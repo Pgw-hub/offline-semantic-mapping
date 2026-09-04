@@ -1,0 +1,9 @@
+# 전체 세션 재현용 (log_000~010). 기존 산출물(data/raibo, compiled/)과는 별도 root 에 만든다.
+root: /data2/cg/sessions/riverside_20260827
+mcap_dir: /data2/20260827/20260827/KR-RRT-2604-008_20260827_172935
+logs: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+options:
+  map_id: 20260827_riverside_session
+  lidar_fusion: true
+  vlm_edges: true
+  vlm_max_pairs: 30

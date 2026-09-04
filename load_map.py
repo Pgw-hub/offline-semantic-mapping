@@ -27,8 +27,11 @@ class MapPackage:
         self.edges = {"heuristic": json.load(open(P("edges_heuristic"))),
                       "object_terrain": json.load(open(P("edges_object_terrain"))),
                       "vlm": json.load(open(P("edges_vlm")))}
-        cm = np.load(P(self.costmap_key))
-        self.costmap, self.cm_x0, self.cm_y0, self.cm_res = cm["cost"], float(cm["x0"]), float(cm["y0"]), float(cm["res"])
+        if self.costmap_key in self.man["files"]:
+            cm = np.load(P(self.costmap_key))
+            self.costmap, self.cm_x0, self.cm_y0, self.cm_res = cm["cost"], float(cm["x0"]), float(cm["y0"]), float(cm["res"])
+        else:   # 코스트맵이 아직 없는 패키지(빌드 중) 도 로드 가능
+            self.costmap, self.cm_x0, self.cm_y0, self.cm_res = None, 0.0, 0.0, 0.0
         # 확률적 occupancy (레이캐스팅 log-odds + 표면 하이브리드). 없으면 None.
         self.occ = None
         if "occupancy_probabilistic" in self.man["files"]:
@@ -81,7 +84,7 @@ class MapPackage:
     def summary(self):
         lab = self.labels(); names = self.classes + ["other", "unknown(LiDAR only)"]
         cnt = {n: int((lab == i).sum()) for i, n in enumerate(names)}
-        c = self.costmap
+        c = self.costmap if self.costmap is not None else np.full((1, 1), 255, np.uint8)
         occ = None
         if self.occ is not None:
             s = self.occ["state"]

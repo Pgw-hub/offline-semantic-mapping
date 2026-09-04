@@ -24,8 +24,8 @@ import numpy as np
 
 FEAT_NPZ = "/data2/20260827/_peek/global_session_feat.npz"
 PROTO_NPZ = "/data2/20260827/_dino/proto_session.npz"
-RAIBO_ROOT = "/data2/cg/data/raibo"
-OUT_DIR = "/data2/cg/compiled"
+RAIBO_ROOT = os.environ.get("CG_RAIBO_ROOT", "/data2/cg/data/raibo")
+OUT_DIR = os.environ.get("CG_OUT_DIR", "/data2/cg/compiled")
 
 
 # ---------- 고표현력 맵 로드 ----------

@@ -11,7 +11,7 @@ K, NP, RGBs, SEMs, NS, FF = [], [], [], [], [], []
 o = 1 << 20
 for f in files:
     d = np.load(f)
-    li = int(re.search(r"log(\d{3})", f).group(1))
+    li = int(re.search(r"log_?(\d{3})", f).group(1))
     ijk = d["ijk"].astype(np.int64)
     K.append(((ijk[:, 0]+o) << 42) | ((ijk[:, 1]+o) << 21) | (ijk[:, 2]+o))
     NP.append(d["n_pts"].astype(np.int64))
