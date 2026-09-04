@@ -131,3 +131,13 @@
 - rerun 기본 가시성: rerun 0.16 은 엔티티별 on/off 저장 불가 → Blueprint 의 뷰 contents 포함/제외로 대신함
   (load_map.py default_blueprint(): 탭 4개 — Map(기본: unknown·rgb·other·heuristic·costmap 제외) / Costmap / RGB / All layers,
   rr.send_blueprint(make_default=True) 로 rrd 에 저장). 제외된 엔티티는 뷰어 Blueprint 패널 "+" 로 다시 추가 가능.
+
+## 코드 저장소 (2026-09-04 커밋 완료)
+| 위치 | 내용 | 최신 커밋 |
+|---|---|---|
+| emc:/opt/catkin_ws (git) | ROS 도구, mcap_to_cg.py, build_voxel_sem_map.py | 99e5be5 |
+| cg:/data2/cg/concept-graphs (git, ali-dev 로컬 브랜치) | ConceptGraphs 호환 패치·raibo 설정 | fabcd43 |
+| /data2/cg (git, main — 신설) | map_compiler·복셀 도구·vlm_edges·load_map·뷰어·docs/HANDOFF.md | b4811bb |
+- 커밋은 컨테이너 안에서: `docker exec cg bash -c "cd /data2/cg && git add -A && git commit -m ..."` (git identity 는 -c 로 지정 또는 git config 설정)
+- 데이터·모델·산출물(data/ voxel/ compiled/ hf_cache/ *.rrd *.npz)은 .gitignore — 백업은 docker 이미지 cg-conceptgraphs:20260902 + /data2/backups
+- 원격(remote) 미설정 — GitHub/GitLab 에 올리려면 `git remote add origin <url> && git push -u origin main`
