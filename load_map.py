@@ -10,9 +10,10 @@ import numpy as np
 class MapPackage:
     """매니페스트가 가리키는 파일들을 메모리에 올린 맵. Map Compiler 가 읽는 단위."""
 
-    def __init__(self, manifest_path):
+    def __init__(self, manifest_path, costmap_key="costmap_2d"):
         t0 = time.time()
         self.man = json.load(open(manifest_path))
+        self.costmap_key = costmap_key if costmap_key in self.man["files"] else "costmap_2d"
         root = os.path.dirname(os.path.dirname(os.path.abspath(manifest_path)))   # …/cg
         P = lambda k: os.path.join(root, self.man["files"][k]["path"])
         self.vox = float(self.man["voxel_m"])
@@ -26,7 +27,7 @@ class MapPackage:
         self.edges = {"heuristic": json.load(open(P("edges_heuristic"))),
                       "object_terrain": json.load(open(P("edges_object_terrain"))),
                       "vlm": json.load(open(P("edges_vlm")))}
-        cm = np.load(P("costmap_2d"))
+        cm = np.load(P(self.costmap_key))
         self.costmap, self.cm_x0, self.cm_y0, self.cm_res = cm["cost"], float(cm["x0"]), float(cm["y0"]), float(cm["res"])
         # 확률적 occupancy (레이캐스팅 log-odds + 표면 하이브리드). 없으면 None.
         self.occ = None
