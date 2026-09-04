@@ -17,7 +17,7 @@
   E  graph      객체 병합 → compiled/session_objects.json(+clip), 휴리스틱 엣지, 객체-지형 엣지, (옵션) VLM 엣지
   F  occupancy  lidar_scans + session_voxsem → compiled/session_occupancy.npz
   G  package    map_manifest.json 작성 + 코스트맵(costmap_from_occupancy) 등록
-  H  view       load_map 요약 + compiled/map_package.rrd (--coarse 0.3 --cubes)
+  H  view       compiled/map_package.rrd — 기본 0.1m 점 표현 (options.view_cubes: true 면 view_coarse m 큐브)
   V  video      RGB 배속 영상 compiled/session_rgb_x<speed>.mp4 (options.video_speed, 0 이면 생략)
 레이아웃: <root>/{dataset,sem,voxel,compiled}/ ; 매니페스트 경로는 <root> 기준 상대경로 (load_map 규약).
 """
@@ -40,7 +40,7 @@ class Build:
         self.D = {k: os.path.join(self.root, k) for k in ("dataset", "sem", "voxel", "compiled", "logs")}
         self.opt = {"lidar_fusion": True, "mask_bottom_px": 60, "drop_classes": "person", "scene_cloud": 0, "vlm_edges": True, "vlm_max_pairs": 30,
                     "vlm_model": "Qwen/Qwen2.5-VL-32B-Instruct", "occupancy_res": 0.2, "prob_hit": 0.85, "prob_miss": 0.45,
-                    "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "video_speed": 15, "video_width": 960, "map_id": os.path.basename(self.root),
+                    "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "view_cubes": False, "view_sub": 1, "video_speed": 15, "video_width": 960, "map_id": os.path.basename(self.root),
                     "frame": "SLAM world (/Odometry/base)"}
         self.opt.update(cfg.get("options", {}))
         for d in self.D.values():
@@ -175,7 +175,10 @@ class Build:
     def step_H(self):
         man = os.path.join(self.D["compiled"], "map_manifest.json"); rrd = os.path.join(self.D["compiled"], "map_package.rrd")
         if self.done("H", rrd): return
-        self.run([PY, f"{CG}/load_map.py", man, "--rrd", rrd, "--coarse", str(self.opt["view_coarse"]), "--cubes", "--sub", "1"], env={"CUDA_VISIBLE_DEVICES": ""}, logname="H.log")
+        cmd = [PY, f"{CG}/load_map.py", man, "--rrd", rrd, "--sub", str(self.opt.get("view_sub", 1))]
+        if self.opt.get("view_cubes", False):                      # 기본은 0.1m 점(구) 표현; 큐브(OctoMap 풍)는 옵션
+            cmd += ["--coarse", str(self.opt["view_coarse"]), "--cubes"]
+        self.run(cmd, env={"CUDA_VISIBLE_DEVICES": ""}, logname="H.log")
 
     def chown_outputs(self):
         """컨테이너(root)가 만든 산출물을 output 폴더 소유자(호스트 사용자)에게 넘김"""

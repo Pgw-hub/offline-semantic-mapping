@@ -102,8 +102,7 @@ def default_blueprint():
     """뷰어가 열릴 때의 기본 레이아웃/가시성. 0.16 은 엔티티별 on/off 대신 뷰의 contents 포함·제외로 제어."""
     import rerun.blueprint as rrb
     main = rrb.Spatial3DView(origin="/map", name="Map (default)", contents=[
-        "+ /map/**",
-        "- /map/voxels/unknown",      # LiDAR 만 본 회색 복셀: 기본 꺼짐
+        "+ /map/**",                  # unknown(LiDAR 만 본 회색 복셀) 은 기본 켜짐 — 지형 문맥
         "- /map/voxels/rgb",          # 실제색 복셀: semantic 과 겹치므로 기본 꺼짐
         "- /map/voxels/other",
         "- /map/edges/heuristic/**",  # 671 개 근사 엣지: 기본 꺼짐 (노이즈)
