@@ -1,5 +1,5 @@
 # 오케스트레이터 검증용: 강변 세션 log_007~008 두 개만
-root: /data2/cg/sessions/test_2logs
+root: test_2logs
 mcap_dir: /data2/20260827/20260827/KR-RRT-2604-008_20260827_172935
 logs: [7, 8]
 options:

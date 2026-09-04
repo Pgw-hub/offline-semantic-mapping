@@ -3,7 +3,7 @@
 
 컨테이너 offline_3d_semantic_map 안에서 실행 (docker exec 없음, 단일 프로세스가 단계별 스크립트를 subprocess 로 호출).
 사용:
-  python build_map_package.py <session.yaml>              # 전부 (이미 있는 산출물은 건너뜀)
+  python build_map_package.py <session.yaml>              # 전부 (이미 있는 산출물은 건너뜀). root 가 이름만이면 <repo>/output/<이름>
   python build_map_package.py <session.yaml> --steps D,E  # 일부 단계만
   python build_map_package.py <session.yaml> --force D    # 해당 단계 산출물 지우고 다시
   python build_map_package.py <session.yaml> --dry-run    # 명령만 출력
@@ -23,13 +23,18 @@
 import argparse, glob, json, os, shutil, subprocess, sys, time
 import yaml
 
-CG = "/data2/cg"; TOOLS = f"{CG}/tools/preprocess"; CGREPO = f"{CG}/concept-graphs/conceptgraph"
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))          # 이 저장소 (우리 코드)
+CG = REPO; TOOLS = f"{REPO}/tools/preprocess"
+CGREPO = os.environ.get("CG_REPO", "/data2/cg/concept-graphs") + "/conceptgraph"   # ConceptGraphs 설치 위치 (컨테이너에 editable 설치됨)
+HF_HOME = os.environ.get("HF_HOME", "/data2/cg/hf_cache")                        # 모델 캐시 (수십 GB, 데이터 디스크에 둠)
 PY = sys.executable
 
 class Build:
     def __init__(self, cfg, dry=False, force=()):
         self.c = cfg; self.dry = dry; self.force = set(force)
-        self.root = cfg["root"]; self.logs = [f"log_{int(i):03d}" for i in cfg["logs"]]
+        root = cfg.get("root") or cfg.get("name")
+        self.root = root if os.path.isabs(root) else os.path.join(REPO, "output", root)   # 상대경로/이름 → <repo>/output/<name>
+        self.logs = [f"log_{int(i):03d}" for i in cfg["logs"]]
         self.mcap_dir = cfg["mcap_dir"]; self.calib = cfg.get("calib") or os.path.join(self.mcap_dir, "raisin_config", "calibration")
         self.D = {k: os.path.join(self.root, k) for k in ("dataset", "sem", "voxel", "compiled", "logs")}
         self.opt = {"lidar_fusion": True, "mask_bottom_px": 60, "drop_classes": "person", "scene_cloud": 0, "vlm_edges": True, "vlm_max_pairs": 30,
@@ -126,7 +131,7 @@ class Build:
                     out = os.path.join(self.D["compiled"], f"vlm_edges_{log}_v2")
                     if os.path.exists(os.path.join(out, "edges_claude.json")): self.say(f"  건너뜀 (있음): {out}"); continue
                     self.run([PY, f"{CG}/vlm_edges.py", "--scene", log, "--dataset-root", self.D["dataset"], "--out", out, "--backend", "local",
-                              "--local-model", self.opt["vlm_model"], "--max-pairs", str(self.opt["vlm_max_pairs"])], env={"HF_HOME": f"{CG}/hf_cache"}, logname=f"E_vlm_{log}.log")
+                              "--local-model", self.opt["vlm_model"], "--max-pairs", str(self.opt["vlm_max_pairs"])], env={"HF_HOME": HF_HOME}, logname=f"E_vlm_{log}.log")
                 self.run([PY, f"{CG}/edges_session_rerun.py", self.D["dataset"], self.D["compiled"], os.path.join(self.D["compiled"], "vlm_edges_session.rrd")], logname="E_vlm_session.log")
         elif not os.path.exists(vlm) and not self.dry:
             json.dump([], open(vlm, "w")); self.say("  VLM 엣지 비활성 → 빈 목록 저장")
@@ -171,11 +176,27 @@ class Build:
         if self.done("H", rrd): return
         self.run([PY, f"{CG}/load_map.py", man, "--rrd", rrd, "--coarse", str(self.opt["view_coarse"]), "--cubes", "--sub", "1"], env={"CUDA_VISIBLE_DEVICES": ""}, logname="H.log")
 
+    def chown_outputs(self):
+        """컨테이너(root)가 만든 산출물을 output 폴더 소유자(호스트 사용자)에게 넘김"""
+        if self.dry or os.geteuid() != 0: return
+        try:
+            st = os.stat(os.path.dirname(self.root)); uid, gid = st.st_uid, st.st_gid
+            if uid == 0: return
+            for dp, dn, fn in os.walk(self.root):
+                os.chown(dp, uid, gid)
+                for f in fn: os.chown(os.path.join(dp, f), uid, gid)
+            self.say(f"  소유권 → uid {uid}")
+        except Exception as e:
+            self.say(f"  chown 실패(무시): {e}")
+
     def go(self, steps):
-        for s in steps:
-            self.say(f"===== 단계 {s} =====")
-            getattr(self, f"step_{s}")()
-        self.say("완료")
+        try:
+            for s in steps:
+                self.say(f"===== 단계 {s} =====")
+                getattr(self, f"step_{s}")()
+            self.say("완료")
+        finally:
+            self.chown_outputs()
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("session_yaml"); ap.add_argument("--steps", default="A,S,R,B,C,D,E,F,G,H")

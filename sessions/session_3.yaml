@@ -1,0 +1,9 @@
+# 세 번째 테스트: 실내 출발(log_000, log_001) + 야외 진입(log_002) — 객체가 많아 VLM 엣지까지 확인
+root: session_3                    # → /home/gw.park/offline_semantic_mapping/output/session_3
+mcap_dir: /data2/20260827/20260827/KR-RRT-2604-008_20260827_172935
+logs: [0, 1, 2]
+options:
+  map_id: session_3_indoor_to_riverside
+  lidar_fusion: true
+  vlm_edges: true
+  vlm_max_pairs: 20
