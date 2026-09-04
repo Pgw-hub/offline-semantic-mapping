@@ -174,11 +174,23 @@ class Build:
             tot = sum(v["bytes"] for v in m["files"].values()); self.say(f"  패키지 {len(m['files'])} 파일 · {tot/1e6:.1f} MB")
     def step_H(self):
         man = os.path.join(self.D["compiled"], "map_manifest.json"); rrd = os.path.join(self.D["compiled"], "map_package.rrd")
-        if self.done("H", rrd): return
-        cmd = [PY, f"{CG}/load_map.py", man, "--rrd", rrd, "--sub", str(self.opt.get("view_sub", 1))]
-        if self.opt.get("view_cubes", False):                      # 기본은 0.1m 점(구) 표현; 큐브(OctoMap 풍)는 옵션
-            cmd += ["--coarse", str(self.opt["view_coarse"]), "--cubes"]
-        self.run(cmd, env={"CUDA_VISIBLE_DEVICES": ""}, logname="H.log")
+        if not self.done("H", rrd):
+            cmd = [PY, f"{CG}/load_map.py", man, "--rrd", rrd, "--sub", str(self.opt.get("view_sub", 1))]
+            if self.opt.get("view_cubes", False):                  # 기본은 0.1m 점(구) 표현; 큐브(OctoMap 풍)는 옵션
+                cmd += ["--coarse", str(self.opt["view_coarse"]), "--cubes"]
+            self.run(cmd, env={"CUDA_VISIBLE_DEVICES": ""}, logname="H.log")
+        # 요약 JSON (웹 포털이 읽음) — 항상 갱신
+        if not self.dry:
+            e = dict(os.environ); e["CUDA_VISIBLE_DEVICES"] = ""
+            p = subprocess.run([PY, f"{CG}/load_map.py", man], env=e, capture_output=True, text=True)
+            out = p.stdout; j = out[out.index("{"):] if "{" in out else "{}"
+            try:
+                summ = json.loads(j)
+            except Exception:
+                summ = {"error": "summary parse failed"}
+            summ["build_seconds_total"] = round(time.time() - self.t0)
+            json.dump(summ, open(os.path.join(self.D["compiled"], "summary.json"), "w"), ensure_ascii=False, indent=1)
+            self.say("  summary.json 갱신")
 
     def chown_outputs(self):
         """컨테이너(root)가 만든 산출물을 output 폴더 소유자(호스트 사용자)에게 넘김"""

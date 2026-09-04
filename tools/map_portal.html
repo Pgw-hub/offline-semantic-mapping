@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Map Portal</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{--bg:#15181b;--paper:#1e2226;--paper2:#252a2f;--ink:#e8eae7;--muted:#98a1a8;--line:#333a40;--acc:#3fc0d3;--grass:#6fb572;--path:#cfa86e;--tree:#4f8f52;--lethal:#e0645b;--unc:#e6a24b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans KR",-apple-system,"Apple SD Gothic Neo","Noto Sans KR",sans-serif;font-size:14px;line-height:1.55}
+.mono{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+header{display:flex;align-items:baseline;gap:16px;padding:22px 28px 14px;border-bottom:1px solid var(--line)}
+header h1{font-size:20px;font-weight:600;margin:0;letter-spacing:-.01em}
+header .sub{color:var(--muted);font-size:13px}
+header .right{margin-left:auto;color:var(--muted);font-size:12.5px}
+main{padding:20px 28px 60px;display:grid;gap:18px}
+.card{background:var(--paper);border:1px solid var(--line);border-radius:4px;display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:0}
+.card .meta{padding:18px 20px;border-right:1px solid var(--line)}
+.card .media{padding:14px 18px;display:grid;gap:10px;align-content:start}
+.card h2{font-size:17px;font-weight:600;margin:0 0 2px}
+.card .name{color:var(--muted);font-size:12.5px;margin-bottom:12px}
+dl{display:grid;grid-template-columns:auto 1fr;gap:3px 12px;margin:0 0 12px;font-size:13px}
+dt{color:var(--muted)}dd{margin:0;word-break:break-all}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
+.chip{background:var(--paper2);border:1px solid var(--line);border-radius:3px;padding:2px 8px;font-size:12px}
+.chip b{font-weight:600;font-family:"IBM Plex Mono",monospace}
+.bar{display:flex;height:8px;border-radius:2px;overflow:hidden;border:1px solid var(--line);margin:4px 0 2px}
+.bar span{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:11.5px;color:var(--muted);margin-bottom:12px}
+.legend i{display:inline-block;width:9px;height:9px;margin-right:4px;vertical-align:-1px;background:var(--c)}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+a.btn,button.btn{display:inline-block;padding:7px 12px;border-radius:3px;border:1px solid var(--line);background:var(--paper2);color:var(--ink);text-decoration:none;font-size:13px;cursor:pointer;font-family:inherit}
+a.btn.primary{background:var(--acc);border-color:var(--acc);color:#0e1a1d;font-weight:600}
+a.btn:hover,button.btn:hover{border-color:var(--acc)}
+a.btn:focus-visible,button.btn:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+video{width:100%;background:#000;border-radius:3px;display:block}
+.vtitle{font-size:12px;color:var(--muted);margin:0 0 4px}
+.tabs{display:flex;gap:6px;margin-bottom:6px}
+.tabs button{padding:3px 10px;font-size:12px;border-radius:3px;border:1px solid var(--line);background:transparent;color:var(--muted);cursor:pointer;font-family:inherit}
+.tabs button.on{color:var(--ink);border-color:var(--acc)}
+pre.log{background:#0f1214;border:1px solid var(--line);border-radius:3px;padding:10px 12px;font-size:11.5px;line-height:1.45;max-height:260px;overflow:auto;margin:0;white-space:pre-wrap;color:#c9d1d9}
+.empty{color:var(--muted);padding:40px;text-align:center}
+details summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin:6px 0}
+@media (max-width:900px){.card{grid-template-columns:1fr}.card .meta{border-right:0;border-bottom:1px solid var(--line)}}
+</style></head><body>
+<header><h1>Map Portal</h1><span class="sub">Offline 3D Semantic Map · 빌드된 Map Package</span><span class="right" id="stamp"></span></header>
+<main id="main"><div class="empty">불러오는 중…</div></main>
+<script>
+const host = location.hostname || "localhost";
+const fileURL = p => `http://${host}:${location.port||9092}/${p}`;
+const rerunURL = p => `http://${host}:9091?url=${encodeURIComponent(fileURL(p))}`;
+const fmt = n => n==null ? "—" : Number(n).toLocaleString("ko-KR");
+const CLS = [["grass","--grass"],["path","--path"],["tree","--tree"],["person","--lethal"],["other","--unc"],["unknown(LiDAR only)","--muted"]];
+function labelBar(v){ if(!v) return ""; const tot = Object.values(v).reduce((a,b)=>a+b,0)||1;
+  return `<div class="bar">${CLS.map(([k,c])=>`<span style="width:${100*(v[k]||0)/tot}%;background:var(${c})" title="${k} ${fmt(v[k]||0)}"></span>`).join("")}</div>
+  <div class="legend">${CLS.map(([k,c])=>`<span><i style="--c:var(${c})"></i>${k.replace("(LiDAR only)","")} ${(100*(v[k]||0)/tot).toFixed(0)}%</span>`).join("")}</div>`; }
+function card(m){ const s=m.summary||{}, occ=s.occupancy||{}, cm=s.costmap||{}, e=s.edges||{};
+  const vids = [["pipeline", m.video_pipeline, "RGB · 검출 · 세그멘테이션 (x15)"],["rgb", m.video_rgb, "RGB (x15)"]].filter(v=>v[1]);
+  const mcap = m.mcap_dir ? m.mcap_dir.split("/").slice(-2).join("/") : "—";
+  const logs = m.logs.length ? `${m.logs[0]} ~ ${m.logs[m.logs.length-1]} (${m.n_logs}개)` : "—";
+  return `<section class="card" data-name="${m.name}">
+   <div class="meta">
+    <h2>${m.map_id}</h2><div class="name mono">output/${m.name} · ${m.built||""}</div>
+    <dl><dt>데이터셋</dt><dd class="mono" title="${m.mcap_dir}">${mcap}</dd><dt>로그</dt><dd class="mono">${logs}</dd>
+        <dt>프레임</dt><dd>${m.frame||"—"}</dd><dt>패키지</dt><dd class="mono">${Object.keys(m.files).length} 파일 · ${m.package_mb} MB${s.build_seconds_total?` · 빌드 ${Math.round(s.build_seconds_total/60)}분`:""}</dd>
+        <dt>옵션</dt><dd class="mono">LiDAR 융합 ${m.options.lidar_fusion?"on":"off"} · VLM 엣지 ${m.options.vlm_edges?"on":"off"} · occ ${m.options.occupancy_res||0.2} m</dd></dl>
+    <div class="chips"><span class="chip">복셀 <b>${fmt(s.voxels)}</b></span><span class="chip">occupancy <b>${fmt(occ.cells)}</b> 셀</span><span class="chip">객체 <b>${fmt(s.objects)}</b></span>
+      <span class="chip">엣지 <b>${fmt(e.heuristic)}</b>/<b>${fmt(e.object_terrain)}</b>/<b>${fmt(e.vlm)}</b></span><span class="chip">코스트맵 <b>${cm.shape?cm.shape.join("×"):"—"}</b> @${cm.res_m||"—"} m</span></div>
+    ${labelBar(s.voxel_labels)}
+    <div class="btns">${m.rrd?`<a class="btn primary" target="_blank" rel="noopener" href="${rerunURL(m.rrd)}">rerun 에서 열기</a>`:""}
+      <a class="btn" target="_blank" rel="noopener" href="${fileURL(m.manifest)}">매니페스트</a>
+      ${m.has_log?`<button class="btn" data-log="${m.name}">빌드 로그</button>`:""}</div>
+    <pre class="log" id="log-${m.name}" hidden></pre>
+   </div>
+   <div class="media">${vids.length?`<div class="tabs">${vids.map((v,i)=>`<button class="${i?"":"on"}" data-v="${v[0]}">${v[2]}</button>`).join("")}</div>
+     ${vids.map((v,i)=>`<video data-v="${v[0]}" src="${fileURL(v[1])}" muted loop playsinline ${i?"hidden":"autoplay"} controls></video>`).join("")}`:`<div class="empty">영상 없음 (단계 V 미실행)</div>`}
+   </div></section>`; }
+async function load(){ const r = await fetch("/api/maps"); const d = await r.json();
+  document.getElementById("stamp").textContent = `${d.maps.length}개 맵 · ${d.time} · ${d.root}`;
+  const main = document.getElementById("main");
+  main.innerHTML = d.maps.length ? d.maps.map(card).join("") : `<div class="empty">output/ 아래에 빌드된 맵이 없습니다. sessions/build_map_package.py 로 만들면 여기에 나타납니다.</div>`;
+  main.querySelectorAll(".tabs button").forEach(b=>b.addEventListener("click",()=>{ const card=b.closest(".card"); card.querySelectorAll(".tabs button").forEach(x=>x.classList.toggle("on",x===b));
+    card.querySelectorAll("video").forEach(v=>{ const on=v.dataset.v===b.dataset.v; v.hidden=!on; if(on){v.play().catch(()=>{});} else v.pause(); }); }));
+  main.querySelectorAll("button[data-log]").forEach(b=>b.addEventListener("click",async()=>{ const pre=document.getElementById("log-"+b.dataset.log);
+    if(!pre.hidden){pre.hidden=true;return;} const r=await fetch("/api/log/"+b.dataset.log); const j=await r.json(); pre.textContent=(j.lines||[j.error]).join("\n"); pre.hidden=false; pre.scrollTop=pre.scrollHeight; }));
+  main.querySelectorAll("video[autoplay]").forEach(v=>v.play().catch(()=>{}));
+}
+load(); setInterval(load, 60000);
+</script></body></html>
