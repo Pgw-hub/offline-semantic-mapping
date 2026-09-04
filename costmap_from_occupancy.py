@@ -19,6 +19,9 @@ ap.add_argument("manifest"); ap.add_argument("out")
 ap.add_argument("--h-ground", type=int, default=2); ap.add_argument("--h-obs", type=int, default=3)
 ap.add_argument("--clearance", type=float, default=1.4); ap.add_argument("--low", type=float, default=0.5, help="이 높이 이하 라벨 없는 장애물 → 200")
 ap.add_argument("--register", action="store_true", help="매니페스트에 costmap_2d_occ 로 등록")
+ap.add_argument("--mode", choices=["semantic", "geometric"], default="semantic",
+                help="geometric = 라벨 무시: 지면은 전부 free(0), 밴드 안 확인된 점은 전부 lethal (nav2 static/obstacle layer 와 같은 규칙)")
+ap.add_argument("--band-min", type=float, default=0.3, help="지면 위 이 높이부터 장애물 밴드 시작 (m)")
 a = ap.parse_args(); t0 = time.time()
 mp = MapPackage(a.manifest); O = mp.occ; R = O["res"]; ijk = O["ijk"].astype(np.int64); hits = O["hits"]
 classes = mp.classes; n_cls = len(classes); GRASS = classes.index("grass"); TREE = classes.index("tree"); PATH = classes.index("path")
@@ -62,6 +65,8 @@ gi, gj = i_all - i0, j_all - j0
 ground_cost = np.full(len(ucol), 60, np.uint8)
 ground_cost[glab == PATH] = 10; ground_cost[glab == GRASS] = 90; ground_cost[glab == n_cls] = 150
 ground_cost[glab == TREE] = 150                              # 지면이 tree 라벨(뿌리/낮은 가지) → other 취급
+if a.mode == "geometric":
+    ground_cost[:] = 0                                       # 기하 전용: 지면이면 전부 free
 cost[gi, gj] = ground_cost; gz[gi, gj] = (kmin + 0.5) * R
 
 # --- 밴드 장애물 ---
@@ -69,9 +74,13 @@ kg_of_cell = np.full(len(ijk), -1, np.int64)
 pc = np.searchsorted(ucol, col); pcc = np.minimum(pc, len(ucol) - 1); fc = ucol[pcc] == col
 kg_of_cell[fc] = kmin[pcc[fc]]
 h = (ijk[:, 2] - kg_of_cell) * R
-obs = (kg_of_cell >= 0) & (hits >= a.h_obs) & (h >= 0.3 - 1e-6) & (h <= a.clearance) & (olab != GRASS) & (olab != PERSON)
-lethal = obs & ((olab == TREE) | (h > a.low))
-unc = obs & ~lethal
+if a.mode == "geometric":
+    obs = (kg_of_cell >= 0) & (hits >= a.h_obs) & (h >= a.band_min - 1e-6) & (h <= a.clearance)   # 라벨 무시
+    lethal = obs; unc = np.zeros_like(obs)
+else:
+    obs = (kg_of_cell >= 0) & (hits >= a.h_obs) & (h >= a.band_min - 1e-6) & (h <= a.clearance) & (olab != GRASS) & (olab != PERSON)
+    lethal = obs & ((olab == TREE) | (h > a.low))
+    unc = obs & ~lethal
 ci, cj = ijk[:, 0] - i0, ijk[:, 1] - j0
 cost[ci[unc], cj[unc]] = np.maximum(cost[ci[unc], cj[unc]], 200)
 cost[ci[lethal], cj[lethal]] = 254
@@ -86,8 +95,11 @@ from scipy import ndimage
 comp, n = ndimage.label(cost <= 200, structure=np.ones((3, 3))); sz = np.bincount(comp.ravel()); sz[0] = 0
 print(f"  연결요소 {n} · 상위5(m²) {sorted((sz*R*R).tolist(), reverse=True)[:5]}")
 legend = "0-252 cost (path10 grass90 other150 none60), 200 uncertain(low unlabeled obstacle), 254 lethal, 255 unknown"
+# 비교용: 밴드 안에서 grass 라벨이라 통과시킨(semantic) / lethal 로 잡았을(geometric) 셀 수
+band_all = (kg_of_cell >= 0) & (hits >= a.h_obs) & (h >= a.band_min - 1e-6) & (h <= a.clearance)
+print(f"  밴드 안 확인 셀 {int(band_all.sum()):,} · 그중 grass 라벨 {int((band_all & (olab == GRASS)).sum()):,} · mode={a.mode} band_min={a.band_min}")
 np.savez_compressed(a.out + ".npz", cost=cost, ground_z=gz, x0=x0, y0=y0, res=R, axes="row=x,col=y", legend=legend, clearance_m=a.clearance,
-                    h_ground=a.h_ground, h_obs=a.h_obs)
+                    h_ground=a.h_ground, h_obs=a.h_obs, mode=a.mode, band_min=a.band_min)
 print("저장:", a.out + ".npz")
 if a.register:
     m = json.load(open(a.manifest)); root = os.path.dirname(os.path.dirname(os.path.abspath(a.manifest)))
