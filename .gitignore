@@ -16,3 +16,4 @@ __pycache__/
 sessions/*/
 sessions/*.out
 output/
+data2_cg
