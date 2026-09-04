@@ -139,16 +139,17 @@ for nm, c in [("A", ca), ("B", cg), ("C", cs)]:
     paths[nm] = {"cross": {"len_m": L(p1), "on_grass_pct": on_grass(p1)}, "to_center": {"len_m": L(p2), "reachable": p2 is not None}, "_p1": p1, "_p2": p2}
     print(nm, {k: v for k, v in paths[nm].items() if not k.startswith("_")})
 straight = math.hypot(gA[0] - sA[0], gA[1] - sA[1]) * R if sA and gA else None
-# 경로 그림 (C 배경 위에 A/B/C 경로)
-base = cv2.resize(crop_img(cs), None, fx=S_, fy=S_, interpolation=cv2.INTER_NEAREST)
-def px(q): return (int((q[1] - j0) * S_ + S_ / 2), int((i1 - 1 - q[0]) * S_ + S_ / 2))
+# 경로 그림 (C 배경 위에 A/B/C 경로) — 격자(row=i,col=j) 위에 그리고 마지막에 전치+반전
+base = cv2.resize(render(cs)[i0:i1, j0:j1], None, fx=S_, fy=S_, interpolation=cv2.INTER_NEAREST)
+def px(q): return (int((q[1] - j0) * S_ + S_ / 2), int((q[0] - i0) * S_ + S_ / 2))
 cols = {"A": (60, 60, 255), "B": (255, 200, 40), "C": (255, 255, 0)}
 for nm in ("A", "B", "C"):
     for key in ("_p1", "_p2"):
         p = paths[nm][key]
         if p: cv2.polylines(base, [np.array([px(q) for q in p], np.int32)], False, cols[nm], 2 if nm == "C" else 1)
-for q, col in [(sA, (0, 255, 0)), (gA, (255, 0, 255)), (tuple(int(v) for v in np.round(mu)), (0, 165, 255))]:
+for q, col in [(sA, (0, 255, 0)), (gA, (255, 0, 255)), (mu_cell, (0, 165, 255))]:
     if q: cv2.circle(base, px(q), 7, col, -1)
+base = np.ascontiguousarray(np.flipud(base.transpose(1, 0, 2)))
 cv2.imwrite(os.path.join(a.out, "paths.png"), base)
 json.dump({"stats": ST, "diff": diff_stats, "paths": {k: {kk: vv for kk, vv in v.items() if not kk.startswith("_")} for k, v in paths.items()}, "straight_m": straight,
            "crop_world": [x0 + i0 * R, y0 + j0 * R, x0 + i1 * R, y0 + j1 * R]}, open(os.path.join(a.out, "stats.json"), "w"), ensure_ascii=False, indent=1)

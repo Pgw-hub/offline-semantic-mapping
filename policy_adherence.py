@@ -102,29 +102,32 @@ def render(c):
     for k, v in pal.items(): im[c == k] = v[::-1]
     return im
 base = render(cs); COL = {"GEO": (60, 60, 255), "SEM": (255, 255, 0), "STRICT": (255, 0, 255)}
-def draw(img, P, i0, j0, Sc, which=("GEO", "SEM")):
-    for nm in which:
-        p = P.get(nm)
-        if p: cv2.polylines(img, [np.array([[int((q[1] - j0) * Sc + Sc / 2), int((i1_ - 1 - q[0]) * Sc + Sc / 2)] for q in p], np.int32)], False, COL[nm], 2 if nm != "GEO" else 2)
+def view(i0, i1, j0, j1, Sc, paths_list, which):
+    """격자(row=i=x, col=j=y) 위에 그린 뒤 전치+상하반전 → 화면 x 오른쪽, y 위"""
+    img = cv2.resize(base[i0:i1, j0:j1], None, fx=Sc, fy=Sc, interpolation=cv2.INTER_NEAREST)
+    for P in paths_list:
+        for nm in which:
+            p = P.get(nm)
+            if p: cv2.polylines(img, [np.array([[int((q[1] - j0) * Sc + Sc / 2), int((q[0] - i0) * Sc + Sc / 2)] for q in p], np.int32)], False, COL[nm], 2)
+    return np.ascontiguousarray(np.flipud(img.transpose(1, 0, 2)))
 known = np.where(cs < 255); gi0, gi1 = known[0].min(), known[0].max() + 1; gj0, gj1 = known[1].min(), known[1].max() + 1
-i1_ = gi1; Sc = 2
-ov = cv2.resize(np.flipud(base[gi0:gi1, gj0:gj1].transpose(1, 0, 2)), None, fx=Sc, fy=Sc, interpolation=cv2.INTER_NEAREST)
-for P in allpaths: draw(ov, P, gi0, gj0, Sc)
-cv2.imwrite(os.path.join(a.out, "overview.png"), ov)
+cv2.imwrite(os.path.join(a.out, "overview.png"), view(gi0, gi1, gj0, gj1, 2, allpaths, ("GEO", "SEM")))
 diffs = sorted([(r["GEO"]["grass_m"] - r["SEM"]["grass_m"], r["id"]) for r in ok], reverse=True)[:6]
-tiles = []
+tiles = []; Wt = 560
 for _, k in diffs:
-    P = allpaths[k]; pts = np.array(P["GEO"] + P["SEM"] + (P["STRICT"] or [])); m = int(6 / R)
-    i0, i1_ = max(pts[:, 0].min() - m, 0), min(pts[:, 0].max() + m, H); j0, j1 = max(pts[:, 1].min() - m, 0), min(pts[:, 1].max() + m, W)
-    Sc = max(1, int(560 / max(i1_ - i0, j1 - j0)))
-    im = cv2.resize(np.flipud(base[i0:i1_, j0:j1].transpose(1, 0, 2)), None, fx=Sc, fy=Sc, interpolation=cv2.INTER_NEAREST)
-    draw(im, P, i0, j0, Sc, ("GEO", "SEM", "STRICT"))
-    r = rows[k]; bar = np.zeros((44, im.shape[1], 3), np.uint8)
-    cv2.putText(bar, f"#{k}  straight {r['straight_m']}m   GEO grass {r['GEO']['grass_m']}m  SEM grass {r['SEM']['grass_m']}m (+{r['SEM']['len_m']-r['GEO']['len_m']:.1f}m)", (8, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
-    Wt = 560; im = cv2.resize(np.vstack([bar, im]), (Wt, int((bar.shape[0] + im.shape[0]) * Wt / im.shape[1])))
-    tiles.append(im)
+    P = allpaths[k]; pts = np.array(P["GEO"] + P["SEM"] + (P["STRICT"] or [])); m = int(5 / R)
+    i0, i1 = max(pts[:, 0].min() - m, 0), min(pts[:, 0].max() + m, H); j0, j1 = max(pts[:, 1].min() - m, 0), min(pts[:, 1].max() + m, W)
+    side = max(i1 - i0, j1 - j0); ic, jc = (i0 + i1) // 2, (j0 + j1) // 2          # 정사각 크롭
+    i0, i1 = max(ic - side // 2, 0), min(ic - side // 2 + side, H); j0, j1 = max(jc - side // 2, 0), min(jc - side // 2 + side, W)
+    Sc = max(1, int(Wt / (i1 - i0)))
+    im = view(i0, i1, j0, j1, Sc, [P], ("GEO", "SEM", "STRICT"))
+    im = cv2.resize(im, (Wt, int(im.shape[0] * Wt / im.shape[1])), interpolation=cv2.INTER_NEAREST)
+    r = rows[k]; bar = np.zeros((48, Wt, 3), np.uint8)
+    cv2.putText(bar, f"#{k}  straight {r['straight_m']} m", (8, 19), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+    cv2.putText(bar, f"GEO grass {r['GEO']['grass_m']} m | SEM grass {r['SEM']['grass_m']} m (+{r['SEM']['len_m']-r['GEO']['len_m']:.1f} m) | STRICT +{(r['STRICT']['len_m']-r['GEO']['len_m']) if r['STRICT'] else float('nan'):.1f} m", (8, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (200, 200, 200), 1, cv2.LINE_AA)
+    tiles.append(np.vstack([bar, im]))
 hmax = max(t.shape[0] for t in tiles)
-tiles = [np.vstack([t, np.zeros((hmax - t.shape[0], t.shape[1], 3), np.uint8)]) for t in tiles]
+tiles = [np.vstack([t, np.full((hmax - t.shape[0], Wt, 3), 25, np.uint8)]) for t in tiles]
 grid = np.vstack([np.hstack(tiles[0:3]), np.hstack(tiles[3:6])]) if len(tiles) >= 6 else np.hstack(tiles)
 cv2.imwrite(os.path.join(a.out, "examples.png"), grid)
 json.dump({"summary": summary, "rows": rows}, open(os.path.join(a.out, "report.json"), "w"), ensure_ascii=False, indent=1)
