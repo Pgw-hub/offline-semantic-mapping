@@ -14,6 +14,7 @@ ap.add_argument("--res", type=float, default=0.2)
 ap.add_argument("--stride", type=int, default=1, help="스캔 간격 (1=전부)")
 ap.add_argument("--max-range", type=float, default=40.0, help="복셀 빌더의 LiDAR 상한(40m)과 일치시켜야 함")
 ap.add_argument("--rrd", default=None)
+ap.add_argument("--alpha", type=float, default=1.0, help="큐브 투명도 0~1 (rrd 에 굽힘)")
 a = ap.parse_args()
 
 ap2 = argparse.ArgumentParser(add_help=False)
@@ -102,7 +103,7 @@ if a.rrd:
     for i, nm in enumerate(classes + ["other", "unknown"]):
         m = occ_lab == i
         if m.any():
-            log_cubes(f"occ/occupied/{nm}", occ_xyz[m], a.res, pal[i])
+            log_cubes(f"occ/occupied/{nm}", occ_xyz[m], a.res, pal[i], alpha=a.alpha)
     sub = np.arange(len(free_xyz))[::4]
     rr.log("occ/free", rr.Points3D(free_xyz[sub], colors=[[80, 160, 255, 40]], radii=a.res * 0.25))
     log_cubes("occ/cleared", ctr[ours_in_free][::2], V * 0.9, (255, 60, 200), edges=False)   # OctoMap 이 비웠다고 본 우리 복셀

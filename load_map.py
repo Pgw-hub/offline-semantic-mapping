@@ -71,7 +71,7 @@ def default_blueprint():
                          rrb.SelectionPanel(expanded=False))
 
 
-def to_rerun(mp, out, sub=2, cubes=False, edges=True):
+def to_rerun(mp, out, sub=2, cubes=False, edges=True, alpha=1.0):
     import rerun as rr
     rr.init("map_package"); rr.save(out)
     rr.send_blueprint(default_blueprint(), make_active=True, make_default=True)
@@ -89,7 +89,7 @@ def to_rerun(mp, out, sub=2, cubes=False, edges=True):
         sel = idx[lab[idx] == ci]
         if len(sel):
             if cubes:
-                log_cubes(f"map/voxels/semantic/{cname}", ctr[sel], mp.vox, pal[ci], edges=edges)
+                log_cubes(f"map/voxels/semantic/{cname}", ctr[sel], mp.vox, pal[ci], edges=edges, alpha=alpha)
             else:
                 rr.log(f"map/voxels/semantic/{cname}", rr.Points3D(ctr[sel], colors=[pal[ci].tolist()], radii=mp.vox * 0.45))
     rr.log("map/voxels/rgb", rr.Points3D(ctr[np.concatenate([known, oth])], colors=mp.rgb[np.concatenate([known, oth])], radii=mp.vox * 0.45))
@@ -136,9 +136,10 @@ if __name__ == "__main__":
     ap.add_argument("manifest"); ap.add_argument("--rrd", default=None); ap.add_argument("--sub", type=int, default=2)
     ap.add_argument("--cubes", action="store_true", help="semantic 복셀을 정육면체 메시로 (OctoMap 스타일, 무거움 → --sub 4~8 권장)")
     ap.add_argument("--no-edges", action="store_true", help="--cubes 에서 검은 모서리 와이어 생략")
+    ap.add_argument("--alpha", type=float, default=1.0, help="큐브 투명도 0~1 (rrd 에 굽힘; 0.16 뷰어에 런타임 슬라이더 없음)")
     a = ap.parse_args()
     mp = MapPackage(a.manifest)
     print(json.dumps(mp.summary(), ensure_ascii=False, indent=1))
     if a.rrd:
-        t0 = time.time(); to_rerun(mp, a.rrd, a.sub, a.cubes, not a.no_edges)
+        t0 = time.time(); to_rerun(mp, a.rrd, a.sub, a.cubes, not a.no_edges, a.alpha)
         print(f"rerun 저장 {a.rrd} ({time.time()-t0:.1f}s)")
