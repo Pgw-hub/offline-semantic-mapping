@@ -15,6 +15,7 @@ ap.add_argument("--stride", type=int, default=1, help="스캔 간격 (1=전부)"
 ap.add_argument("--max-range", type=float, default=40.0, help="복셀 빌더의 LiDAR 상한(40m)과 일치시켜야 함")
 ap.add_argument("--rrd", default=None)
 ap.add_argument("--alpha", type=float, default=1.0, help="큐브 투명도 0~1 (rrd 에 굽힘)")
+ap.add_argument("--objects", default=None, help="맵 패키지 objects.json → 3D 박스+라벨 겹침 (occ/objects/*)")
 a = ap.parse_args()
 
 ap2 = argparse.ArgumentParser(add_help=False)
@@ -90,8 +91,9 @@ if a.rrd:
     import rerun as rr, rerun.blueprint as rrb
     rr.init("octomap"); rr.save(a.rrd)
     bp = rrb.Blueprint(rrb.Tabs(
-        rrb.Spatial3DView(origin="/occ", name="Occupied (semantic)", contents=["+ /occ/occupied/**", "+ /occ/cleared/**"]),
-        rrb.Spatial3DView(origin="/occ", name="Occupied (no edges)", contents=["+ /occ/occupied/**", "- /occ/occupied/*/wire"]),
+        rrb.Spatial3DView(origin="/occ", name="Occupied (semantic)", contents=["+ /occ/occupied/**", "+ /occ/objects/**"]),
+        rrb.Spatial3DView(origin="/occ", name="Occupied (no edges)", contents=["+ /occ/occupied/**", "- /occ/occupied/*/wire", "+ /occ/objects/**"]),
+        rrb.Spatial3DView(origin="/occ", name="Cleared voxels", contents=["+ /occ/occupied/**", "+ /occ/cleared/**"]),
         rrb.Spatial3DView(origin="/occ", name="Free space", contents=["+ /occ/free", "+ /occ/occupied/**"]),
         rrb.Spatial3DView(origin="/occ", name="All", contents="+ /occ/**")), rrb.TimePanel(expanded=False))
     rr.send_blueprint(bp, make_default=True)
@@ -106,5 +108,20 @@ if a.rrd:
             log_cubes(f"occ/occupied/{nm}", occ_xyz[m], a.res, pal[i], alpha=a.alpha)
     sub = np.arange(len(free_xyz))[::4]
     rr.log("occ/free", rr.Points3D(free_xyz[sub], colors=[[80, 160, 255, 40]], radii=a.res * 0.25))
+    if a.objects:   # 씬그래프 객체(맵 패키지 objects.json) 를 같은 world 프레임에 겹침 — 이 OctoMap 범위 안의 것만
+        import json
+        raw = json.load(open(a.objects)); objs = list(raw.values()) if isinstance(raw, dict) else raw
+        lo, hi = occ_xyz.min(0) - 1.0, occ_xyz.max(0) + 1.0; n_obj = 0
+        for i, o in enumerate(objs):
+            tag = o.get("tag") or o.get("object_tag")
+            if tag == "person":
+                continue
+            cen = np.array(o.get("center_w") or o["bbox_center"], float)
+            if not (np.all(cen >= lo) and np.all(cen <= hi)):
+                continue
+            ext = np.array(o.get("extent") or o.get("bbox_extent") or [0.5] * 3, float)
+            rr.log(f"occ/objects/{tag.replace(' ', '_')}_{i}", rr.Boxes3D(centers=[cen], half_sizes=[ext / 2], labels=[tag], colors=[[255, 200, 40]]))
+            n_obj += 1
+        print(f"objects 겹침: {n_obj}/{len(objs)} (OctoMap 범위 내)")
     log_cubes("occ/cleared", ctr[ours_in_free][::2], V * 0.9, (255, 60, 200), edges=False)   # OctoMap 이 비웠다고 본 우리 복셀
     print("rrd:", a.rrd)

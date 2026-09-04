@@ -30,6 +30,23 @@ class MapPackage:
         self.costmap, self.cm_x0, self.cm_y0, self.cm_res = cm["cost"], float(cm["x0"]), float(cm["y0"]), float(cm["res"])
         self.load_s = time.time() - t0
 
+    def coarsen(self, res):
+        """복셀 격자를 res(m) 로 재격자화 (서브샘플이 아니라 병합: semantic 은 n_sem 가중 평균, rgb 는 n_pts 가중 평균)."""
+        if res <= self.vox:
+            return self
+        ctr = self.voxel_centers(); K = np.floor(ctr / res).astype(np.int64)
+        uk, inv = np.unique(K, axis=0, return_inverse=True); inv = inv.ravel(); n = len(uk)
+        w = self.n_sem.astype(np.float64)
+        sem = np.zeros((n, self.sem.shape[1])); np.add.at(sem, inv, self.sem * w[:, None])
+        n_sem = np.bincount(inv, weights=w, minlength=n); sem /= np.maximum(n_sem, 1)[:, None]
+        wp = self.n_pts.astype(np.float64)
+        rgb = np.zeros((n, 3)); np.add.at(rgb, inv, self.rgb.astype(np.float64) * wp[:, None])
+        n_pts = np.bincount(inv, weights=wp, minlength=n); rgb /= np.maximum(n_pts, 1)[:, None]
+        self.ijk, self.vox = uk, float(res)
+        self.sem, self.n_sem = sem.astype(np.float32), n_sem.astype(np.int32)
+        self.rgb, self.n_pts = rgb.clip(0, 255).astype(np.uint8), n_pts.astype(np.int32)
+        return self
+
     # --- 편의 질의 (CPU) ---
     def voxel_centers(self):
         return (self.ijk + 0.5) * self.vox
@@ -137,9 +154,13 @@ if __name__ == "__main__":
     ap.add_argument("--cubes", action="store_true", help="semantic 복셀을 정육면체 메시로 (OctoMap 스타일, 무거움 → --sub 4~8 권장)")
     ap.add_argument("--no-edges", action="store_true", help="--cubes 에서 검은 모서리 와이어 생략")
     ap.add_argument("--alpha", type=float, default=1.0, help="큐브 투명도 0~1 (rrd 에 굽힘; 0.16 뷰어에 런타임 슬라이더 없음)")
+    ap.add_argument("--coarse", type=float, default=None, help="복셀을 이 해상도(m)로 병합해서 표시 (예: 0.3)")
     a = ap.parse_args()
     mp = MapPackage(a.manifest)
     print(json.dumps(mp.summary(), ensure_ascii=False, indent=1))
+    if a.coarse:
+        t0 = time.time(); mp.coarsen(a.coarse)
+        print(f"coarsen → {a.coarse} m: {len(mp.ijk):,} voxels ({time.time()-t0:.1f}s)")
     if a.rrd:
         t0 = time.time(); to_rerun(mp, a.rrd, a.sub, a.cubes, not a.no_edges, a.alpha)
         print(f"rerun 저장 {a.rrd} ({time.time()-t0:.1f}s)")
