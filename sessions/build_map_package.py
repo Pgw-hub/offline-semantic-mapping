@@ -18,6 +18,7 @@
   F  occupancy  lidar_scans + session_voxsem → compiled/session_occupancy.npz
   G  package    map_manifest.json 작성 + 코스트맵(costmap_from_occupancy) 등록
   H  view       load_map 요약 + compiled/map_package.rrd (--coarse 0.3 --cubes)
+  V  video      RGB 배속 영상 compiled/session_rgb_x<speed>.mp4 (options.video_speed, 0 이면 생략)
 레이아웃: <root>/{dataset,sem,voxel,compiled}/ ; 매니페스트 경로는 <root> 기준 상대경로 (load_map 규약).
 """
 import argparse, glob, json, os, shutil, subprocess, sys, time
@@ -39,7 +40,7 @@ class Build:
         self.D = {k: os.path.join(self.root, k) for k in ("dataset", "sem", "voxel", "compiled", "logs")}
         self.opt = {"lidar_fusion": True, "mask_bottom_px": 60, "drop_classes": "person", "scene_cloud": 0, "vlm_edges": True, "vlm_max_pairs": 30,
                     "vlm_model": "Qwen/Qwen2.5-VL-32B-Instruct", "occupancy_res": 0.2, "prob_hit": 0.85, "prob_miss": 0.45,
-                    "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "map_id": os.path.basename(self.root),
+                    "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "video_speed": 15, "video_width": 960, "map_id": os.path.basename(self.root),
                     "frame": "SLAM world (/Odometry/base)"}
         self.opt.update(cfg.get("options", {}))
         for d in self.D.values():
@@ -189,6 +190,13 @@ class Build:
         except Exception as e:
             self.say(f"  chown 실패(무시): {e}")
 
+    def step_V(self):
+        sp = int(self.opt.get("video_speed", 0) or 0)
+        if sp <= 0: self.say("  video_speed 0 → 생략"); return
+        out = os.path.join(self.D["compiled"], f"session_rgb_x{sp}.mp4")
+        if self.done("V", out): return
+        self.run([PY, f"{REPO}/tools/make_rgb_video.py", self.D["dataset"], out, "--speed", str(sp), "--width", str(self.opt.get("video_width", 960)), "--logs", *self.logs], logname="V.log")
+
     def go(self, steps):
         try:
             for s in steps:
@@ -199,7 +207,7 @@ class Build:
             self.chown_outputs()
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("session_yaml"); ap.add_argument("--steps", default="A,S,R,B,C,D,E,F,G,H")
+    ap = argparse.ArgumentParser(); ap.add_argument("session_yaml"); ap.add_argument("--steps", default="A,S,R,B,C,D,E,F,G,H,V")
     ap.add_argument("--force", default="", help="다시 만들 단계 (쉼표)"); ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(); cfg = yaml.safe_load(open(a.session_yaml))
     b = Build(cfg, dry=a.dry_run, force=[s for s in a.force.split(",") if s])
