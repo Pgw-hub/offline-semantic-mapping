@@ -89,27 +89,21 @@ if a.rrd:
     import rerun as rr, rerun.blueprint as rrb
     rr.init("octomap"); rr.save(a.rrd)
     bp = rrb.Blueprint(rrb.Tabs(
-        rrb.Spatial3DView(origin="/occ", name="Occupied (semantic)", contents=["+ /occ/occupied/**", "+ /occ/cleared"]),
+        rrb.Spatial3DView(origin="/occ", name="Occupied (semantic)", contents=["+ /occ/occupied/**", "+ /occ/cleared/**"]),
+        rrb.Spatial3DView(origin="/occ", name="Occupied (no edges)", contents=["+ /occ/occupied/**", "- /occ/occupied/*/wire"]),
         rrb.Spatial3DView(origin="/occ", name="Free space", contents=["+ /occ/free", "+ /occ/occupied/**"]),
         rrb.Spatial3DView(origin="/occ", name="All", contents="+ /occ/**")), rrb.TimePanel(expanded=False))
     rr.send_blueprint(bp, make_default=True)
     pal = np.array([(95, 170, 95), (200, 165, 120), (40, 110, 60), (220, 60, 60), (120, 135, 160), (110, 110, 110)], np.uint8)
 
-    def cubes_mesh(centers, size, color):
-        """복셀 중심들 → 속이 찬 정육면체 하나의 Mesh3D (OctoMap 스타일). 0.16 Boxes3D 는 와이어프레임만이라 메시로."""
-        c = np.asarray(centers, np.float32); h = size / 2
-        off = np.array([[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]], np.float32) * h
-        verts = (c[:, None, :] + off[None]).reshape(-1, 3)
-        face = np.array([[0,1,2],[0,2,3],[4,6,5],[4,7,6],[0,4,5],[0,5,1],[1,5,6],[1,6,2],[2,6,7],[2,7,3],[3,7,4],[3,4,0]], np.uint32)
-        tris = (face[None] + (np.arange(len(c), dtype=np.uint32) * 8)[:, None, None]).reshape(-1, 3)
-        cols = np.tile(np.asarray(color, np.uint8), (len(verts), 1))
-        return rr.Mesh3D(vertex_positions=verts, triangle_indices=tris, vertex_colors=cols)
+    import sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from cube_mesh import log_cubes   # 면별 음영 큐브 메시 + 검은 모서리(<entity>/wire)
 
     for i, nm in enumerate(classes + ["other", "unknown"]):
         m = occ_lab == i
         if m.any():
-            rr.log(f"occ/occupied/{nm}", cubes_mesh(occ_xyz[m], a.res * 0.96, pal[i]))       # 살짝 작게 → 격자 경계가 보임
+            log_cubes(f"occ/occupied/{nm}", occ_xyz[m], a.res, pal[i])
     sub = np.arange(len(free_xyz))[::4]
     rr.log("occ/free", rr.Points3D(free_xyz[sub], colors=[[80, 160, 255, 40]], radii=a.res * 0.25))
-    rr.log("occ/cleared", cubes_mesh(ctr[ours_in_free][::2], V * 0.9, (255, 60, 200)))   # OctoMap 이 비웠다고 본 우리 복셀
+    log_cubes("occ/cleared", ctr[ours_in_free][::2], V * 0.9, (255, 60, 200), edges=False)   # OctoMap 이 비웠다고 본 우리 복셀
     print("rrd:", a.rrd)

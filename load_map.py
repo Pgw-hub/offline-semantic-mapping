@@ -71,7 +71,7 @@ def default_blueprint():
                          rrb.SelectionPanel(expanded=False))
 
 
-def to_rerun(mp, out, sub=2, cubes=False):
+def to_rerun(mp, out, sub=2, cubes=False, edges=True):
     import rerun as rr
     rr.init("map_package"); rr.save(out)
     rr.send_blueprint(default_blueprint(), make_active=True, make_default=True)
@@ -81,21 +81,15 @@ def to_rerun(mp, out, sub=2, cubes=False):
     n_cls = len(mp.classes)
     known = idx[lab[idx] < n_cls]; oth = idx[lab[idx] == n_cls]; unk = idx[lab[idx] == n_cls + 1]
     # 이전 뷰와 같은 구조: 카메라가 본 복셀(semantic/rgb) · 어휘 밖(other) · LiDAR 만(unknown) 을 각각 토글 가능하게
-    def cubes_mesh(centers, size, color):
-        """복셀 → 속이 찬 정육면체 Mesh3D (OctoMap 스타일). 0.16 Boxes3D 는 와이어프레임만 지원."""
-        c = np.asarray(centers, np.float32); h = size / 2
-        off = np.array([[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[-1,-1,1],[1,-1,1],[1,1,1],[-1,1,1]], np.float32) * h
-        verts = (c[:, None, :] + off[None]).reshape(-1, 3)
-        face = np.array([[0,1,2],[0,2,3],[4,6,5],[4,7,6],[0,4,5],[0,5,1],[1,5,6],[1,6,2],[2,6,7],[2,7,3],[3,7,4],[3,4,0]], np.uint32)
-        tris = (face[None] + (np.arange(len(c), dtype=np.uint32) * 8)[:, None, None]).reshape(-1, 3)
-        return rr.Mesh3D(vertex_positions=verts, triangle_indices=tris, vertex_colors=np.tile(np.asarray(color, np.uint8), (len(verts), 1)))
+    import sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from cube_mesh import log_cubes   # 면별 음영 큐브 메시 + 검은 모서리(<entity>/wire, 토글 가능)
 
     # 클래스별 엔티티 → 뷰어에서 grass/path/tree/person 을 개별 토글 (--cubes 면 정육면체 메시)
     for ci, cname in enumerate(mp.classes):
         sel = idx[lab[idx] == ci]
         if len(sel):
             if cubes:
-                rr.log(f"map/voxels/semantic/{cname}", cubes_mesh(ctr[sel], mp.vox * 0.96, pal[ci]))
+                log_cubes(f"map/voxels/semantic/{cname}", ctr[sel], mp.vox, pal[ci], edges=edges)
             else:
                 rr.log(f"map/voxels/semantic/{cname}", rr.Points3D(ctr[sel], colors=[pal[ci].tolist()], radii=mp.vox * 0.45))
     rr.log("map/voxels/rgb", rr.Points3D(ctr[np.concatenate([known, oth])], colors=mp.rgb[np.concatenate([known, oth])], radii=mp.vox * 0.45))
@@ -141,9 +135,10 @@ if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("manifest"); ap.add_argument("--rrd", default=None); ap.add_argument("--sub", type=int, default=2)
     ap.add_argument("--cubes", action="store_true", help="semantic 복셀을 정육면체 메시로 (OctoMap 스타일, 무거움 → --sub 4~8 권장)")
+    ap.add_argument("--no-edges", action="store_true", help="--cubes 에서 검은 모서리 와이어 생략")
     a = ap.parse_args()
     mp = MapPackage(a.manifest)
     print(json.dumps(mp.summary(), ensure_ascii=False, indent=1))
     if a.rrd:
-        t0 = time.time(); to_rerun(mp, a.rrd, a.sub, a.cubes)
+        t0 = time.time(); to_rerun(mp, a.rrd, a.sub, a.cubes, not a.no_edges)
         print(f"rerun 저장 {a.rrd} ({time.time()-t0:.1f}s)")
