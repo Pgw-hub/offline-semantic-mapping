@@ -28,7 +28,28 @@ class MapPackage:
                       "vlm": json.load(open(P("edges_vlm")))}
         cm = np.load(P("costmap_2d"))
         self.costmap, self.cm_x0, self.cm_y0, self.cm_res = cm["cost"], float(cm["x0"]), float(cm["y0"]), float(cm["res"])
+        # 확률적 occupancy (레이캐스팅 log-odds + 표면 하이브리드). 없으면 None.
+        self.occ = None
+        if "occupancy_probabilistic" in self.man["files"]:
+            o = np.load(P("occupancy_probabilistic"))
+            self.occ = {"ijk": o["ijk"], "res": float(o["res"]), "logodds": o["logodds"], "state": o["state"], "source": o["source"],
+                        "hits": o["hits"], "misses": o["misses"]}
+            self.surf_state, self.surf_removed = o["surf_state"], o["surf_removed"]
         self.load_s = time.time() - t0
+
+    def occupancy_state(self, xyz):
+        """world 점들 → 1 occupied / 0 free / -1 unknown (CPU, 정렬 키 이진탐색)"""
+        if self.occ is None:
+            return np.full(len(xyz), -1, np.int8)
+        R = self.occ["res"]; K = np.floor(np.asarray(xyz) / R).astype(np.int64)
+        if not hasattr(self, "_occ_keys"):
+            I = self.occ["ijk"].astype(np.int64) + (1 << 20)
+            self._occ_keys = (I[:, 0] << 42) | (I[:, 1] << 21) | I[:, 2]
+            self._occ_order = np.argsort(self._occ_keys); self._occ_keys = self._occ_keys[self._occ_order]
+        K = K + (1 << 20); k = (K[:, 0] << 42) | (K[:, 1] << 21) | K[:, 2]
+        p = np.searchsorted(self._occ_keys, k); pc = np.minimum(p, len(self._occ_keys) - 1); f = self._occ_keys[pc] == k
+        out = np.full(len(k), -1, np.int8); out[f] = self.occ["state"][self._occ_order[pc[f]]]
+        return out
 
     def coarsen(self, res):
         """복셀 격자를 res(m) 로 재격자화 (서브샘플이 아니라 병합: semantic 은 n_sem 가중 평균, rgb 는 n_pts 가중 평균)."""
@@ -60,7 +81,12 @@ class MapPackage:
         lab = self.labels(); names = self.classes + ["other", "unknown(LiDAR only)"]
         cnt = {n: int((lab == i).sum()) for i, n in enumerate(names)}
         c = self.costmap
-        return {"load_seconds": round(self.load_s, 2), "voxels": int(len(self.ijk)), "voxel_labels": cnt,
+        occ = None
+        if self.occ is not None:
+            s = self.occ["state"]
+            occ = {"res_m": self.occ["res"], "cells": int(len(s)), "occupied": int((s == 1).sum()), "free": int((s == 0).sum()),
+                   "surface_voxels_removed_dynamic": int(self.surf_removed.sum())}
+        return {"load_seconds": round(self.load_s, 2), "voxels": int(len(self.ijk)), "voxel_labels": cnt, "occupancy": occ,
                 "objects": len(self.objects), "clip_dim": int(self.clip.shape[1]),
                 "edges": {k: len(v) for k, v in self.edges.items()},
                 "costmap": {"shape": list(c.shape), "res_m": self.cm_res,
@@ -78,17 +104,21 @@ def default_blueprint():
         "- /map/voxels/other",
         "- /map/edges/heuristic/**",  # 671 개 근사 엣지: 기본 꺼짐 (노이즈)
         "- /map/costmap2d",
+        "- /map/occupancy/**",        # 확률적 occupancy 는 별도 탭
     ])
+    occ = rrb.Spatial3DView(origin="/map", name="Occupancy", contents=[
+        "+ /map/occupancy/occupied/**", "+ /map/objects/**"])
+    occ_free = rrb.Spatial3DView(origin="/map", name="Occupancy + free", contents=["+ /map/occupancy/**"])
     cost = rrb.Spatial3DView(origin="/map", name="Costmap", contents=[
         "+ /map/costmap2d", "+ /map/objects/**", "+ /map/voxels/unknown"])
     rgb = rrb.Spatial3DView(origin="/map", name="RGB", contents=["+ /map/voxels/rgb", "+ /map/objects/**"])
     everything = rrb.Spatial3DView(origin="/map", name="All layers", contents="+ /map/**")
-    return rrb.Blueprint(rrb.Tabs(main, cost, rgb, everything),
+    return rrb.Blueprint(rrb.Tabs(main, occ, occ_free, cost, rgb, everything),
                          rrb.TimePanel(expanded=False),
                          rrb.SelectionPanel(expanded=False))
 
 
-def to_rerun(mp, out, sub=2, cubes=False, edges=True, alpha=1.0):
+def to_rerun(mp, out, sub=2, cubes=False, edges=True, alpha=1.0, occ_view_res=0.4):
     import rerun as rr
     rr.init("map_package"); rr.save(out)
     rr.send_blueprint(default_blueprint(), make_active=True, make_default=True)
@@ -101,6 +131,9 @@ def to_rerun(mp, out, sub=2, cubes=False, edges=True, alpha=1.0):
     import sys; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from cube_mesh import log_cubes   # 면별 음영 큐브 메시 + 검은 모서리(<entity>/wire, 토글 가능)
 
+    # 동적 클래스 표면 복셀(free 공간 안) 제거 — occupancy 레이어가 있을 때만 (coarsen 뒤에는 인덱스가 달라 생략)
+    if mp.occ is not None and len(mp.surf_removed) == len(ctr):
+        idx = idx[~mp.surf_removed[idx]]
     # 클래스별 엔티티 → 뷰어에서 grass/path/tree/person 을 개별 토글 (--cubes 면 정육면체 메시)
     for ci, cname in enumerate(mp.classes):
         sel = idx[lab[idx] == ci]
@@ -112,6 +145,21 @@ def to_rerun(mp, out, sub=2, cubes=False, edges=True, alpha=1.0):
     rr.log("map/voxels/rgb", rr.Points3D(ctr[np.concatenate([known, oth])], colors=mp.rgb[np.concatenate([known, oth])], radii=mp.vox * 0.45))
     rr.log("map/voxels/other", rr.Points3D(ctr[oth], colors=[[120, 135, 160]], radii=mp.vox * 0.45))
     rr.log("map/voxels/unknown", rr.Points3D(ctr[unk], colors=[[110, 110, 110]], radii=mp.vox * 0.35))
+    # 확률적 occupancy 레이어 (0.2m): occupied 큐브는 출처별 색, free 는 반투명 점
+    if mp.occ is not None:
+        O = mp.occ; oc = (O["ijk"] + 0.5) * O["res"]; src = O["source"]; st = O["state"]
+        vr = max(occ_view_res, O["res"])            # 표시용 병합 해상도 (데이터는 그대로)
+        occm = st == 1
+        K = np.floor(oc[occm] / vr).astype(np.int64); uk, inv = np.unique(K, axis=0, return_inverse=True); inv = inv.ravel()
+        vsrc = np.zeros(len(uk), np.int8); np.maximum.at(vsrc, inv, src[occm])     # 3(둘 다) > 2(표면복원) > 1(레이만)
+        vctr = (uk + 0.5) * vr
+        for code, nm, col in [(3, "occupied/ray_and_surface", (120, 160, 120)), (2, "occupied/surface_restored", (230, 170, 60)),
+                              (1, "occupied/ray_only", (220, 70, 70))]:
+            m = vsrc == code
+            if m.any():
+                log_cubes(f"map/occupancy/{nm}", vctr[m], vr, col, edges=edges, alpha=alpha)
+        fr = np.where(st == 0)[0][::max(4, sub * 4)]
+        rr.log("map/occupancy/free", rr.Points3D(oc[fr], colors=[[80, 160, 255, 40]], radii=O["res"] * 0.25))
     # costmap → 지면 위 색 점 (row=x, col=y)
     c = mp.costmap; ii, jj = np.where(c < 255)
     cx = mp.cm_x0 + (ii + 0.5) * mp.cm_res; cy = mp.cm_y0 + (jj + 0.5) * mp.cm_res
@@ -155,6 +203,7 @@ if __name__ == "__main__":
     ap.add_argument("--no-edges", action="store_true", help="--cubes 에서 검은 모서리 와이어 생략")
     ap.add_argument("--alpha", type=float, default=1.0, help="큐브 투명도 0~1 (rrd 에 굽힘; 0.16 뷰어에 런타임 슬라이더 없음)")
     ap.add_argument("--coarse", type=float, default=None, help="복셀을 이 해상도(m)로 병합해서 표시 (예: 0.3)")
+    ap.add_argument("--occ-view", type=float, default=0.4, help="occupancy 레이어 표시 해상도(m) (데이터 0.2m 는 그대로)")
     a = ap.parse_args()
     mp = MapPackage(a.manifest)
     print(json.dumps(mp.summary(), ensure_ascii=False, indent=1))
@@ -162,5 +211,5 @@ if __name__ == "__main__":
         t0 = time.time(); mp.coarsen(a.coarse)
         print(f"coarsen → {a.coarse} m: {len(mp.ijk):,} voxels ({time.time()-t0:.1f}s)")
     if a.rrd:
-        t0 = time.time(); to_rerun(mp, a.rrd, a.sub, a.cubes, not a.no_edges, a.alpha)
+        t0 = time.time(); to_rerun(mp, a.rrd, a.sub, a.cubes, not a.no_edges, a.alpha, a.occ_view)
         print(f"rerun 저장 {a.rrd} ({time.time()-t0:.1f}s)")
