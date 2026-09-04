@@ -221,3 +221,6 @@
 - session_3 (log_000~002, 실내→야외) 35분: A 253s(84s/로그) · R+B 370s(1,800프레임) · C 35s · D 1,066s(≈6분/로그, 실내 객체 多) · E 298s(VLM 포함) · F 88s · G+H 6s.
   결과: 복셀 225만 · occupancy 316만 셀 · 객체 76 · 엣지 휴리스틱 76/지형 29/VLM 13 · 코스트맵 460×598@0.2m · 패키지 9파일 31.7MB · rrd 67MB.
 - 단계 V 추가: options.video_speed (기본 15, 0=생략) → compiled/session_rgb_x15.mp4 (tools/make_rgb_video.py, 30fps 원본 stride=배속, 960px, H.264). session_3 3로그 → 12s 14.6MB, 5초 소요.
+- Map Portal (2026-09-04): tools/map_portal.py 가 9092 를 맡음(rrd_http.py 대체, 파일 서빙 겸함). http://localhost:9092/ 에 output/*/compiled/map_manifest.json 스캔 카드
+  (데이터셋·로그·통계 chips·클래스 분포·rerun 열기·매니페스트·빌드 로그·영상 자동재생). step H 가 compiled/summary.json 작성(포털이 읽음). 시작: tools/start_portal.sh.
+  test_2logs 도 output/ 아래로 이동(구 /data2/cg/sessions 비움).
