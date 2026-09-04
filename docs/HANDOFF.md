@@ -141,3 +141,82 @@
 - 커밋은 컨테이너 안에서: `docker exec cg bash -c "cd /data2/cg && git add -A && git commit -m ..."` (git identity 는 -c 로 지정 또는 git config 설정)
 - 데이터·모델·산출물(data/ voxel/ compiled/ hf_cache/ *.rrd *.npz)은 .gitignore — 백업은 docker 이미지 cg-conceptgraphs:20260902 + /data2/backups
 - 원격(remote) 미설정 — GitHub/GitLab 에 올리려면 `git remote add origin <url> && git push -u origin main`
+
+## 확률적 occupancy (OctoMap) 실험 (2026-09-04)
+- 도구: emc tools/export_lidar_scans.py (스캔별 world 점+센서 원점) → cg build_octomap.py (octomap-python, 레이캐스팅 log-odds,
+  tree.search 로 우리 복셀과 조인) → compiled/octo_log007_{occupancy.npz,octomap.bt,rrd}
+- 결과(0.2m, 기본 hit0.7/miss0.4, 599스캔 23s): occupied 114k · free 2.48M 리프. 우리 0.1m 복셀의 65.8% 가 OctoMap free —
+  동적 제거가 아니라 **지면 침식(path 86% free)·식생 통과** 아티팩트. person 은 94% free → 동적 지우기는 작동.
+  ★우리 semantic 복셀 맵 = 표면 복셀(관측 점 누적), free/unknown 없음. 진짜 occupancy 는 별도 층으로 병행이 맞음.
+- OctoMap 3설정 비교(우리 표면 복셀 중 free 판정 = 침식률): 0.2m 기본 65.8% / 0.2m hit.85·miss.45 **31.2%** / 0.1m hit.85·miss.45 39.5%.
+  → miss 약화가 침식을 절반으로, 해상도↑는 오히려 악화(셀당 hit 희소). person 제거는 86~94% 유지.
+  권장 하이브리드: occupied = 표면 복셀 ∪ OctoMap occupied / free = OctoMap free ∧ 표면 복셀 없음 / 그 외 unknown,
+  "표면 복셀이 free 안" 은 person 등 동적 클래스에만 삭제 근거로 사용. rrd: compiled/octo_log007.rrd(0.2 기본), octo_log007_tuned.rrd(0.1 튠)
+- rerun 정육면체 렌더: 0.16 Boxes3D 는 와이어프레임만 → 복셀 중심에서 8정점·12삼각 Mesh3D 를 클래스별 1개로 생성(cubes_mesh, 크기 0.96×res).
+  build_octomap.py 기본 적용(occ/occupied/<class>), load_map.py --cubes (--sub 4~8 권장, 수백만 큐브는 브라우저 부담).
+  rrd: compiled/octo_log007_tuned02.rrd (0.2m 튠, 권장 설정) · compiled/map_package_cubes.rrd
+  · 검은 모서리: cube_mesh.py (면별 24정점 음영 메시 + <entity>/wire 에 검은 Boxes3D 와이어). load_map --cubes 기본 켜짐(--no-edges 로 끔), OctoMap rrd 는 "Occupied (no edges)" 탭으로 비교.
+  · 해상도: load_map --coarse <m> 는 서브샘플이 아니라 병합(semantic n_sem 가중, rgb n_pts 가중). 세션 라벨 큐브 수: 0.2m 85만 · 0.3m 41만 · 0.4m 23만 · 0.5m 15만.
+    rrd: compiled/map_package_cubes03.rrd (0.3m, 105MB) · map_package_cubes05.rrd (0.5m, 40MB). OctoMap rrd 는 --objects <session_objects.json> 으로 씬그래프 박스 겹침(occ/objects/*).
+  · 투명도: --alpha (RGBA 굽힘). 0.16 뷰어는 런타임 슬라이더 없음, 메시 알파 지원 불확실 → compiled/octo_log007_tuned02_a40.rrd 로 확인.
+
+## 확률적 occupancy 레이어 — 맵 패키지 내장 (2026-09-04)
+- 외부 OctoMap 단계 제거: cg:/data2/cg/build_occupancy.py (numpy 레이캐스팅). 입력 = emc export_lidar_scans.py 의 스캔별 world 점+원점
+  (/data2/cg/data/raibo/log_XXX/lidar_scans, 11개 로그 전부 export 완료) + session_voxsem.npz.
+- 규칙: 스캔당 셀 1회 hit/miss, log-odds hit .85/miss .45 클램프[-2,3.5]; 하이브리드 = occupied ∪ 정적 표면 복셀, free = free ∧ 표면 없음,
+  동적(person) 표면 복셀이 free 안이면 제거(surf_removed). 0.2m, 11로그 6526스캔 266s.
+- 세션 결과: 셀 863만 (occupied 214만 · free 649만). occupied 출처: 레이만 292 · 표면복원 86만 · 둘 다 128만.
+  표면 복셀 755만 중 레이 free 234만(31%) — 지면 침식/식생 통과라 복원됨. person 14,383 중 11,610 제거.
+- 매니페스트 files.occupancy_probabilistic = compiled/session_occupancy.npz (41MB; 패키지 총 124MB). 로드 1.0s.
+  MapPackage.occ / .occupancy_state(xyz) / .surf_removed. load_map --occ-view 0.4 (표시 병합).
+- rrd: compiled/map_package_occ.rrd (0.3m 큐브 + occ 0.4m, 230MB) · map_package_occ_lite.rrd (0.5m/0.6m).
+- 미완: 코스트맵(voxel_postprocess) 이 아직 이 레이어를 안 씀 — free 셀을 '관측된 자유공간' 으로 넣으면 255(미관측) 줄일 수 있음.
+
+## 요청 검증 + 코스트맵 v2 (2026-09-04)
+- cg:/data2/cg/verify_requests.py <manifest> --n 20 --exclude-indoor --costmap-key costmap_2d_occ
+  랜덤 시작 → 문장 파싱(사전 KO2EN) → CLIP 객체 → "옆" 목표(0.5~1.5m 링, 같은 연결요소, 3D occupancy 몸통 검사) → 가중 A*.
+  + 지형 코스트맵 요청 grass_only/avoid_grass/grass_layer/graded, n×n 크롭, nav2 map_server pgm+yaml. 출력 compiled/verify_occ/.
+- ★발견: v1 costmap_2d(voxel_postprocess) 는 통행면 3,253m² / lethal 3,553m², 연결요소 14,961(최대 557m²) → 4/20.
+  원인 = 표면 복셀 1개(hit 1회)도 장애물 + 열 최저점 지면. occupancy 셀 34% 가 hit 1회.
+- costmap_from_occupancy.py → compiled/session_costmap_occ.npz, 매니페스트 costmap_2d_occ (0.2m). 지면 hits≥2 최저 셀, 장애물 hits≥3,
+  grass/person 제외, tree 또는 >0.5m lethal. 통행 9,483m² / lethal 719m², 최대 요소 8,907m² → 20/20 (평균 62m, 우회비 1.56).
+  MapPackage(manifest, costmap_key="costmap_2d_occ"). inflation 붙인 뒤 v1 제거 권장. voxel_postprocess 의 rrd/뷰는 아직 v1.
+- 리포트 아티팩트: "벤치 옆으로 가줘 검증".
+- 세션 RGB 배속 영상: compiled/session_rgb_x15.mp4 (43.6s, 57MB) · session_rgb_x10.mp4 (65s, 81MB). 11로그 30fps 프레임을 stride 15/10 으로 뽑고(cg cv2, 960px, 상단 오버레이) emc ffmpeg libx264 로 인코딩.
+  브라우저 재생: http://localhost:9092/compiled/session_rgb_x15.mp4 (rrd_http.py 서버). 프레임 임시폴더 video_frames*/ 는 삭제.
+- 기하 vs semantic 정적 코스트맵 비교 (compare_costmaps.py, 아티팩트 "기하 vs Semantic 정적 코스트맵"): 세션 잔디 1,142m² 중 lethal 비율
+  A 원시점 기하(0.1m, ≥0.15m) 87.6% · B occupancy 기하(hits≥1) 6.5% · C semantic 5.2%. 최대 통행영역 60 / 4,221 / 8,293 m².
+  ★핵심: 잔디 통과의 대부분은 다중스캔 occupancy 에서 이미 나옴; semantic 은 등급(잔디 90, 산책로 선호)·낮은 미라벨 장애물 200 (연결성)·tree/other 보수 처리를 더함.
+  B 도 hits≥3 이면 한 덩이(8,384m²). 파일 compiled/cmp_costmap_*_h1.npz, compiled/compare_costmap/.
+- 산책로 준수 정책 검증 (policy_adherence.py, 아티팩트 "산책로 준수 정책 검증"): 산책로 셀 50쌍(20~80m), GEO/SEM/STRICT 세 맵 모두 도달.
+  산책로 위 비율 42.2% → 74.6% → 78.9%, 잔디 침범 합계 176.5m → 47.5m → 0, 길이 +4.6% / +10.0%. 잔디 밟는 쌍 36 → 19 → 0.
+  ★compare_costmaps/policy_adherence 의 경로 오버레이는 격자에 그린 뒤 전치+반전해야 함(전치 후 그리면 대각 반전 버그, 수정 완료·재발행).
+
+## 컨테이너 통합 (2026-09-04) — offline_3d_semantic_map
+- 새 컨테이너 `offline_3d_semantic_map` (이미지 offline-3d-semantic-map:20260904 = cg 스냅샷 + mcap 1.4.0 + ffmpeg).
+  run: docker run -d --name offline_3d_semantic_map --gpus all --shm-size 16g -v /data2:/data2 -w /data2/cg --restart unless-stopped offline-3d-semantic-map:20260904 sleep infinity
+  버전 고정 유지: numpy 1.26.4 · cv2 4.10 · torch 2.7.1+cu128 · transformers 5.16.1 · rerun-sdk 0.16.1 · supervision 0.21.0.
+- 전처리 5종을 emc 에서 /data2/cg/tools/preprocess/ 로 이전 (ROS 불필요): mcap_to_cg, extract_rgb_session, precompute_semantic(=구 precompute_semantic_outdoor, 인자화),
+  build_voxel_sem_map, export_lidar_scans. log_007 검증: 프레임·depth·traj·lidar_world 바이트 동일, SegFormer 확률 동일, 복셀 키 집합 동일.
+  precompute_semantic 은 이제 이 GPU 에서 돈다(40프레임 11s; 세션 6600프레임 ≈ 30분).
+- ★기존 참조 복셀(voxel/log007_voxsem.npz, session)은 LiDAR 융합 없는 data/raibo/log_007 depth 로 만든 것. --lidar 데이터셋(log_007_lidar)으로 만들면 복셀 +0.14%.
+- 이후 모든 작업은 offline_3d_semantic_map 에서. cg 는 참고용으로 남김(중지 여부는 사용자 결정), emc 는 옛 히트맵 파이프라인·rviz 전용.
+- 다음: 한 번에 도는 빌드 오케스트레이터(build_map_package.py + 세션 YAML) — 단일 컨테이너라 docker exec 없이 파이썬 한 프로세스로 가능.
+
+## 단일 스크립트 빌드 (2026-09-04) — sessions/build_map_package.py
+- 컨테이너 offline_3d_semantic_map 에서: `cd /data2/cg/sessions && python build_map_package.py <session.yaml> [--steps A,S,R,B,C,D,E,F,G,H] [--force X] [--dry-run]`
+  YAML: root, mcap_dir, logs(연속 범위), calib(기본 mcap_dir/raisin_config/calibration), options{lidar_fusion, mask_bottom_px, drop_classes, vlm_edges, vlm_max_pairs, occupancy_res, prob_hit/miss, costmap{...}, view_coarse, map_id}
+  레이아웃 <root>/{dataset/log_XXX, sem, voxel, compiled, logs}. 산출물 있으면 건너뜀. 단계별 로그 <root>/logs/*.log, 전체 로그 sessions/<name>_build.out.
+- 검증: sessions/test_2logs (log_007+008) 전체 13분 → 매니페스트 9 파일 25.7MB, 복셀 166만, occupancy 296만 셀, 객체 12, 코스트맵 813×320@0.2m, map_package.rrd 62MB.
+  단계 시간: A 데이터셋 81s/로그 · B SegFormer 268s(1,200프레임) · D ConceptGraphs ≈110s/로그(scene cloud 로깅 끔) · E 115s · F 30s.
+- 고친 것: merge_voxels 파일명 log_XXX 허용, MapPackage 코스트맵 없이 로드 가능, map_compiler 경로 env(CG_RAIBO_ROOT/CG_OUT_DIR).
+- ★야외 로그는 객체가 적어(로그당 6개) VLM 후보 쌍이 0 일 수 있음 → edges_vlm 빈 목록도 정상. 전체 세션 재현용 YAML: sessions/session_riverside_20260827.yaml (미실행, 예상 2시간).
+- 기존 세션(data/raibo, compiled/)은 손대지 않음. 새 세션은 모두 sessions/<name>/ 아래.
+
+## 저장소 이전 + session_3 (2026-09-04)
+- ★코드·세션 설정·결과의 정본은 /home/gw.park/offline_semantic_mapping (git). /data2/cg 는 mcap 원본·ConceptGraphs 설치본·hf_cache·옛 산출물만.
+  컨테이너 offline_3d_semantic_map 는 이 폴더를 같은 경로로 마운트(-w 도 여기). YAML root 에 이름만 쓰면 output/<이름>/.
+  빌드 끝나면 output 소유권을 gw.park 으로 chown. 9092 파일 서버는 tools/rrd_http.py [dir] (기본 = 저장소) → 링크 http://localhost:9092/output/<이름>/compiled/map_package.rrd,
+  옛 산출물은 심볼릭링크 data2_cg/ 경유 (http://localhost:9092/data2_cg/compiled/...).
+- session_3 (log_000~002, 실내→야외) 35분: A 253s(84s/로그) · R+B 370s(1,800프레임) · C 35s · D 1,066s(≈6분/로그, 실내 객체 多) · E 298s(VLM 포함) · F 88s · G+H 6s.
+  결과: 복셀 225만 · occupancy 316만 셀 · 객체 76 · 엣지 휴리스틱 76/지형 29/VLM 13 · 코스트맵 460×598@0.2m · 패키지 9파일 31.7MB · rrd 67MB.
