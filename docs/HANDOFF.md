@@ -220,3 +220,4 @@
   옛 산출물은 심볼릭링크 data2_cg/ 경유 (http://localhost:9092/data2_cg/compiled/...).
 - session_3 (log_000~002, 실내→야외) 35분: A 253s(84s/로그) · R+B 370s(1,800프레임) · C 35s · D 1,066s(≈6분/로그, 실내 객체 多) · E 298s(VLM 포함) · F 88s · G+H 6s.
   결과: 복셀 225만 · occupancy 316만 셀 · 객체 76 · 엣지 휴리스틱 76/지형 29/VLM 13 · 코스트맵 460×598@0.2m · 패키지 9파일 31.7MB · rrd 67MB.
+- 단계 V 추가: options.video_speed (기본 15, 0=생략) → compiled/session_rgb_x15.mp4 (tools/make_rgb_video.py, 30fps 원본 stride=배속, 960px, H.264). session_3 3로그 → 12s 14.6MB, 5초 소요.
