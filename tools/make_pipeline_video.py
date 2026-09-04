@@ -58,8 +58,8 @@ for lg in logs:
                 seg = seg_overlay(cv2.resize(base, (W, H)), np.load(sp)["sem"]); n_seg_hit += 1
         t = t_sess + i / a.src_fps; mm, ss = divmod(int(t), 60)
         frame = np.hstack([panel_title(cv2.resize(rgb, (W, H)), f"RGB   {lg}  frame {i:04d}  {mm:02d}:{ss:02d}  x{a.speed}"),
-                           panel_title(det, "Detection  YOLO-World + SAM  (ConceptGraphs, stride 10)"),
-                           panel_title(seg, "Segmentation  SegFormer-B4 ADE20K -> grass/path/tree/person")])
+                           panel_title(det, "Detection: YOLO-World + SAM (stride 10)"),
+                           panel_title(seg, "Segmentation: SegFormer-B4 (ADE20K)")])
         cv2.imwrite(os.path.join(tmp, f"{k:05d}.jpg"), frame, [cv2.IMWRITE_JPEG_QUALITY, 88]); k += 1
     t_sess += n / a.src_fps; print(f"  {lg}: {n} frames → 누적 {k}", flush=True)
 os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
