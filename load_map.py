@@ -206,8 +206,12 @@ def render_bev(mp, out_png, res=0.2, max_w=1280):
     pal = {0: (111, 145, 121), 1: (141, 147, 155), 2: (79, 122, 92), 3: (209, 133, 47), 4: (92, 153, 199), 5: (70, 74, 80)}   # 디자인 팔레트 (RGB)
     K = np.floor(ctr[:, :2] / res).astype(np.int64); k0 = K.min(0); K -= k0; W, H = int(K[:, 0].max()) + 1, int(K[:, 1].max()) + 1
     scale = min(1.0, max_w / max(W, H))
-    order = np.argsort(ctr[:, 2]); flat = K[order, 0] * H + K[order, 1]
-    top = np.full(W * H, -1, np.int64); top[flat] = lab[order]          # 마지막 대입 = 최고 z
+    # 지면 우선: 열마다 라벨 있는 복셀 중 가장 낮은 것(지면 클래스)을 쓰고, 라벨이 하나도 없으면 unknown
+    n_cls = len(mp.classes); flat_all = K[:, 0] * H + K[:, 1]
+    top = np.full(W * H, -1, np.int64); top[flat_all] = n_cls + 1                       # unknown 바탕
+    known = lab <= n_cls
+    order = np.argsort(-ctr[known, 2]); flat = flat_all[known][order]                   # z 내림차순 → 마지막 대입 = 최저 z
+    top[flat] = lab[known][order]
     img = np.full((H, W, 3), (37, 37, 39), np.uint8)
     for c, col in pal.items():
         m = (top == c).reshape(W, H).T; img[m] = col
