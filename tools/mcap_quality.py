@@ -93,6 +93,14 @@ for topic, d in sorted(per.items()):
     print(f"{topic:32s} n={len(t):6d} exp={exp_n:8.0f} miss≈{max(0, round(exp_n)-len(t)):4d} rate={rate:6.1f}Hz gaps={len(gaps):3d} {n.sum()/1e6:8.1f}MB", flush=True)
 
 # ---------- 2패스: 재생 (RGB / depth / LiDAR / odom) ----------
+# LiDAR 는 로봇(base) 프레임의 자식 엔티티로 로깅하고, base 의 Transform3D 를 odom 마다 갱신 → 스캔이 로봇을 따라다님
+try:
+    import yaml
+    tr = yaml.safe_load(open(os.path.join(a.mcap_dir, "raisin_config", "calibration", "livox_lidar_0_lidar.yaml")))["transform"]
+    t_bl = [float(tr["translation"][k]) for k in "xyz"]
+except Exception:
+    t_bl = [-0.0579, 0.0, 0.20932]
+rr.log("playback/robot/lidar", rr.Transform3D(translation=t_bl), timeless=True)          # base → lidar 오프셋 (회전은 디코더에서 -x,-y 로 처리)
 traj = []
 for li, f in zip(a.logs, files):
     ci = di = si = 0
@@ -119,10 +127,11 @@ for li, f in zip(a.logs, files):
                 xyz = np.stack([-p["x"], -p["y"], p["z"]], -1).astype(np.float32)
                 z = xyz[:, 2]; c = np.clip((z - z.min()) / (np.ptp(z) + 1e-6), 0, 1)
                 col = np.stack([(255 * c), (120 * np.ones_like(c)), (255 * (1 - c))], -1).astype(np.uint8)
-                rr.log("playback/lidar", rr.Points3D(xyz, colors=col, radii=0.03))
+                rr.log("playback/robot/lidar/points", rr.Points3D(xyz, colors=col, radii=0.03))
             else:
                 v = struct.unpack_from("<7d", d, 8); traj.append(v[0:3])
-                rr.log("playback/odom/robot", rr.Points3D([v[0:3]], colors=[[255, 80, 80]], radii=0.15))
+                rr.log("playback/robot", rr.Transform3D(translation=v[0:3], rotation=rr.Quaternion(xyzw=[v[3], v[4], v[5], v[6]])))
+                rr.log("playback/robot/marker", rr.Points3D([[0, 0, 0]], colors=[[255, 80, 80]], radii=0.15))
                 if len(traj) % 10 == 0:
                     rr.log("playback/odom/path", rr.LineStrips3D([np.array(traj, np.float32)], colors=[[255, 200, 60]], radii=0.03))
     print(f"log_{li:03d} 재생 로깅 완료", flush=True)
@@ -133,7 +142,7 @@ bp = rrb.Blueprint(rrb.Tabs(
                  rrb.TimeSeriesView(origin="/quality/size_kb", name="size (KB)"), name="Data quality"),
     rrb.TextLogView(origin="/events", name="Events (gaps, log boundaries)"),
     rrb.Horizontal(rrb.Vertical(rrb.Spatial2DView(origin="/playback/rgb", name="RGB"), rrb.Spatial2DView(origin="/playback/depth", name="Depth")),
-                   rrb.Spatial3DView(origin="/playback", name="LiDAR + odometry", contents=["+ /playback/lidar", "+ /playback/odom/**"]), name="Playback")),
+                   rrb.Spatial3DView(origin="/playback", name="LiDAR + odometry (world)", contents=["+ /playback/robot/**", "+ /playback/odom/**"]), name="Playback")),
     rrb.TimePanel(expanded=True))
 rr.send_blueprint(bp, make_default=True)
 json.dump(summary, open(a.out + ".json", "w"), ensure_ascii=False, indent=1)
