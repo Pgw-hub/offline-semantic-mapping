@@ -199,6 +199,30 @@ def to_rerun(mp, out, sub=2, cubes=False, edges=True, alpha=1.0, occ_view_res=0.
     return out
 
 
+def render_bev(mp, out_png, res=0.2, max_w=1280):
+    """상단 뷰 썸네일: 셀별 최고 z 복셀의 클래스 색 (grass/path/tree/person/other/unknown), 객체 박스 윤곽, 어두운 배경."""
+    import cv2
+    ctr = mp.voxel_centers(); lab = mp.labels()
+    pal = {0: (111, 145, 121), 1: (141, 147, 155), 2: (79, 122, 92), 3: (209, 133, 47), 4: (92, 153, 199), 5: (70, 74, 80)}   # 디자인 팔레트 (RGB)
+    K = np.floor(ctr[:, :2] / res).astype(np.int64); k0 = K.min(0); K -= k0; W, H = int(K[:, 0].max()) + 1, int(K[:, 1].max()) + 1
+    scale = min(1.0, max_w / max(W, H))
+    order = np.argsort(ctr[:, 2]); flat = K[order, 0] * H + K[order, 1]
+    top = np.full(W * H, -1, np.int64); top[flat] = lab[order]          # 마지막 대입 = 최고 z
+    img = np.full((H, W, 3), (37, 37, 39), np.uint8)
+    for c, col in pal.items():
+        m = (top == c).reshape(W, H).T; img[m] = col
+    img = np.ascontiguousarray(img[::-1])                                 # +y 위
+    if scale < 1: img = cv2.resize(img, (int(W * scale), int(H * scale)), interpolation=cv2.INTER_AREA)
+    for o in mp.objects:
+        if (o.get("tag") or "") == "person": continue
+        c = o.get("center_w"); e = o.get("extent") or [0.5, 0.5, 0.5]
+        if not c: continue
+        x0 = int(((c[0] - e[0] / 2) / res - k0[0]) * scale); x1 = int(((c[0] + e[0] / 2) / res - k0[0]) * scale)
+        y0 = int(img.shape[0] - ((c[1] + e[1] / 2) / res - k0[1]) * scale); y1 = int(img.shape[0] - ((c[1] - e[1] / 2) / res - k0[1]) * scale)
+        cv2.rectangle(img, (x0, y0), (max(x1, x0 + 2), max(y1, y0 + 2)), (41, 151, 255), 1)
+    cv2.imwrite(out_png, img[:, :, ::-1]); return img.shape
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("manifest"); ap.add_argument("--rrd", default=None); ap.add_argument("--sub", type=int, default=2)
@@ -206,6 +230,7 @@ if __name__ == "__main__":
     ap.add_argument("--no-edges", action="store_true", help="--cubes 에서 검은 모서리 와이어 생략")
     ap.add_argument("--alpha", type=float, default=1.0, help="큐브 투명도 0~1 (rrd 에 굽힘; 0.16 뷰어에 런타임 슬라이더 없음)")
     ap.add_argument("--coarse", type=float, default=None, help="복셀을 이 해상도(m)로 병합해서 표시 (예: 0.3)")
+    ap.add_argument("--bev", default=None, help="상단 뷰 PNG 저장 경로 (포털 썸네일)")
     ap.add_argument("--occ-view", type=float, default=0.4, help="occupancy 레이어 표시 해상도(m) (데이터 0.2m 는 그대로)")
     a = ap.parse_args()
     mp = MapPackage(a.manifest)
@@ -213,6 +238,8 @@ if __name__ == "__main__":
     if a.coarse:
         t0 = time.time(); mp.coarsen(a.coarse)
         print(f"coarsen → {a.coarse} m: {len(mp.ijk):,} voxels ({time.time()-t0:.1f}s)")
+    if a.bev:
+        print("bev", render_bev(mp, a.bev), "→", a.bev)
     if a.rrd:
         t0 = time.time(); to_rerun(mp, a.rrd, a.sub, a.cubes, not a.no_edges, a.alpha, a.occ_view)
         print(f"rerun 저장 {a.rrd} ({time.time()-t0:.1f}s)")

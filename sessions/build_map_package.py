@@ -180,10 +180,10 @@ class Build:
             if self.opt.get("view_cubes", False):                  # 기본은 0.1m 점(구) 표현; 큐브(OctoMap 풍)는 옵션
                 cmd += ["--coarse", str(self.opt["view_coarse"]), "--cubes"]
             self.run(cmd, env={"CUDA_VISIBLE_DEVICES": ""}, logname="H.log")
-        # 요약 JSON (웹 포털이 읽음) — 항상 갱신
+        # 요약 JSON + BEV 썸네일 (웹 포털이 읽음) — 항상 갱신
         if not self.dry:
             e = dict(os.environ); e["CUDA_VISIBLE_DEVICES"] = ""
-            p = subprocess.run([PY, f"{CG}/load_map.py", man], env=e, capture_output=True, text=True)
+            p = subprocess.run([PY, f"{CG}/load_map.py", man, "--bev", os.path.join(self.D["compiled"], "bev.png")], env=e, capture_output=True, text=True)
             out = p.stdout; j = out[out.index("{"):] if "{" in out else "{}"
             try:
                 summ = json.loads(j)

@@ -32,7 +32,8 @@ for li, f in zip(a.logs, files):
             t0f = msg.log_time if t0f is None else min(t0f, msg.log_time); t1f = msg.log_time if t1f is None else max(t1f, msg.log_time)
     bounds.append((li, t0f, t1f)); print(f"log_{li:03d}: {(t1f-t0f)/1e9:.1f}s", flush=True)
 T0 = min(b[1] for b in bounds); sec = lambda ns: (ns - T0) / 1e9
-summary = {"mcap_dir": a.mcap_dir, "logs": [f"log_{i:03d}" for i in a.logs], "duration_s": round((max(b[2] for b in bounds) - T0) / 1e9, 1), "topics": {}, "gaps": []}
+summary = {"mcap_dir": a.mcap_dir, "logs": [f"log_{i:03d}" for i in a.logs], "duration_s": round((max(b[2] for b in bounds) - T0) / 1e9, 1), "topics": {}, "gaps": [],
+           "log_bounds": [{"log": f"log_{li:03d}", "start_s": round(sec(t0f), 2), "end_s": round(sec(t1f), 2), "duration_s": round((t1f - t0f) / 1e9, 1)} for li, t0f, t1f in bounds]}
 
 # 로그 경계 표시
 for li, t0f, t1f in bounds:

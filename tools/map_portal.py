@@ -41,7 +41,24 @@ def scan_maps():
                                        "late_start": [c["log"] for c in v.get("coverage", []) if (c.get("start_delay_s") or 0) > 1.0]} for k, v in tp.items()},
                         "log_gaps_s": q.get("log_gaps_s", [])}
             except Exception: pass
-        maps.append({"name": name, "quality": qual, "quality_rrd": rel("data_quality.rrd"), "map_id": man.get("map_id", name), "built": man.get("built", ""), "frame": man.get("frame", ""),
+        tags = {}; edges_sample = []; classes = {}
+        try:
+            for o in json.load(open(os.path.join(comp, "session_objects.json"))):
+                t = o.get("tag") or "?"; tags[t] = tags.get(t, 0) + 1
+        except Exception: pass
+        for fn, src in (("session_edges_vlm.json", "vlm"), ("voxel_session_relations.json", "terrain"), ("session_edges.json", "heuristic")):
+            try:
+                for e in json.load(open(os.path.join(comp, fn))):
+                    if src == "vlm": d = f"{e['object_1']['tag']} {e['relation']} {e['object_2']['tag']}"; c = e.get("confidence")
+                    elif src == "terrain": d = f"{e.get('tag','?')} on {e.get('on','?')}"; c = None
+                    else: d = e.get("edge_description", ""); c = None
+                    edges_sample.append({"src": src, "desc": d, "conf": c})
+            except Exception: pass
+        edges_sample = edges_sample[:40]
+        if os.path.exists(qp):
+            try: qual["log_bounds"] = json.load(open(qp)).get("log_bounds", [])
+            except Exception: pass
+        maps.append({"name": name, "quality": qual, "quality_rrd": rel("data_quality.rrd"), "bev": rel("bev.png"), "tags": dict(sorted(tags.items(), key=lambda kv: -kv[1])), "edges_sample": edges_sample, "map_id": man.get("map_id", name), "built": man.get("built", ""), "frame": man.get("frame", ""),
                      "mcap_dir": man.get("source", {}).get("mcap_dir", ""), "logs": logs, "n_logs": len(logs), "calib": man.get("source", {}).get("calib", ""),
                      "options": man.get("options", {}), "files": man.get("files", {}), "package_mb": round(size / 1e6, 1),
                      "summary": summ, "rrd": rel("map_package.rrd"), "manifest": f"output/{name}/compiled/map_manifest.json",
