@@ -39,6 +39,8 @@ video{width:100%;background:#000;border-radius:3px;display:block}
 pre.log{background:#0f1214;border:1px solid var(--line);border-radius:3px;padding:10px 12px;font-size:11.5px;line-height:1.45;max-height:260px;overflow:auto;margin:0;white-space:pre-wrap;color:#c9d1d9}
 .empty{color:var(--muted);padding:40px;text-align:center}
 details summary{cursor:pointer;color:var(--muted);font-size:12.5px;margin:6px 0}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:7px;vertical-align:0}.dot.ok{background:var(--grass)}.dot.warn{background:var(--unc)}
+table.qt{border-collapse:collapse;width:100%;font-size:11.5px;margin:4px 0 10px}table.qt th{color:var(--muted);font-weight:500;text-align:left;padding:3px 6px;border-bottom:1px solid var(--line)}table.qt td{padding:3px 6px;border-bottom:1px solid var(--line)}table.qt .n{text-align:right}table.qt tr.warn td{color:var(--unc)}
 @media (max-width:900px){.card{grid-template-columns:1fr}.card .meta{border-right:0;border-bottom:1px solid var(--line)}}
 </style></head><body>
 <header><h1>Map Portal</h1><span class="sub">Offline 3D Semantic Map · 빌드된 Map Package</span><span class="right" id="stamp"></span></header>
@@ -52,6 +54,12 @@ const CLS = [["grass","--grass"],["path","--path"],["tree","--tree"],["person","
 function labelBar(v){ if(!v) return ""; const tot = Object.values(v).reduce((a,b)=>a+b,0)||1;
   return `<div class="bar">${CLS.map(([k,c])=>`<span style="width:${100*(v[k]||0)/tot}%;background:var(${c})" title="${k} ${fmt(v[k]||0)}"></span>`).join("")}</div>
   <div class="legend">${CLS.map(([k,c])=>`<span><i style="--c:var(${c})"></i>${k.replace("(LiDAR only)","")} ${(100*(v[k]||0)/tot).toFixed(0)}%</span>`).join("")}</div>`; }
+function qualityBlock(m){ const q=m.quality; if(!q||!q.topics) return "";
+  const rows=Object.entries(q.topics).sort((a,b)=>b[1].bytes_mb-a[1].bytes_mb).map(([k,v])=>{
+    const bad=v.missing_est>0||v.n_gaps>0||v.late_start.length; return `<tr class="${bad?"warn":""}"><td class="mono">${k}</td><td class="n mono">${v.rate_hz}</td><td class="n mono">${fmt(v.count)}</td><td class="n mono">${v.missing_est?fmt(v.missing_est):"0"}</td><td class="n mono">${v.n_gaps}</td><td class="n mono">${v.dt_max_ms}</td><td class="n mono">${v.bytes_mb}</td><td class="mono">${v.late_start.join(", ")}</td></tr>`;}).join("");
+  const ok = q.missing_total===0 && q.n_gaps===0;
+  return `<details class="qual"><summary><span class="dot ${ok?"ok":"warn"}"></span>데이터 품질 · ${q.duration_s}s · 유실 추정 ${fmt(q.missing_total)} msg · gap ${q.n_gaps}건${q.log_gaps_s&&q.log_gaps_s.length?` · 로그 간 공백 ${q.log_gaps_s.map(g=>g.gap_s+"s").join(", ")}`:""}</summary>
+   <table class="qt"><tr><th>토픽</th><th class="n">Hz</th><th class="n">개수</th><th class="n">유실≈</th><th class="n">gap</th><th class="n">dt max ms</th><th class="n">MB</th><th>늦은 시작</th></tr>${rows}</table></details>`; }
 function card(m){ const s=m.summary||{}, occ=s.occupancy||{}, cm=s.costmap||{}, e=s.edges||{};
   const vids = [["pipeline", m.video_pipeline, "RGB · 검출 · 세그멘테이션 (x15)"],["rgb", m.video_rgb, "RGB (x15)"]].filter(v=>v[1]);
   const mcap = m.mcap_dir ? m.mcap_dir.split("/").slice(-2).join("/") : "—";
@@ -65,7 +73,9 @@ function card(m){ const s=m.summary||{}, occ=s.occupancy||{}, cm=s.costmap||{}, 
     <div class="chips"><span class="chip">복셀 <b>${fmt(s.voxels)}</b></span><span class="chip">occupancy <b>${fmt(occ.cells)}</b> 셀</span><span class="chip">객체 <b>${fmt(s.objects)}</b></span>
       <span class="chip">엣지 <b>${fmt(e.heuristic)}</b>/<b>${fmt(e.object_terrain)}</b>/<b>${fmt(e.vlm)}</b></span><span class="chip">코스트맵 <b>${cm.shape?cm.shape.join("×"):"—"}</b> @${cm.res_m||"—"} m</span></div>
     ${labelBar(s.voxel_labels)}
+    ${qualityBlock(m)}
     <div class="btns">${m.rrd?`<a class="btn primary" target="_blank" rel="noopener" href="${rerunURL(m.rrd)}">rerun 에서 열기</a>`:""}
+      ${m.quality_rrd?`<a class="btn" target="_blank" rel="noopener" href="${rerunURL(m.quality_rrd)}">데이터 품질 · 재생 (rerun)</a>`:""}
       <a class="btn" target="_blank" rel="noopener" href="${fileURL(m.manifest)}">매니페스트</a>
       ${m.has_log?`<button class="btn" data-log="${m.name}">빌드 로그</button>`:""}</div>
     <pre class="log" id="log-${m.name}" hidden></pre>

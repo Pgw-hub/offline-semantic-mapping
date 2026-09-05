@@ -31,7 +31,17 @@ def scan_maps():
         logs = man.get("source", {}).get("logs", [])
         size = sum(v.get("bytes", 0) for v in man.get("files", {}).values())
         build_out = os.path.join(ROOT, "sessions", f"{name}_build.out")
-        maps.append({"name": name, "map_id": man.get("map_id", name), "built": man.get("built", ""), "frame": man.get("frame", ""),
+        qual = {}
+        qp = os.path.join(comp, "data_quality.json")
+        if os.path.exists(qp):
+            try:
+                q = json.load(open(qp)); tp = q.get("topics", {})
+                qual = {"duration_s": q.get("duration_s"), "n_gaps": len(q.get("gaps", [])), "missing_total": sum(v.get("missing_est", 0) for v in tp.values()),
+                        "topics": {k: {"count": v["count"], "expected": v["expected"], "missing_est": v["missing_est"], "rate_hz": v["rate_hz"], "dt_max_ms": v["dt_max_ms"], "bytes_mb": v["bytes_mb"], "n_gaps": v["n_gaps"],
+                                       "late_start": [c["log"] for c in v.get("coverage", []) if (c.get("start_delay_s") or 0) > 1.0]} for k, v in tp.items()},
+                        "log_gaps_s": q.get("log_gaps_s", [])}
+            except Exception: pass
+        maps.append({"name": name, "quality": qual, "quality_rrd": rel("data_quality.rrd"), "map_id": man.get("map_id", name), "built": man.get("built", ""), "frame": man.get("frame", ""),
                      "mcap_dir": man.get("source", {}).get("mcap_dir", ""), "logs": logs, "n_logs": len(logs), "calib": man.get("source", {}).get("calib", ""),
                      "options": man.get("options", {}), "files": man.get("files", {}), "package_mb": round(size / 1e6, 1),
                      "summary": summ, "rrd": rel("map_package.rrd"), "manifest": f"output/{name}/compiled/map_manifest.json",
