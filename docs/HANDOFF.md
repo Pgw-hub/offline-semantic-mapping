@@ -224,3 +224,6 @@
 - Map Portal (2026-09-04): tools/map_portal.py 가 9092 를 맡음(rrd_http.py 대체, 파일 서빙 겸함). http://localhost:9092/ 에 output/*/compiled/map_manifest.json 스캔 카드
   (데이터셋·로그·통계 chips·클래스 분포·rerun 열기·매니페스트·빌드 로그·영상 자동재생). step H 가 compiled/summary.json 작성(포털이 읽음). 시작: tools/start_portal.sh.
   test_2logs 도 output/ 아래로 이동(구 /data2/cg/sessions 비움).
+- 단계 Q 데이터 품질 (2026-09-05): tools/mcap_quality.py → compiled/data_quality.{rrd,json}. 모든 토픽의 dt/rate/size 시계열(고주파 IMU 는 초 단위 집계), gap(dt>2.5×중앙값)·로그별 커버리지(1s 이상 늦은 시작/이른 끝) 이벤트 TextLog,
+  재생 탭(RGB stride15 jpeg, depth, LiDAR 1Hz 1/4점, odom 궤적). 3로그 6초, 87MB. 포털 카드에 품질 표(토픽별 Hz·개수·유실≈·gap·dt max·MB·늦은 시작) + "데이터 품질·재생" 버튼.
+  ★발견: log_000 /Odometry/base 가 로그 시작 후 6.3s 부터 나옴(SLAM 초기화) → 그 구간 프레임은 자세 없음(pose스킵). IMU gap 은 1~2 msg 수준(base_imu 120건).
