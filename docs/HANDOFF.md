@@ -227,3 +227,6 @@
 - 단계 Q 데이터 품질 (2026-09-05): tools/mcap_quality.py → compiled/data_quality.{rrd,json}. 모든 토픽의 dt/rate/size 시계열(고주파 IMU 는 초 단위 집계), gap(dt>2.5×중앙값)·로그별 커버리지(1s 이상 늦은 시작/이른 끝) 이벤트 TextLog,
   재생 탭(RGB stride15 jpeg, depth, LiDAR 1Hz 1/4점, odom 궤적). 3로그 6초, 87MB. 포털 카드에 품질 표(토픽별 Hz·개수·유실≈·gap·dt max·MB·늦은 시작) + "데이터 품질·재생" 버튼.
   ★발견: log_000 /Odometry/base 가 로그 시작 후 6.3s 부터 나옴(SLAM 초기화) → 그 구간 프레임은 자세 없음(pose스킵). IMU gap 은 1~2 msg 수준(base_imu 120건).
+- 콘솔 상시 구동 (2026-09-05): systemd --user 서비스 map-portal.service(:9092) · rerun-viewer.service(:9091, ws 9877, sdk 9876) 등록·enable, linger on → 재부팅/로그아웃 후에도 유지.
+  파일 사본 tools/*.service. 모두 0.0.0.0 바인딩이라 사내망에서 http://192.168.100.161:9092/ 로 접근 가능(방화벽은 sudo 없어 미확인). 인증 없음 → 외부 공개는 Tailscale/Cloudflare Access 등 앞단 필요.
+  ★rerun --serve 는 --port(SDK)와 ws 포트를 다르게 줘야 함(같으면 즉시 종료). 콘솔 상세 화면의 RGB 단독 탭 제거(3분할에 포함).
