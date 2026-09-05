@@ -1,0 +1,11 @@
+[Unit]
+Description=rerun web viewer (:9091, ws :9877)
+After=network.target
+
+[Service]
+ExecStart=/home/gw.park/.venvs/rerun/bin/rerun --serve --web-viewer-port 9091 --ws-server-port 9877 --port 9876
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

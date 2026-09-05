@@ -4,4 +4,4 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"; PY="$HOME/.venvs/rerun/bin/python"; RR
 if pgrep -u "$USER" -f 'tools/map_porta[l].py' >/dev/null; then echo "portal already running"; else
   (cd "$REPO" && setsid nohup "$PY" tools/map_portal.py >/tmp/map_portal.log 2>&1 < /dev/null &) ; sleep 1; echo "portal started: http://localhost:9092/"; fi
 if pgrep -u "$USER" -x rerun >/dev/null; then echo "rerun viewer already running"; else
-  (setsid nohup "$RR" --serve --web-viewer-port 9091 --port 9877 >/tmp/rerun_viewer.log 2>&1 < /dev/null &) ; sleep 1; echo "rerun viewer started: http://localhost:9091"; fi
+  (setsid nohup "$RR" --serve --web-viewer-port 9091 --ws-server-port 9877 --port 9876 >/tmp/rerun_viewer.log 2>&1 < /dev/null &) ; sleep 1; echo "rerun viewer started: http://localhost:9091"; fi
