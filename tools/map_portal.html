@@ -121,7 +121,10 @@ pre.log{margin:12px 20px;background:#0f1214;color:#c9d1d9;border-radius:var(--ra
 <script>
 const host=location.hostname||"localhost"; let RERUN_BASE="";
 const fileURL=p=>`${location.origin}/${p}`;                                   // 같은 origin (localhost·사내망·터널 모두 동작)
-const rerunURL=p=>`${RERUN_BASE||`http://${host}:9091`}?url=${encodeURIComponent(fileURL(p))}`;
+// rerun 뷰어: RERUN_BASE 가 있으면 그것, HTTPS(터널/외부)면 rerun 공식 호스팅 뷰어(같은 0.16.1, WebSocket 불필요), 아니면 로컬 :9091
+const HOSTED_VIEWER="https://app.rerun.io/version/0.16.1/index.html";
+const viewerBase=()=>RERUN_BASE||(location.protocol==="https:"?HOSTED_VIEWER:`http://${host}:9091`);
+const rerunURL=p=>`${viewerBase()}?url=${encodeURIComponent(fileURL(p))}`;
 const fmt=n=>n==null?"—":Number(n).toLocaleString("ko-KR"), fmtM=n=>n==null?"—":(n>=1e6?(n/1e6).toFixed(2)+"M":n>=1e3?(n/1e3).toFixed(1)+"k":String(n));
 const CLASSES=[["grass","Grass","#79916f"],["path","Path","#8d939b"],["tree","Tree","#4f7a5c"],["person","Person","#d1852f"],["other","Other","#5c99c7"],["unknown(LiDAR only)","Unlabeled (LiDAR only)","#7a7a7a"]];
 const TAGCOL=["#5c99c7","#79916f","#a8adb5","#d1852f","#4f7a5c","#b8562f","#8d939b","#6f7680"];
