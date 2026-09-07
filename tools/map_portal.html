@@ -119,8 +119,9 @@ pre.log{margin:12px 20px;background:#0f1214;color:#c9d1d9;border-radius:var(--ra
 <div class="modal" id="modal"><div class="box"><h4 id="mTitle"></h4><p id="mText"></p><pre id="mPre"></pre><div style="display:flex;justify-content:flex-end"><button class="btn-soft" id="mClose">닫기</button></div></div></div>
 
 <script>
-const host=location.hostname||"localhost", port=location.port||9092;
-const fileURL=p=>`http://${host}:${port}/${p}`, rerunURL=p=>`http://${host}:9091?url=${encodeURIComponent(fileURL(p))}`;
+const host=location.hostname||"localhost"; let RERUN_BASE="";
+const fileURL=p=>`${location.origin}/${p}`;                                   // 같은 origin (localhost·사내망·터널 모두 동작)
+const rerunURL=p=>`${RERUN_BASE||`http://${host}:9091`}?url=${encodeURIComponent(fileURL(p))}`;
 const fmt=n=>n==null?"—":Number(n).toLocaleString("ko-KR"), fmtM=n=>n==null?"—":(n>=1e6?(n/1e6).toFixed(2)+"M":n>=1e3?(n/1e3).toFixed(1)+"k":String(n));
 const CLASSES=[["grass","Grass","#79916f"],["path","Path","#8d939b"],["tree","Tree","#4f7a5c"],["person","Person","#d1852f"],["other","Other","#5c99c7"],["unknown(LiDAR only)","Unlabeled (LiDAR only)","#7a7a7a"]];
 const TAGCOL=["#5c99c7","#79916f","#a8adb5","#d1852f","#4f7a5c","#b8562f","#8d939b","#6f7680"];
@@ -197,6 +198,6 @@ document.addEventListener("click",e=>{
   if(e.target.closest("nav a")&&!e.target.closest("#navMaps")){e.preventDefault();}
 });
 document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value; renderLibrary();});
-async function load(){const r=await fetch("/api/maps"); const d=await r.json(); MAPS=d.maps; renderLibrary(); if(state.cur){const m=MAPS.find(x=>x.name===state.cur.name); if(m){state.cur=m;}}}
+async function load(){const r=await fetch("/api/maps"); const d=await r.json(); MAPS=d.maps; RERUN_BASE=d.rerun_base||""; renderLibrary(); if(state.cur){const m=MAPS.find(x=>x.name===state.cur.name); if(m){state.cur=m;}}}
 load(); setInterval(load,60000);
 </script></body></html>

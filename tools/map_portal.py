@@ -79,7 +79,8 @@ class H(http.server.SimpleHTTPRequestHandler):
         if p in ("/", "/index.html", "/portal"):
             b = HTML.encode(); self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b); return
         if p == "/api/maps":
-            return self.send_json({"maps": scan_maps(), "root": ROOT, "time": time.strftime("%Y-%m-%d %H:%M:%S")})
+            return self.send_json({"maps": scan_maps(), "root": ROOT, "time": time.strftime("%Y-%m-%d %H:%M:%S"),
+                                   "rerun_base": os.environ.get("RERUN_BASE", "")})   # 비어 있으면 페이지가 <접속 호스트>:9091 사용
         if p.startswith("/api/log/"):
             name = os.path.basename(p[len("/api/log/"):]); f = os.path.join(ROOT, "sessions", f"{name}_build.out")
             if not os.path.exists(f): return self.send_json({"error": "no log"}, 404)

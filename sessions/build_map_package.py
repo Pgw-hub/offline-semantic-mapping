@@ -184,11 +184,11 @@ class Build:
         if not self.dry:
             e = dict(os.environ); e["CUDA_VISIBLE_DEVICES"] = ""
             p = subprocess.run([PY, f"{CG}/load_map.py", man, "--bev", os.path.join(self.D["compiled"], "bev.png")], env=e, capture_output=True, text=True)
-            out = p.stdout; j = out[out.index("{"):] if "{" in out else "{}"
-            try:
-                summ = json.loads(j)
+            out = p.stdout
+            try:                                   # JSON 뒤에 다른 출력(bev …)이 붙어도 첫 JSON 객체만 읽는다
+                summ = json.JSONDecoder().raw_decode(out[out.index("{"):])[0]
             except Exception:
-                summ = {"error": "summary parse failed"}
+                summ = {"error": "summary parse failed", "stdout_tail": out[-300:]}
             summ["build_seconds_total"] = round(time.time() - self.t0)
             json.dump(summ, open(os.path.join(self.D["compiled"], "summary.json"), "w"), ensure_ascii=False, indent=1)
             self.say("  summary.json 갱신")
