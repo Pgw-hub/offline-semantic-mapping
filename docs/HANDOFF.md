@@ -237,3 +237,13 @@
   (포털은 호스트 venv 에서 돌고 빌드는 컨테이너). 로그 sessions/<name>_build.out, 큐 상태 sessions/jobs.json. Processing queue 탭: 단계 진행바·Cancel·Log.
 - 포털 재시작 시 진행 중이던 작업은 status=unknown 으로 표시(빌드 자체는 컨테이너에서 계속 돎). 쓰기 동작 보호: env PORTAL_TOKEN 설정 시 X-Portal-Token 필요(기본 미설정 — 사내망 한정 전제).
 - 첫 웹 빌드: web_172218_l01 (172218 세션 log_000~001, VLM off).
+
+## 클래스 사전 (2026-09-09)
+- classdict.py + classdicts/<name>.json: SegFormer ADE20K 150 라벨 → 클래스(ade 부분문자열 묶음) + role(ground_preferred/ground_soft/obstacle/dynamic/context) + cost + color.
+  default 는 내장(초기 4클래스, ids 동일: grass[9] path[6,11,13,29,52,54,91] tree[4,17,72,87] person[12]) → 기존 sem 과 수치 동일 검증(24프레임 max diff 0).
+  ★'tree' 부분문자열이 'streetlight' 도 잡음(원래부터). 새 사전에서 tree 를 정확히 하려면 ade 에 "tree" 대신 라벨 전체("tree", "plant", "palm") 를 두고 streetlight 를 별도 클래스로.
+- 파이프라인: precompute_semantic --classdict → sem/classes.json + N채널; build_voxel_sem_map/merge_voxels N채널 + npz classdict; build_occupancy dynamic=role; costmap_from_occupancy 역할 규칙
+  (ground_*: 지면값=cost, soft·dynamic 은 밴드 통과, obstacle 은 밴드 lethal, context 지면 150); load_map/voxel_rerun 색은 사전에서. 구 npz(classdict 없음)는 이름으로 legacy 복원.
+- 오케스트레이터 options.classdict (기본 default). sem/ 이 다른 사전으로 만들어져 있으면 중단(--force B 또는 새 root). 매니페스트에 classdict 전체 기록.
+- 포털 Class dictionary 탭: 목록/편집(ADE 라벨 검색 추가, 역할, 코스트, 색)/Duplicate/Save/Delete, 빌드 폼에 사전 선택. classdicts/ade20k_labels.json 은 컨테이너에서 모델 config 로 덤프.
+- 예시 사전 outdoor_v2 (car=obstacle, building/wall/fence=context) → 웹 빌드 web_172218_cdv2 로 검증 중.
