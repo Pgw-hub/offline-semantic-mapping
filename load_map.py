@@ -3,8 +3,9 @@
 
 사용: python load_map.py /data2/cg/compiled/map_manifest.json [--rrd out.rrd] [--sub 2]
 """
-import argparse, json, os, time
+import argparse, json, os, sys, time
 import numpy as np
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import classdict as CD
 
 
 class MapPackage:
@@ -21,6 +22,7 @@ class MapPackage:
         self.ijk, self.sem, self.rgb = v["ijk"], v["sem_mean"].astype(np.float32), v["rgb"]
         self.n_sem, self.n_pts = v["n_sem"], v["n_pts"]
         self.classes = [str(c) for c in v["classes"]]
+        self.classdict = CD.from_voxsem(v); self.colors = CD.colors_rgb(self.classdict)     # 클래스별 (r,g,b)
         raw = json.load(open(P("objects")))
         self.objects = list(raw.values()) if isinstance(raw, dict) else raw
         self.clip = np.load(P("objects_clip"))["clip"].astype(np.float32)
@@ -91,6 +93,7 @@ class MapPackage:
             occ = {"res_m": self.occ["res"], "cells": int(len(s)), "occupied": int((s == 1).sum()), "free": int((s == 0).sum()),
                    "surface_voxels_removed_dynamic": int(self.surf_removed.sum())}
         return {"load_seconds": round(self.load_s, 2), "voxels": int(len(self.ijk)), "voxel_labels": cnt, "occupancy": occ,
+                "classdict": {"name": self.classdict.get("name"), "classes": [{"name": c["name"], "color": c["color"], "role": c["role"], "cost": c.get("cost")} for c in self.classdict["classes"]]},
                 "objects": len(self.objects), "clip_dim": int(self.clip.shape[1]),
                 "edges": {k: len(v) for k, v in self.edges.items()},
                 "costmap": {"shape": list(c.shape), "res_m": self.cm_res,
@@ -126,7 +129,7 @@ def to_rerun(mp, out, sub=2, cubes=False, edges=True, alpha=1.0, occ_view_res=0.
     rr.init("map_package"); rr.save(out)
     rr.send_blueprint(default_blueprint(), make_active=True, make_default=True)
     ctr = mp.voxel_centers(); lab = mp.labels()
-    pal = np.array([(95, 170, 95), (200, 165, 120), (40, 110, 60), (220, 60, 60), (120, 135, 160), (110, 110, 110)], np.uint8)
+    pal = np.array(mp.colors + [CD.hex2rgb(CD.OTHER_COLOR), CD.hex2rgb(CD.UNKNOWN_COLOR)], np.uint8)
     idx = np.arange(len(ctr))[::sub]
     n_cls = len(mp.classes)
     known = idx[lab[idx] < n_cls]; oth = idx[lab[idx] == n_cls]; unk = idx[lab[idx] == n_cls + 1]
@@ -203,7 +206,7 @@ def render_bev(mp, out_png, res=0.2, max_w=1280):
     """상단 뷰 썸네일: 셀별 최고 z 복셀의 클래스 색 (grass/path/tree/person/other/unknown), 객체 박스 윤곽, 어두운 배경."""
     import cv2
     ctr = mp.voxel_centers(); lab = mp.labels()
-    pal = {0: (111, 145, 121), 1: (141, 147, 155), 2: (79, 122, 92), 3: (209, 133, 47), 4: (92, 153, 199), 5: (70, 74, 80)}   # 디자인 팔레트 (RGB)
+    pal = {i: c for i, c in enumerate(mp.colors)}; pal[len(mp.colors)] = CD.hex2rgb(CD.OTHER_COLOR); pal[len(mp.colors) + 1] = (70, 74, 80)
     K = np.floor(ctr[:, :2] / res).astype(np.int64); k0 = K.min(0); K -= k0; W, H = int(K[:, 0].max()) + 1, int(K[:, 1].max()) + 1
     scale = min(1.0, max_w / max(W, H))
     # 지면 우선: 열마다 라벨 있는 복셀 중 가장 낮은 것(지면 클래스)을 쓰고, 라벨이 하나도 없으면 unknown

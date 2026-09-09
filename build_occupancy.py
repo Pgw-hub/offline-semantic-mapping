@@ -14,8 +14,9 @@
   · 스캔당 셀 1회 갱신 (OctoMap insertPointCloud 와 동일), 끝점 셀은 miss 에서 제외
 사용: python build_occupancy.py --scans dirA [dirB ...] --voxsem session_voxsem.npz --out session_occupancy [--res 0.2] [--max-range 40]
 """
-import argparse, glob, os, time
+import argparse, glob, os, time, sys
 import numpy as np
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import classdict as CD
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--scans", nargs="+", required=True)
@@ -27,7 +28,7 @@ ap.add_argument("--free-range", type=float, default=25.0, help="free 광선 최�
 ap.add_argument("--ray-stride", type=int, default=1, help="free 광선에 쓸 점 간격 (hit 은 전부)")
 ap.add_argument("--prob-hit", type=float, default=float(os.environ.get("OCTO_PROB_HIT", 0.85)))
 ap.add_argument("--prob-miss", type=float, default=float(os.environ.get("OCTO_PROB_MISS", 0.45)))
-ap.add_argument("--dynamic", default="person", help="동적 클래스(쉼표) — free 안이면 제거")
+ap.add_argument("--dynamic", default=None, help="동적 클래스(쉼표). 생략하면 클래스 사전의 role=dynamic")
 ap.add_argument("--batch", type=int, default=20, help="병합 단위 스캔 수")
 a = ap.parse_args()
 
@@ -86,7 +87,9 @@ state = (logodds > 0).astype(np.int8)
 v = np.load(a.voxsem); V = float(v["vox"]); classes = [str(c) for c in v["classes"]]
 sem = v["sem_mean"].astype(np.float32); has = v["n_sem"] > 0
 lab = sem.argmax(1); lab = np.where(has & (sem.max(1) < 0.3), len(classes), lab); lab = np.where(has, lab, len(classes) + 1)
-dyn_ids = [classes.index(c) for c in a.dynamic.split(",") if c in classes]
+cd = CD.from_voxsem(v)
+dyn_ids = [classes.index(c) for c in a.dynamic.split(",") if c in classes] if a.dynamic else CD.ids_with_role(cd, "dynamic")
+a.dynamic = a.dynamic or ",".join(classes[i] for i in dyn_ids) or "-"
 is_dyn = np.isin(lab, dyn_ids)
 ctr = (v["ijk"] + 0.5) * V; sk = key(ctr)
 pos = np.searchsorted(keys, sk); pos_c = np.minimum(pos, len(keys) - 1); found = keys[pos_c] == sk

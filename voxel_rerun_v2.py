@@ -30,8 +30,9 @@ lab = sem.argmax(1); labeled = n_sem > 0
 OTHER = len(classes)
 other = labeled & (sem.max(1) < 0.3)
 lab = np.where(other, OTHER, lab)
-CCOL = {"grass": (95, 170, 95), "path": (200, 165, 120), "tree": (40, 110, 60), "person": (220, 60, 60)}
-palette = [CCOL[c] for c in classes] + [(120, 135, 160)]   # other = 청회색 (unknown 회색과 구분)
+import sys as _sys, os as _os; _sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__))); import classdict as CD
+cd = CD.from_voxsem(d); palette = CD.colors_rgb(cd) + [CD.hex2rgb(CD.OTHER_COLOR)]   # other = 청회색 (unknown 회색과 구분)
+NON_TERRAIN = set(CD.ids_with_role(cd, "dynamic", "context"))                          # 지형 판정에서 제외 (obstacle 은 'on tree' 허용)
 semcol = np.array([palette[i] for i in lab], np.uint8)
 print(f"other(4클래스 해당없음) 복셀: {other.sum():,} / 라벨 {labeled.sum():,}")
 nF = int(d["n_frames"])
@@ -82,9 +83,9 @@ for i, o in enumerate(objs):
            rr.Boxes3D(centers=[c], half_sizes=[e / 2], labels=[tag], colors=[[255, 200, 40]]))
     foot = labeled & (np.abs(ctr[:, 0] - c[0]) < e[0] / 2 + 0.3) & (np.abs(ctr[:, 1] - c[1]) < e[1] / 2 + 0.3) \
         & (ctr[:, 2] < c[2] - e[2] / 2 + 0.3) & (ctr[:, 2] > c[2] - e[2] / 2 - 0.6)
-    foot = foot & (lab < OTHER) & (lab != classes.index('person'))   # other·person 은 지형이 아님
+    foot = foot & (lab < OTHER) & ~np.isin(lab, list(NON_TERRAIN))   # other·동적·문맥 클래스는 지형이 아님
     if foot.any():
-        terrain = classes[int(np.bincount(lab[foot], minlength=4).argmax())]
+        terrain = classes[int(np.bincount(lab[foot], minlength=len(classes)).argmax())]
         gz = float(ctr[foot, 2].mean())
         rr.log(f"world/relations/{i}", rr.LineStrips3D([[c, [c[0], c[1], gz]]], colors=[[80, 200, 255]], radii=0.03,
                                                        labels=[f"on {terrain}"]))

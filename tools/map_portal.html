@@ -89,6 +89,15 @@ pre.log{margin:12px 20px;background:#0f1214;color:#c9d1d9;border-radius:var(--ra
 .job .prog{height:4px;border-radius:9999px;background:var(--color-hairline);overflow:hidden;margin:12px 0 8px}.job .prog i{display:block;height:100%;background:var(--color-primary);transition:width .4s var(--ease)}
 .job .steps{display:flex;gap:4px;font-size:11px;color:var(--color-ink-muted-48)}.job .steps span{flex:1;text-align:center;padding:3px 0;border-radius:4px;background:var(--color-canvas-parchment)}.job .steps span.done{background:rgba(0,102,204,.12);color:#0066cc}.job .steps span.cur{background:var(--color-primary);color:#fff}
 .job .acts{margin-left:auto;display:flex;gap:8px}
+.cdwrap{display:grid;grid-template-columns:260px 1fr;gap:20px}.cdlist{border:1px solid var(--color-hairline);border-radius:var(--radius-lg);padding:14px;align-self:start}.cdhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:14px}
+.cditem{padding:10px 12px;border-radius:var(--radius-sm);cursor:pointer;font-size:14px}.cditem:hover{background:var(--color-canvas-parchment)}.cditem.on{background:var(--color-canvas-parchment);font-weight:600}.cditem .m{font-size:12px;color:var(--color-ink-muted-48);font-weight:400}
+.cdedit{border:1px solid var(--color-hairline);border-radius:var(--radius-lg);padding:20px 22px;min-height:300px}.cdedit .top{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}.cdedit label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--color-ink-muted-48)}.cdedit input,.cdedit select{height:32px;border:1px solid var(--color-hairline);border-radius:var(--radius-sm);padding:0 10px;font:400 14px var(--font-text);color:var(--color-ink);background:var(--color-canvas)}
+table.cdt{border-collapse:collapse;width:100%;font-size:13px;margin-top:16px}table.cdt th{text-align:left;font-weight:500;color:var(--color-ink-muted-48);font-size:12px;padding:6px 8px;border-bottom:1px solid var(--color-hairline)}table.cdt td{padding:6px 8px;border-bottom:1px solid var(--color-hairline);vertical-align:top}
+table.cdt input[type=text]{width:120px}table.cdt input[type=number]{width:70px}table.cdt input[type=color]{width:36px;height:28px;padding:0;border:0;background:none}
+.adechips{display:flex;flex-wrap:wrap;gap:4px;max-width:420px}.adechip{display:inline-flex;align-items:center;gap:4px;height:22px;padding:0 8px;border-radius:9999px;background:var(--color-canvas-parchment);font-size:12px}.adechip button{border:0;background:none;color:var(--color-ink-muted-48);cursor:pointer;padding:0;font-size:13px}
+.adeadd{position:relative}.adeadd input{width:150px;height:26px;font-size:12px}.adeadd .sugg{position:absolute;top:28px;left:0;z-index:5;background:var(--color-canvas);border:1px solid var(--color-hairline);border-radius:var(--radius-sm);max-height:200px;overflow:auto;width:260px;box-shadow:rgba(0,0,0,.12) 0 6px 20px}.adeadd .sugg div{padding:6px 10px;font-size:12px;cursor:pointer}.adeadd .sugg div:hover{background:var(--color-canvas-parchment)}
+.cdedit .foot{display:flex;gap:10px;justify-content:flex-end;margin-top:16px;align-items:center}.cdedit .note{font-size:12px;color:var(--color-ink-muted-48);margin-right:auto}
+@media (max-width:900px){.cdwrap{grid-template-columns:1fr}}
 @media (max-width:1100px){.panel{display:none}}@media (max-width:820px){.side{display:none}}
 </style></head><body>
 <div class="app">
@@ -96,7 +105,7 @@ pre.log{margin:12px 20px;background:#0f1214;color:#c9d1d9;border-radius:var(--ra
     <nav><a href="#" title="준비 중">Sites</a><a href="#" class="on" id="navMaps" data-screen="library">Maps</a><a href="#" title="준비 중">Sessions</a><a href="#" data-screen="datasets">Datasets</a><a href="#" data-screen="queue">Pipeline</a><a href="#" title="준비 중">Robots</a></nav>
     <div class="right"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg><span id="who">gw.park@raionrobotics.com</span></div></div>
   <div class="sn"><div class="title">Semantic Map Console</div>
-    <div class="tabs"><span class="on" id="tabLibrary" data-screen="library">Map library</span><span data-screen="datasets">Datasets</span><span title="준비 중">Class dictionary</span><span data-screen="queue" id="tabQueue">Processing queue <em id="queueBadge" hidden></em></span></div>
+    <div class="tabs"><span class="on" id="tabLibrary" data-screen="library">Map library</span><span data-screen="datasets">Datasets</span><span data-screen="classdicts">Class dictionary</span><span data-screen="queue" id="tabQueue">Processing queue <em id="queueBadge" hidden></em></span></div>
     <div class="actions"><button class="btn-link" id="btnIngest">Ingest data</button><button class="btn-pill" id="btnBuild">Build new map</button></div></div>
 
   <section class="screen on" id="library">
@@ -118,6 +127,15 @@ pre.log{margin:12px 20px;background:#0f1214;color:#c9d1d9;border-radius:var(--ra
     <div class="filters"><div class="in"><div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg><input id="dsq" placeholder="Search datasets"></div>
       <div class="right"><span id="dsLabel"></span><button class="btn-soft" id="dsRescan" style="height:30px">Rescan</button></div></div></div>
     <div class="body"><div class="table" id="dsTable"></div></div>
+  </section>
+
+  <section class="screen" id="classdicts">
+    <div class="hero" style="padding-bottom:28px"><div class="in"><div class="eyebrow">SegFormer-B4 · ADE20K 150 labels → map classes</div><h2>Class dictionary</h2>
+      <p>3D semantic voxel 빌더가 쓰는 클래스 정의입니다. ADE20K 의 150개 라벨을 묶어 클래스를 만들고, 각 클래스에 주행 역할(선호 지면·통행 가능 지면·장애물·동적·문맥)과 코스트를 줍니다. 빌드 폼에서 사전을 고르면 그 정의로 맵이 만들어지고, 사전은 매니페스트에 기록됩니다.</p></div></div>
+    <div class="body cdwrap">
+      <aside class="cdlist"><div class="cdhead"><b>Dictionaries</b><button class="btn-soft" id="cdNew" style="height:28px;padding:0 10px">New</button></div><div id="cdItems"></div></aside>
+      <div class="cdedit" id="cdEdit"></div>
+    </div>
   </section>
 
   <section class="screen" id="queue">
@@ -147,6 +165,7 @@ pre.log{margin:12px 20px;background:#0f1214;color:#c9d1d9;border-radius:var(--ra
     <label>Dataset<select name="dataset" id="bDataset"></select></label>
     <div class="row2"><label>Map name<input name="name" id="bName" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,48}" placeholder="예: campus_20260910"></label><label>Map ID (표시 이름)<input name="map_id" id="bMapId" placeholder="비우면 이름과 같음"></label></div>
     <div class="row2"><label>Logs from<input name="log_from" id="bFrom" type="number"></label><label>Logs to<input name="log_to" id="bTo" type="number"></label></div>
+    <label style="margin-top:10px">Class dictionary (SegFormer 클래스 정의)<select name="opt_classdict" id="bClassdict"></select></label>
     <details class="adv"><summary>고급 설정 (기본값으로 두어도 됩니다)</summary><div class="optgrid" id="bOpts"></div></details>
     <label class="chk"><input type="checkbox" name="overwrite"> 같은 이름의 맵이 있으면 덮어쓰기(건너뛰기 없이 이어서 빌드)</label>
     <div id="bErr" class="err" hidden></div>
@@ -165,8 +184,31 @@ const fmt=n=>n==null?"—":Number(n).toLocaleString("ko-KR"), fmtM=n=>n==null?"�
 const CLASSES=[["grass","Grass","#79916f"],["path","Path","#8d939b"],["tree","Tree","#4f7a5c"],["person","Person","#d1852f"],["other","Other","#5c99c7"],["unknown(LiDAR only)","Unlabeled (LiDAR only)","#7a7a7a"]];
 const TAGCOL=["#5c99c7","#79916f","#a8adb5","#d1852f","#4f7a5c","#b8562f","#8d939b","#6f7680"];
 let MAPS=[], DATASETS=[], JOBS=[], OPTION_SPEC={}, TOKEN_REQUIRED=false, state={q:"",site:"all",st:"all",view:"grid",cur:null,mode:"pipeline",panel:"layers",screen:"library",dsq:""};
+let CDS=[], ADE=[], ROLES=[], ROLE_COST={}, cdCur=null;
+const ROLE_LABEL={ground_preferred:"선호 지면",ground_soft:"통행 가능 지면(비쌈)",obstacle:"장애물",dynamic:"동적",context:"문맥"};
+async function loadClassdicts(){const r=await fetch("/api/classdicts"); const d=await r.json(); CDS=d.classdicts; ADE=d.ade_labels; ROLES=d.roles; ROLE_COST=d.role_cost; if(!cdCur||!CDS.find(c=>c.name===cdCur.name)) cdCur=JSON.parse(JSON.stringify(CDS[0])); renderClassdicts(); fillClassdictSelect();}
+function fillClassdictSelect(){const sel=document.getElementById("bClassdict"); if(!sel) return; const cur=sel.value||"default"; sel.innerHTML=CDS.filter(c=>!c.error).map(c=>`<option value="${c.name}" ${c.name===cur?"selected":""}>${c.name} — ${c.classes.map(x=>x.name).join(", ")}</option>`).join("");}
+function adeIdsFor(subs){const s=subs.map(x=>x.toLowerCase()); return ADE.filter(l=>s.some(x=>l.label.toLowerCase().includes(x))).map(l=>l.label);}
+function renderClassdicts(){document.getElementById("cdItems").innerHTML=CDS.map(c=>`<div class="cditem ${cdCur&&c.name===cdCur.name?"on":""}" data-cd="${c.name}">${c.name}${c.error?" ⚠":""}<div class="m">${c.error||`${c.classes.length} classes · ${c.description||""}`}</div></div>`).join("");
+  const c=cdCur, ro=c.name==="default"; const e=document.getElementById("cdEdit");
+  e.innerHTML=`<div class="top"><label>이름<input id="cdName" value="${c.name}" ${ro?"disabled":""} pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,40}"></label><label style="flex:1;min-width:240px">설명<input id="cdDesc" value="${c.description||""}" ${ro?"disabled":""}></label>${ro?`<span class="note">default 는 읽기 전용입니다. Duplicate 로 복제해 편집하세요.</span>`:""}</div>
+   <table class="cdt"><tr><th>클래스</th><th>ADE20K 라벨 (부분문자열 매칭)</th><th>매칭되는 라벨</th><th>역할</th><th>지면 코스트</th><th>색</th><th></th></tr>
+   ${c.classes.map((k,i)=>`<tr data-i="${i}"><td><input type="text" class="f-name" value="${k.name}" ${ro?"disabled":""} pattern="[a-z][a-z0-9_]{0,30}"></td>
+     <td><div class="adechips">${k.ade.map((a,j)=>`<span class="adechip">${a}${ro?"":`<button data-rm="${i}:${j}" title="제거">×</button>`}</span>`).join("")}</div>${ro?"":`<div class="adeadd"><input class="f-ade" data-i="${i}" placeholder="라벨 검색·추가 (예: car)"><div class="sugg" hidden></div></div>`}</td>
+     <td style="font-size:12px;color:var(--color-ink-muted-48);max-width:220px">${adeIdsFor(k.ade).join(", ")||"<span style='color:#8f3d1c'>매칭 없음</span>"}</td>
+     <td><select class="f-role" ${ro?"disabled":""}>${ROLES.map(r=>`<option value="${r}" ${k.role===r?"selected":""}>${ROLE_LABEL[r]||r}</option>`).join("")}</select></td>
+     <td><input type="number" class="f-cost" value="${k.cost??ROLE_COST[k.role]}" min="0" max="254" ${ro?"disabled":""}></td>
+     <td><input type="color" class="f-color" value="${k.color}" ${ro?"disabled":""}></td>
+     <td>${ro?"":`<button class="btn-soft" data-del="${i}" style="height:28px;padding:0 8px">삭제</button>`}</td></tr>`).join("")}</table>
+   <div class="foot"><span class="note">역할이 코스트맵 규칙을 정합니다: 선호/통행 지면 → 지면 코스트, 장애물 → 밴드에서 lethal, 동적 → free 공간이면 제거, 문맥 → 지면 150.</span>
+     ${ro?"":`<button class="btn-soft" id="cdAddRow">+ 클래스</button><button class="btn-soft" id="cdDelete">사전 삭제</button>`}<button class="btn-soft" id="cdDup">Duplicate</button>${ro?"":`<button class="btn-pill" id="cdSave">Save</button>`}</div><div id="cdErr" class="err" hidden></div>`;
+  if(!ro) e.querySelectorAll(".f-ade").forEach(inp=>{inp.addEventListener("input",()=>{const q=inp.value.trim().toLowerCase(); const box=inp.nextElementSibling; if(!q){box.hidden=true;return;} const hits=ADE.filter(l=>l.label.toLowerCase().includes(q)).slice(0,20); box.innerHTML=hits.map(h=>`<div data-pick="${h.label.split(",")[0].trim()}">${h.label}</div>`).join("")||"<div>일치 없음</div>"; box.hidden=false;});
+    inp.addEventListener("keydown",ev=>{if(ev.key==="Enter"){ev.preventDefault(); const v=inp.value.trim().toLowerCase(); if(v){cdCur=readEditor(); cdCur.classes[+inp.dataset.i].ade.push(v); renderClassdicts();}}});});}
+function readEditor(){const e=document.getElementById("cdEdit"); const c=JSON.parse(JSON.stringify(cdCur)); if(c.name!=="default"&&e.querySelector("#cdName")){c.name=e.querySelector("#cdName").value.trim(); c.description=e.querySelector("#cdDesc").value; e.querySelectorAll("tr[data-i]").forEach(tr=>{const i=+tr.dataset.i; c.classes[i].name=tr.querySelector(".f-name").value.trim(); c.classes[i].role=tr.querySelector(".f-role").value; c.classes[i].cost=Number(tr.querySelector(".f-cost").value); c.classes[i].color=tr.querySelector(".f-color").value;});} return c;}
+async function saveClassdict(){const c=readEditor(); const headers={"Content-Type":"application/json"}; if(TOKEN_REQUIRED){const t=localStorage.getItem("portal_token"); if(t) headers["X-Portal-Token"]=t;}
+  const r=await fetch("/api/classdicts",{method:"POST",headers,body:JSON.stringify(c)}); const j=await r.json(); const er=document.getElementById("cdErr"); if(!r.ok){er.textContent=j.error||"실패"; er.hidden=false; return;} cdCur=j.classdict; await loadClassdicts();}
 const OPT_LABEL={lidar_fusion:"LiDAR → depth 융합",mask_bottom_px:"하단 마스킹 (px)",drop_classes:"제외 동적 클래스",vlm_edges:"VLM 관계 엣지",vlm_max_pairs:"VLM 쌍 상한 / 로그",occupancy_res:"Occupancy 해상도 (m)",prob_hit:"prob hit",prob_miss:"prob miss",h_ground:"지면 hits ≥",h_obs:"장애물 hits ≥",clearance:"clearance (m)",band_min:"장애물 밴드 시작 (m)",view_cubes:"rerun 큐브 표현",view_coarse:"큐브 크기 (m)",video_speed:"영상 배속 (0=생략)",video_pipeline:"3분할 영상"};
-function showScreen(name){state.screen=name; document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("on",s.id===name)); document.querySelectorAll("[data-screen]").forEach(el=>el.classList.toggle("on",el.dataset.screen===name)); if(name!=="detail"){state.cur=null; document.querySelectorAll("#stage video").forEach(v=>v.pause());} if(name==="datasets") loadDatasets(); if(name==="queue") loadJobs(); window.scrollTo(0,0);}
+function showScreen(name){state.screen=name; document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("on",s.id===name)); document.querySelectorAll("[data-screen]").forEach(el=>el.classList.toggle("on",el.dataset.screen===name)); if(name!=="detail"){state.cur=null; document.querySelectorAll("#stage video").forEach(v=>v.pause());} if(name==="datasets") loadDatasets(); if(name==="queue") loadJobs(); if(name==="classdicts") loadClassdicts(); window.scrollTo(0,0);}
 const fmtGB=g=>g>=1?g.toFixed(1)+" GB":Math.round(g*1000)+" MB";
 async function loadDatasets(){const r=await fetch("/api/datasets"); const d=await r.json(); DATASETS=d.datasets; renderDatasets();}
 function renderDatasets(){const q=state.dsq.trim().toLowerCase(); const list=DATASETS.filter(d=>!q||(d.name+" "+d.parent+" "+d.path).toLowerCase().includes(q));
@@ -183,6 +225,7 @@ function renderJobs(){const active=JOBS.filter(j=>j.status==="running"||j.status
       <div class="prog"><i style="width:${pct}%"></i></div><div class="steps">${STEPS.map((s,i)=>`<span class="${j.status==="done"||i<j.step_index-1?"done":(i===j.step_index-1&&j.status==="running"?"cur":"")}">${s}</span>`).join("")}</div></div>`;}).join(""):`<div class="empty">아직 웹에서 시작한 빌드가 없습니다. Datasets 에서 데이터셋을 골라 Build map 을 누르세요.</div>`;}
 function openBuild(dsPath){const sel=document.getElementById("bDataset"); sel.innerHTML=DATASETS.map(d=>`<option value="${d.path}" ${d.path===dsPath?"selected":""}>${d.name} (${d.n_logs} logs, ${d.recorded})</option>`).join(""); syncBuildForm();
   const g=document.getElementById("bOpts"); g.innerHTML=Object.entries(OPTION_SPEC).map(([k,sp])=>sp.type==="bool"?`<label>${OPT_LABEL[k]||k}<input type="checkbox" name="opt_${k}" ${sp.default?"checked":""}></label>`:`<label>${OPT_LABEL[k]||k}${sp.range?` <span style="color:var(--color-ink-muted-48)">(${sp.range[0]}–${sp.range[1]})</span>`:""}<input name="opt_${k}" type="${sp.type==="str"?"text":"number"}" value="${sp.default}" ${sp.type==="float"?'step="0.01"':""} ${sp.range?`min="${sp.range[0]}" max="${sp.range[1]}"`:""}></label>`).join("");
+  (CDS.length?Promise.resolve():loadClassdicts()).then(fillClassdictSelect);
   document.getElementById("bErr").hidden=true; document.getElementById("buildModal").classList.add("on"); document.getElementById("bName").focus();}
 function syncBuildForm(){const d=DATASETS.find(x=>x.path===document.getElementById("bDataset").value); if(!d) return; const f=document.getElementById("bFrom"), t=document.getElementById("bTo"); f.min=t.min=d.log_min; f.max=t.max=d.log_max; f.value=d.log_min; t.value=d.log_max; const n=document.getElementById("bName"); if(!n.value) n.value=(d.parent+"_"+d.name).replace(/[^A-Za-z0-9_-]/g,"_").slice(0,40);}
 async function submitBuild(e){e.preventDefault(); const fd=new FormData(e.target); const body={dataset:fd.get("dataset"),name:fd.get("name"),map_id:fd.get("map_id"),log_from:Number(fd.get("log_from")),log_to:Number(fd.get("log_to")),overwrite:!!fd.get("overwrite"),options:{}};
@@ -236,7 +279,8 @@ function renderDetail(m){const s=m.summary||{}, q=m.quality||{}, st=statusOf(m);
   document.getElementById("dStats").innerHTML=[["Voxels (0.1 m)",fmt(s.voxels)],["Occupancy cells",fmt(occ.cells)],["Objects",fmt(s.objects)],["Edges (heur / terrain / VLM)",`${fmt(e.heuristic)} / ${fmt(e.object_terrain)} / ${fmt(e.vlm)}`],["Costmap",cm.shape?`${cm.shape.join("×")} @ ${cm.res_m} m`:"—"],["Package",`${Object.keys(m.files).length} files · ${m.package_mb} MB`],["Build time",s.build_seconds_total?Math.round(s.build_seconds_total/60)+" min":"—"]].map(([k,v])=>`<div><div class="k">${k}</div><div class="v">${v}</div></div>`).join("")+`<div class="acts"><a class="btn-soft" target="_blank" rel="noopener" href="${fileURL(m.manifest)}">Manifest</a><button class="btn-soft" id="btnLog2">Build log</button>${m.rrd?`<a class="btn-pill" target="_blank" rel="noopener" href="${rerunURL(m.rrd)}">Open in rerun</a>`:""}</div>`;
   // panel: layers
   const vl=s.voxel_labels||{}, tot=Object.values(vl).reduce((a,b)=>a+b,0)||1;
-  document.getElementById("pLayers").innerHTML=`<div class="psum"><span>${CLASSES.filter(c=>vl[c[0]]).length} classes · ${fmtM(tot)} voxels</span><span>share of voxels</span></div>`+CLASSES.map(([k,l,c])=>`<div class="layer"><div class="sw" style="background:${c}"></div><div><div class="l">${l}</div><div class="s">${k} · ${fmtM(vl[k]||0)} vox</div></div><div class="pct">${(100*(vl[k]||0)/tot).toFixed(1)}%</div></div>`).join("")+
+  const CLS=(s.classdict&&s.classdict.classes?s.classdict.classes.map(c=>[c.name,`${c.name} · ${c.role||""}`,c.color]):CLASSES.slice(0,4)).concat([["other","Other (어휘 밖)","#7887a0"],["unknown(LiDAR only)","Unlabeled (LiDAR only)","#6e6e6e"]]);
+  document.getElementById("pLayers").innerHTML=`<div class="psum"><span>${s.classdict?`dictionary: ${s.classdict.name} · `:""}${CLS.filter(c=>vl[c[0]]).length} classes · ${fmtM(tot)} voxels</span><span>share of voxels</span></div>`+CLS.map(([k,l,c])=>`<div class="layer"><div class="sw" style="background:${c}"></div><div><div class="l">${l}</div><div class="s">${fmtM(vl[k]||0)} vox</div></div><div class="pct">${(100*(vl[k]||0)/tot).toFixed(1)}%</div></div>`).join("")+
     `<div class="review"><b>Coverage</b>${[["Labeled voxels",labeledPct(s),"var(--color-primary)"],["Occupancy free / total",occ.cells?Math.round(100*occ.free/occ.cells):0,"#5c99c7"],["Costmap traversable",cm.shape?Math.round(100*((cm.free_path||0)+(cm.grass||0)+(cm.uncertain||0))/Math.max(1,(cm.free_path||0)+(cm.grass||0)+(cm.uncertain||0)+(cm.lethal||0))):0,"#79916f"]].map(([l,v,c])=>`<div class="rrow"><div class="t"><span>${l}</span><span>${v}%</span></div><div class="bar"><i style="width:${v}%;background:${c}"></i></div></div>`).join("")}
     <div class="foot">Built ${m.built||"—"} · ${m.package_mb} MB · LiDAR fusion ${m.options.lidar_fusion?"on":"off"} · VLM edges ${m.options.vlm_edges?"on":"off"}<br>${m.mcap_dir}</div></div>`;
   // panel: graph
@@ -257,6 +301,14 @@ document.addEventListener("click",e=>{
   const cj=e.target.closest("[data-cancel]"); if(cj){cancelJob(cj.dataset.cancel); return;}
   const jl=e.target.closest("[data-joblog]"); if(jl){showLog(jl.dataset.joblog); return;}
   if(e.target.closest("#dsRescan")){fetch("/api/datasets/rescan",{method:"POST"}).then(loadDatasets); return;}
+  const ci=e.target.closest("[data-cd]"); if(ci){cdCur=JSON.parse(JSON.stringify(CDS.find(c=>c.name===ci.dataset.cd))); renderClassdicts(); return;}
+  if(e.target.closest("#cdNew")||e.target.closest("#cdDup")){const base=e.target.closest("#cdDup")?readEditor():{classes:[]}; cdCur={name:(base.name&&base.name!=="default"?base.name+"_copy":"custom_"+Date.now().toString(36).slice(-4)),description:base.description||"",classes:JSON.parse(JSON.stringify(base.classes||[]))}; if(!cdCur.classes.length) cdCur.classes=JSON.parse(JSON.stringify(CDS[0].classes)); renderClassdicts(); return;}
+  if(e.target.closest("#cdAddRow")){cdCur=readEditor(); cdCur.classes.push({name:"new_class",ade:[],color:"#5c99c7",role:"context",cost:150}); renderClassdicts(); return;}
+  const del=e.target.closest("[data-del]"); if(del){cdCur=readEditor(); cdCur.classes.splice(+del.dataset.del,1); renderClassdicts(); return;}
+  const rm=e.target.closest("[data-rm]"); if(rm){const [i,j]=rm.dataset.rm.split(":").map(Number); cdCur=readEditor(); cdCur.classes[i].ade.splice(j,1); renderClassdicts(); return;}
+  const pk=e.target.closest("[data-pick]"); if(pk){const inp=pk.closest(".adeadd").querySelector("input"); cdCur=readEditor(); cdCur.classes[+inp.dataset.i].ade.push(pk.dataset.pick.toLowerCase()); renderClassdicts(); return;}
+  if(e.target.closest("#cdSave")){saveClassdict(); return;}
+  if(e.target.closest("#cdDelete")){if(!confirm(`사전 '${cdCur.name}' 을 삭제할까요?`)) return; fetch(`/api/classdicts/${encodeURIComponent(cdCur.name)}/delete`,{method:"POST"}).then(()=>{cdCur=null; loadClassdicts();}); return;}
   const chip=e.target.closest("[data-site]"); if(chip){state.site=chip.dataset.site; renderLibrary(); return;}
   const st=e.target.closest("span.f[data-st]"); if(st){state.st=st.dataset.st; document.querySelectorAll("span.f").forEach(x=>x.classList.toggle("on",x===st)); renderLibrary(); return;}
   const vw=e.target.closest("[data-view]"); if(vw){state.view=vw.dataset.view; document.querySelectorAll("[data-view]").forEach(x=>x.classList.toggle("on",x===vw)); renderLibrary(); return;}

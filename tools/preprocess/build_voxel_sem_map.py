@@ -19,7 +19,7 @@ from mcap.reader import make_reader
 LIDAR_DT = np.dtype([("ot", "<u4"), ("x", "<f4"), ("y", "<f4"), ("z", "<f4"),
                      ("refl", "u1"), ("tag", "u1"), ("line", "u1")])
 VOX = 0.10
-CLASSES = ["grass", "path", "tree", "person"]
+CLASSES = ["grass", "path", "tree", "person"]   # sem_dir/classes.json 이 있으면 그것으로 대체 (클래스 사전)
 
 
 def quat_wxyz_to_R(q):
@@ -116,6 +116,12 @@ def main():
 
     # --- semantic 인덱스: 이 로그 시간 범위 안의 것 ---
     idx = np.load(os.path.join(a.sem_dir, "rgb_index.npz"))
+    classdict = None
+    cj = os.path.join(a.sem_dir, "classes.json")
+    if os.path.exists(cj):
+        import json
+        classdict = json.load(open(cj, encoding="utf-8")); CLASSES = [c["name"] for c in classdict["classes"]]
+    NCH = len(CLASSES); print("클래스", NCH, CLASSES)
     rgb_ns = idx["rgb_stamp_ns"]
     sel = np.where((rgb_ns >= st[0]-50e6) & (rgb_ns <= st[-1]+50e6))[0]
     print("semantic 프레임 %d개 (세션 idx %d~%d)" % (len(sel), sel[0], sel[-1]))
@@ -168,7 +174,7 @@ def main():
             # 보임: 카메라 depth 가 없거나(원거리) lidar z 가 카메라 표면과 일치
             vis = infov & ((dcam <= 0) | (np.abs(zl - dcam) < 0.25 + 0.05*zl))
             has[vis] = True
-            semv = np.zeros((len(pw), 4), np.uint8); rgbv = np.zeros((len(pw), 3), np.uint8)
+            semv = np.zeros((len(pw), NCH), np.uint8); rgbv = np.zeros((len(pw), 3), np.uint8)
             semv[vis] = sem[v[vis], u[vis]]; rgbv[vis] = rgb[v[vis], u[vis]]
             rgbv[~vis] = 128
             K_list.append(pack(np.floor(pw/VOX).astype(np.int32)))
@@ -189,7 +195,7 @@ def main():
     hasf = has.astype(np.float32)
     rgb_lab = np.stack([np.bincount(inv, weights=rgbs[:, c]*hasf, minlength=n) for c in range(3)], -1)
     n_sem = np.bincount(inv, weights=hasf, minlength=n)
-    sem_sum = np.stack([np.bincount(inv, weights=sems[:, c]*hasf, minlength=n) for c in range(4)], -1)
+    sem_sum = np.stack([np.bincount(inv, weights=sems[:, c]*hasf, minlength=n) for c in range(NCH)], -1)
     first = np.full(n, 10**9, np.int32); np.minimum.at(first, inv, frs)
     with np.errstate(invalid="ignore", divide="ignore"):
         sem_mean = np.where(n_sem[:, None] > 0, sem_sum/np.maximum(n_sem, 1)[:, None], 0).astype(np.float16)
@@ -197,7 +203,7 @@ def main():
     ijk = unpack(uk).astype(np.int32)
     np.savez_compressed(a.out, ijk=ijk, n_pts=n_pts, rgb=rgb_out, sem_mean=sem_mean,
                         n_sem=n_sem.astype(np.int32), first_frame=first, vox=VOX, classes=np.array(CLASSES),
-                        n_frames=len(sel))
+                        n_frames=len(sel), **({"classdict": np.array(__import__("json").dumps(classdict, ensure_ascii=False))} if classdict else {}))
     lab = int((n_sem > 0).sum())
     print("복셀 %s개, 라벨 있음 %s (%.0f%%), unknown %s" % (f"{n:,}", f"{lab:,}", 100*lab/n, f"{n-lab:,}"))
     print("LiDAR 점 라벨 수령율: %.1f%% (%s/%s)" % (100*n_lidar_lab/max(n_lidar_tot, 1), f"{n_lidar_lab:,}", f"{n_lidar_tot:,}"))

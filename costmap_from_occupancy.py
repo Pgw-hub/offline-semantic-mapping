@@ -13,6 +13,7 @@ import argparse, json, os, sys, time
 import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from load_map import MapPackage
+import classdict as CD
 
 ap = argparse.ArgumentParser()
 ap.add_argument("manifest"); ap.add_argument("out")
@@ -24,8 +25,10 @@ ap.add_argument("--mode", choices=["semantic", "geometric"], default="semantic",
 ap.add_argument("--band-min", type=float, default=0.3, help="지면 위 이 높이부터 장애물 밴드 시작 (m)")
 a = ap.parse_args(); t0 = time.time()
 mp = MapPackage(a.manifest); O = mp.occ; R = O["res"]; ijk = O["ijk"].astype(np.int64); hits = O["hits"]
-classes = mp.classes; n_cls = len(classes); GRASS = classes.index("grass"); TREE = classes.index("tree"); PATH = classes.index("path")
-PERSON = classes.index("person") if "person" in classes else -1
+classes = mp.classes; n_cls = len(classes); cd = mp.classdict
+PREF = CD.ids_with_role(cd, "ground_preferred"); SOFT = CD.ids_with_role(cd, "ground_soft"); OBST = CD.ids_with_role(cd, "obstacle"); DYN = CD.ids_with_role(cd, "dynamic")
+PASS = set(SOFT + DYN)                      # 밴드에서 장애물로 세지 않는 클래스 (잔디·사람)
+print("클래스 사전:", cd["name"], {c["name"]: c["role"] for c in cd["classes"]})
 
 # --- 0.2m 셀 라벨: 0.1m 표면 복셀 다수결 (person·free 안 동적 복셀 제외) ---
 ctr = mp.voxel_centers(); lab = mp.labels(); keep = ~mp.surf_removed
@@ -62,9 +65,10 @@ i_all = ucol // (1 << 21) - (1 << 20); j_all = ucol % (1 << 21) - (1 << 20)
 i0, j0 = int(i_all.min()), int(j_all.min()); H = int(i_all.max() - i0 + 1); W = int(j_all.max() - j0 + 1)
 cost = np.full((H, W), 255, np.uint8); gz = np.full((H, W), np.nan, np.float32)
 gi, gj = i_all - i0, j_all - j0
-ground_cost = np.full(len(ucol), 60, np.uint8)
-ground_cost[glab == PATH] = 10; ground_cost[glab == GRASS] = 90; ground_cost[glab == n_cls] = 150
-ground_cost[glab == TREE] = 150                              # 지면이 tree 라벨(뿌리/낮은 가지) → other 취급
+ground_cost = np.full(len(ucol), 60, np.uint8)               # 라벨 없는 지면 60
+ground_cost[glab == n_cls] = 150                             # other
+for ci, c in enumerate(cd["classes"]):                       # 사전의 역할·코스트로 지면값
+    ground_cost[glab == ci] = min(int(c["cost"]), 252) if c["role"] in ("ground_preferred", "ground_soft") else 150
 if a.mode == "geometric":
     ground_cost[:] = 0                                       # 기하 전용: 지면이면 전부 free
 cost[gi, gj] = ground_cost; gz[gi, gj] = (kmin + 0.5) * R
@@ -78,8 +82,8 @@ if a.mode == "geometric":
     obs = (kg_of_cell >= 0) & (hits >= a.h_obs) & (h >= a.band_min - 1e-6) & (h <= a.clearance)   # 라벨 무시
     lethal = obs; unc = np.zeros_like(obs)
 else:
-    obs = (kg_of_cell >= 0) & (hits >= a.h_obs) & (h >= a.band_min - 1e-6) & (h <= a.clearance) & (olab != GRASS) & (olab != PERSON)
-    lethal = obs & ((olab == TREE) | (h > a.low))
+    obs = (kg_of_cell >= 0) & (hits >= a.h_obs) & (h >= a.band_min - 1e-6) & (h <= a.clearance) & ~np.isin(olab, list(PASS))
+    lethal = obs & (np.isin(olab, OBST) | (h > a.low))
     unc = obs & ~lethal
 ci, cj = ijk[:, 0] - i0, ijk[:, 1] - j0
 cost[ci[unc], cj[unc]] = np.maximum(cost[ci[unc], cj[unc]], 200)
@@ -97,7 +101,7 @@ print(f"  연결요소 {n} · 상위5(m²) {sorted((sz*R*R).tolist(), reverse=Tr
 legend = "0-252 cost (path10 grass90 other150 none60), 200 uncertain(low unlabeled obstacle), 254 lethal, 255 unknown"
 # 비교용: 밴드 안에서 grass 라벨이라 통과시킨(semantic) / lethal 로 잡았을(geometric) 셀 수
 band_all = (kg_of_cell >= 0) & (hits >= a.h_obs) & (h >= a.band_min - 1e-6) & (h <= a.clearance)
-print(f"  밴드 안 확인 셀 {int(band_all.sum()):,} · 그중 grass 라벨 {int((band_all & (olab == GRASS)).sum()):,} · mode={a.mode} band_min={a.band_min}")
+print(f"  밴드 안 확인 셀 {int(band_all.sum()):,} · 그중 통과 클래스(soft/dynamic) {int((band_all & np.isin(olab, list(PASS))).sum()):,} · mode={a.mode} band_min={a.band_min}")
 np.savez_compressed(a.out + ".npz", cost=cost, ground_z=gz, x0=x0, y0=y0, res=R, axes="row=x,col=y", legend=legend, clearance_m=a.clearance,
                     h_ground=a.h_ground, h_obs=a.h_obs, mode=a.mode, band_min=a.band_min)
 print("저장:", a.out + ".npz")

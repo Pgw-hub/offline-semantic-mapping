@@ -21,8 +21,11 @@ OPTION_SPEC = {   # 웹 폼에서 받는 옵션: (타입, 기본값, 범위)
     "vlm_edges": ("bool", True, None), "vlm_max_pairs": ("int", 30, (0, 200)),
     "occupancy_res": ("float", 0.2, (0.1, 0.5)), "prob_hit": ("float", 0.85, (0.5, 0.99)), "prob_miss": ("float", 0.45, (0.05, 0.5)),
     "h_ground": ("int", 2, (1, 10)), "h_obs": ("int", 3, (1, 10)), "clearance": ("float", 1.4, (0.5, 3.0)), "band_min": ("float", 0.3, (0.1, 1.0)),
-    "view_cubes": ("bool", False, None), "view_coarse": ("float", 0.3, (0.1, 1.0)), "video_speed": ("int", 15, (0, 60)), "video_pipeline": ("bool", True, None)}
+    "view_cubes": ("bool", False, None), "view_coarse": ("float", 0.3, (0.1, 1.0)), "video_speed": ("int", 15, (0, 60)), "video_pipeline": ("bool", True, None),
+    "classdict": ("str", "default", None)}
 HTML = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "map_portal.html"), encoding="utf-8").read()
+sys.path.insert(0, ROOT); import classdict as CD
+ADE_LABELS = json.load(open(os.path.join(ROOT, "classdicts", "ade20k_labels.json"))) if os.path.exists(os.path.join(ROOT, "classdicts", "ade20k_labels.json")) else []
 
 _ds_cache = {"t": 0, "v": []}
 def scan_datasets():
@@ -124,7 +127,9 @@ def make_yaml(spec):
          "options": {"map_id": spec.get("map_id") or name, "lidar_fusion": opts["lidar_fusion"], "mask_bottom_px": opts["mask_bottom_px"], "drop_classes": opts["drop_classes"],
                      "vlm_edges": opts["vlm_edges"], "vlm_max_pairs": opts["vlm_max_pairs"], "occupancy_res": opts["occupancy_res"], "prob_hit": opts["prob_hit"], "prob_miss": opts["prob_miss"],
                      "costmap": {"h_ground": opts["h_ground"], "h_obs": opts["h_obs"], "clearance": opts["clearance"], "band_min": opts["band_min"]},
-                     "view_cubes": opts["view_cubes"], "view_coarse": opts["view_coarse"], "video_speed": opts["video_speed"], "video_pipeline": opts["video_pipeline"]}}
+                     "view_cubes": opts["view_cubes"], "view_coarse": opts["view_coarse"], "video_speed": opts["video_speed"], "video_pipeline": opts["video_pipeline"],
+                     "classdict": opts["classdict"]}}
+    if opts["classdict"] != "default" and not os.path.exists(os.path.join(CD.DIR, f"{opts['classdict']}.json")): raise ValueError(f"클래스 사전 '{opts['classdict']}' 없음")
     import yaml as _y
     path = os.path.join(SESS, f"session_{name}.yaml"); os.makedirs(SESS, exist_ok=True)
     open(path, "w", encoding="utf-8").write(f"# 웹 콘솔에서 생성 {time.strftime('%Y-%m-%d %H:%M')} · 데이터셋 {ds['name']}\n" + _y.safe_dump(y, allow_unicode=True, sort_keys=False))
@@ -205,6 +210,8 @@ class H(http.server.SimpleHTTPRequestHandler):
             return self.send_json({"datasets": ds, "roots": DATASET_ROOTS})
         if p == "/api/jobs":
             return self.send_json({"jobs": JOBS.view(), "container": CONTAINER})
+        if p == "/api/classdicts":
+            return self.send_json({"classdicts": CD.list_all(), "roles": CD.ROLES, "role_cost": CD.ROLE_GROUND_COST, "ade_labels": ADE_LABELS})
         if p.startswith("/api/log/"):
             name = os.path.basename(p[len("/api/log/"):]); f = os.path.join(ROOT, "sessions", f"{name}_build.out")
             if not os.path.exists(f): return self.send_json({"error": "no log"}, 404)
@@ -227,6 +234,17 @@ class H(http.server.SimpleHTTPRequestHandler):
         if p.startswith("/api/jobs/") and p.endswith("/cancel"):
             name = p[len("/api/jobs/"):-len("/cancel")]
             return self.send_json({"ok": JOBS.cancel(name)})
+        if p == "/api/classdicts":
+            try:
+                path = CD.save(body); return self.send_json({"ok": True, "path": os.path.relpath(path, ROOT), "classdict": CD.load(body["name"])})
+            except ValueError as e: return self.send_json({"error": str(e)}, 400)
+            except Exception as e: return self.send_json({"error": f"내부 오류: {e}"}, 500)
+        if p.startswith("/api/classdicts/") and p.endswith("/delete"):
+            name = os.path.basename(p[len("/api/classdicts/"):-len("/delete")])
+            if name == "default": return self.send_json({"error": "default 는 삭제 불가"}, 400)
+            f = os.path.join(CD.DIR, f"{name}.json")
+            if os.path.exists(f): os.remove(f)
+            return self.send_json({"ok": True})
         if p == "/api/datasets/rescan":
             _ds_cache["t"] = 0; return self.send_json({"datasets": scan_datasets()})
         return self.send_json({"error": "unknown"}, 404)

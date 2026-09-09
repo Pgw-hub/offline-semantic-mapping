@@ -1,0 +1,602 @@
+[
+{
+"id": 0,
+"label": "wall"
+},
+{
+"id": 1,
+"label": "building"
+},
+{
+"id": 2,
+"label": "sky"
+},
+{
+"id": 3,
+"label": "floor"
+},
+{
+"id": 4,
+"label": "tree"
+},
+{
+"id": 5,
+"label": "ceiling"
+},
+{
+"id": 6,
+"label": "road"
+},
+{
+"id": 7,
+"label": "bed "
+},
+{
+"id": 8,
+"label": "windowpane"
+},
+{
+"id": 9,
+"label": "grass"
+},
+{
+"id": 10,
+"label": "cabinet"
+},
+{
+"id": 11,
+"label": "sidewalk"
+},
+{
+"id": 12,
+"label": "person"
+},
+{
+"id": 13,
+"label": "earth"
+},
+{
+"id": 14,
+"label": "door"
+},
+{
+"id": 15,
+"label": "table"
+},
+{
+"id": 16,
+"label": "mountain"
+},
+{
+"id": 17,
+"label": "plant"
+},
+{
+"id": 18,
+"label": "curtain"
+},
+{
+"id": 19,
+"label": "chair"
+},
+{
+"id": 20,
+"label": "car"
+},
+{
+"id": 21,
+"label": "water"
+},
+{
+"id": 22,
+"label": "painting"
+},
+{
+"id": 23,
+"label": "sofa"
+},
+{
+"id": 24,
+"label": "shelf"
+},
+{
+"id": 25,
+"label": "house"
+},
+{
+"id": 26,
+"label": "sea"
+},
+{
+"id": 27,
+"label": "mirror"
+},
+{
+"id": 28,
+"label": "rug"
+},
+{
+"id": 29,
+"label": "field"
+},
+{
+"id": 30,
+"label": "armchair"
+},
+{
+"id": 31,
+"label": "seat"
+},
+{
+"id": 32,
+"label": "fence"
+},
+{
+"id": 33,
+"label": "desk"
+},
+{
+"id": 34,
+"label": "rock"
+},
+{
+"id": 35,
+"label": "wardrobe"
+},
+{
+"id": 36,
+"label": "lamp"
+},
+{
+"id": 37,
+"label": "bathtub"
+},
+{
+"id": 38,
+"label": "railing"
+},
+{
+"id": 39,
+"label": "cushion"
+},
+{
+"id": 40,
+"label": "base"
+},
+{
+"id": 41,
+"label": "box"
+},
+{
+"id": 42,
+"label": "column"
+},
+{
+"id": 43,
+"label": "signboard"
+},
+{
+"id": 44,
+"label": "chest of drawers"
+},
+{
+"id": 45,
+"label": "counter"
+},
+{
+"id": 46,
+"label": "sand"
+},
+{
+"id": 47,
+"label": "sink"
+},
+{
+"id": 48,
+"label": "skyscraper"
+},
+{
+"id": 49,
+"label": "fireplace"
+},
+{
+"id": 50,
+"label": "refrigerator"
+},
+{
+"id": 51,
+"label": "grandstand"
+},
+{
+"id": 52,
+"label": "path"
+},
+{
+"id": 53,
+"label": "stairs"
+},
+{
+"id": 54,
+"label": "runway"
+},
+{
+"id": 55,
+"label": "case"
+},
+{
+"id": 56,
+"label": "pool table"
+},
+{
+"id": 57,
+"label": "pillow"
+},
+{
+"id": 58,
+"label": "screen door"
+},
+{
+"id": 59,
+"label": "stairway"
+},
+{
+"id": 60,
+"label": "river"
+},
+{
+"id": 61,
+"label": "bridge"
+},
+{
+"id": 62,
+"label": "bookcase"
+},
+{
+"id": 63,
+"label": "blind"
+},
+{
+"id": 64,
+"label": "coffee table"
+},
+{
+"id": 65,
+"label": "toilet"
+},
+{
+"id": 66,
+"label": "flower"
+},
+{
+"id": 67,
+"label": "book"
+},
+{
+"id": 68,
+"label": "hill"
+},
+{
+"id": 69,
+"label": "bench"
+},
+{
+"id": 70,
+"label": "countertop"
+},
+{
+"id": 71,
+"label": "stove"
+},
+{
+"id": 72,
+"label": "palm"
+},
+{
+"id": 73,
+"label": "kitchen island"
+},
+{
+"id": 74,
+"label": "computer"
+},
+{
+"id": 75,
+"label": "swivel chair"
+},
+{
+"id": 76,
+"label": "boat"
+},
+{
+"id": 77,
+"label": "bar"
+},
+{
+"id": 78,
+"label": "arcade machine"
+},
+{
+"id": 79,
+"label": "hovel"
+},
+{
+"id": 80,
+"label": "bus"
+},
+{
+"id": 81,
+"label": "towel"
+},
+{
+"id": 82,
+"label": "light"
+},
+{
+"id": 83,
+"label": "truck"
+},
+{
+"id": 84,
+"label": "tower"
+},
+{
+"id": 85,
+"label": "chandelier"
+},
+{
+"id": 86,
+"label": "awning"
+},
+{
+"id": 87,
+"label": "streetlight"
+},
+{
+"id": 88,
+"label": "booth"
+},
+{
+"id": 89,
+"label": "television receiver"
+},
+{
+"id": 90,
+"label": "airplane"
+},
+{
+"id": 91,
+"label": "dirt track"
+},
+{
+"id": 92,
+"label": "apparel"
+},
+{
+"id": 93,
+"label": "pole"
+},
+{
+"id": 94,
+"label": "land"
+},
+{
+"id": 95,
+"label": "bannister"
+},
+{
+"id": 96,
+"label": "escalator"
+},
+{
+"id": 97,
+"label": "ottoman"
+},
+{
+"id": 98,
+"label": "bottle"
+},
+{
+"id": 99,
+"label": "buffet"
+},
+{
+"id": 100,
+"label": "poster"
+},
+{
+"id": 101,
+"label": "stage"
+},
+{
+"id": 102,
+"label": "van"
+},
+{
+"id": 103,
+"label": "ship"
+},
+{
+"id": 104,
+"label": "fountain"
+},
+{
+"id": 105,
+"label": "conveyer belt"
+},
+{
+"id": 106,
+"label": "canopy"
+},
+{
+"id": 107,
+"label": "washer"
+},
+{
+"id": 108,
+"label": "plaything"
+},
+{
+"id": 109,
+"label": "swimming pool"
+},
+{
+"id": 110,
+"label": "stool"
+},
+{
+"id": 111,
+"label": "barrel"
+},
+{
+"id": 112,
+"label": "basket"
+},
+{
+"id": 113,
+"label": "waterfall"
+},
+{
+"id": 114,
+"label": "tent"
+},
+{
+"id": 115,
+"label": "bag"
+},
+{
+"id": 116,
+"label": "minibike"
+},
+{
+"id": 117,
+"label": "cradle"
+},
+{
+"id": 118,
+"label": "oven"
+},
+{
+"id": 119,
+"label": "ball"
+},
+{
+"id": 120,
+"label": "food"
+},
+{
+"id": 121,
+"label": "step"
+},
+{
+"id": 122,
+"label": "tank"
+},
+{
+"id": 123,
+"label": "trade name"
+},
+{
+"id": 124,
+"label": "microwave"
+},
+{
+"id": 125,
+"label": "pot"
+},
+{
+"id": 126,
+"label": "animal"
+},
+{
+"id": 127,
+"label": "bicycle"
+},
+{
+"id": 128,
+"label": "lake"
+},
+{
+"id": 129,
+"label": "dishwasher"
+},
+{
+"id": 130,
+"label": "screen"
+},
+{
+"id": 131,
+"label": "blanket"
+},
+{
+"id": 132,
+"label": "sculpture"
+},
+{
+"id": 133,
+"label": "hood"
+},
+{
+"id": 134,
+"label": "sconce"
+},
+{
+"id": 135,
+"label": "vase"
+},
+{
+"id": 136,
+"label": "traffic light"
+},
+{
+"id": 137,
+"label": "tray"
+},
+{
+"id": 138,
+"label": "ashcan"
+},
+{
+"id": 139,
+"label": "fan"
+},
+{
+"id": 140,
+"label": "pier"
+},
+{
+"id": 141,
+"label": "crt screen"
+},
+{
+"id": 142,
+"label": "plate"
+},
+{
+"id": 143,
+"label": "monitor"
+},
+{
+"id": 144,
+"label": "bulletin board"
+},
+{
+"id": 145,
+"label": "shower"
+},
+{
+"id": 146,
+"label": "radiator"
+},
+{
+"id": 147,
+"label": "glass"
+},
+{
+"id": 148,
+"label": "clock"
+},
+{
+"id": 149,
+"label": "flag"
+}
+]
