@@ -1,0 +1,77 @@
+{
+ "name": "outdoor_v2",
+ "description": "default + car(장애물) + building/wall(문맥)",
+ "classes": [
+  {
+   "name": "grass",
+   "ade": [
+    "grass"
+   ],
+   "color": "#5faa5f",
+   "role": "ground_soft",
+   "cost": 90
+  },
+  {
+   "name": "path",
+   "ade": [
+    "path",
+    "sidewalk",
+    "road",
+    "earth",
+    "dirt",
+    "field",
+    "runway"
+   ],
+   "color": "#c8a578",
+   "role": "ground_preferred",
+   "cost": 10
+  },
+  {
+   "name": "tree",
+   "ade": [
+    "tree",
+    "plant",
+    "palm"
+   ],
+   "color": "#286e3c",
+   "role": "obstacle",
+   "cost": 254
+  },
+  {
+   "name": "person",
+   "ade": [
+    "person"
+   ],
+   "color": "#dc3c3c",
+   "role": "dynamic",
+   "cost": 254
+  },
+  {
+   "name": "car",
+   "ade": [
+    "car",
+    "truck",
+    "bus",
+    "van",
+    "bicycle",
+    "minibike"
+   ],
+   "color": "#5c99c7",
+   "role": "obstacle",
+   "cost": 254
+  },
+  {
+   "name": "building",
+   "ade": [
+    "building",
+    "wall",
+    "fence",
+    "house",
+    "railing"
+   ],
+   "color": "#a8adb5",
+   "role": "context",
+   "cost": 150
+  }
+ ]
+}
