@@ -78,14 +78,25 @@ a.btn-soft,a.btn-pill{display:inline-flex;align-items:center;text-decoration:non
 table.qt{border-collapse:collapse;width:100%;font-size:12px}table.qt th{font-weight:500;color:var(--color-ink-muted-48);text-align:left;padding:6px 8px;border-bottom:1px solid var(--color-hairline);white-space:nowrap}table.qt td{padding:6px 8px;border-bottom:1px solid var(--color-hairline);font-variant-numeric:tabular-nums}table.qt .n{text-align:right}table.qt tr.warn td{color:#8a5518}table.qt td.topic{max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 pre.log{margin:12px 20px;background:#0f1214;color:#c9d1d9;border-radius:var(--radius-sm);padding:10px 12px;font-size:11.5px;line-height:1.45;max-height:320px;overflow:auto;white-space:pre-wrap}
 .modal{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;align-items:center;justify-content:center;z-index:100}.modal.on{display:flex}.modal .box{background:var(--color-canvas);border-radius:var(--radius-lg);padding:28px 30px;width:min(680px,92vw);box-shadow:rgba(0,0,0,.22) 3px 5px 30px 0}.modal h4{font-family:var(--font-display);font-size:21px;font-weight:600;margin:0 0 8px}.modal p{font-size:14px;color:var(--color-ink-muted-80);margin:0 0 14px}.modal pre{background:var(--color-canvas-parchment);border-radius:var(--radius-sm);padding:12px 14px;font-size:12.5px;overflow:auto;margin:0 0 14px}
+.sn .tabs em{display:inline-block;min-width:16px;height:16px;padding:0 5px;border-radius:9999px;background:var(--color-primary);color:#fff;font-size:10px;line-height:16px;text-align:center;font-style:normal;margin-left:4px;vertical-align:1px}
+.trow.ds{grid-template-columns:2fr 1.4fr .7fr .8fr .8fr 1.1fr 1.3fr auto}.trow.ds .btn-pill{height:28px;padding:0 12px;font-size:13px}
+.bform label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--color-ink-muted-48)}.bform input,.bform select{height:34px;border:1px solid var(--color-hairline);border-radius:var(--radius-sm);padding:0 10px;font:400 14px var(--font-text);color:var(--color-ink);background:var(--color-canvas)}
+.bform .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px}.bform>label{margin-top:10px}.bform .adv{margin-top:14px}.bform .adv summary{font-size:13px;color:var(--color-primary);cursor:pointer}
+.optgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 12px;margin-top:10px}.optgrid label input[type=checkbox]{height:auto;width:auto;align-self:flex-start;margin-top:8px}
+.bform .chk{flex-direction:row;align-items:center;gap:8px;margin-top:14px;color:var(--color-ink-muted-80);font-size:13px}.bform .chk input{height:auto}
+.err{margin-top:10px;padding:10px 12px;border-radius:var(--radius-sm);background:rgba(184,86,47,.12);color:#8f3d1c;font-size:13px}
+.job{border:1px solid var(--color-hairline);border-radius:var(--radius-lg);padding:18px 22px;margin-bottom:14px;background:var(--color-canvas)}.job .top{display:flex;align-items:center;gap:12px}.job h3{font-family:var(--font-display);font-size:19px;font-weight:600;margin:0}.job .meta{font-size:13px;color:var(--color-ink-muted-48)}
+.job .prog{height:4px;border-radius:9999px;background:var(--color-hairline);overflow:hidden;margin:12px 0 8px}.job .prog i{display:block;height:100%;background:var(--color-primary);transition:width .4s var(--ease)}
+.job .steps{display:flex;gap:4px;font-size:11px;color:var(--color-ink-muted-48)}.job .steps span{flex:1;text-align:center;padding:3px 0;border-radius:4px;background:var(--color-canvas-parchment)}.job .steps span.done{background:rgba(0,102,204,.12);color:#0066cc}.job .steps span.cur{background:var(--color-primary);color:#fff}
+.job .acts{margin-left:auto;display:flex;gap:8px}
 @media (max-width:1100px){.panel{display:none}}@media (max-width:820px){.side{display:none}}
 </style></head><body>
 <div class="app">
   <div class="gn"><div class="logo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v10"/></svg><span>RAION</span></div>
-    <nav><a href="#" title="준비 중">Sites</a><a href="#" class="on" id="navMaps">Maps</a><a href="#" title="준비 중">Sessions</a><a href="#" title="준비 중">Datasets</a><a href="#" title="준비 중">Pipeline</a><a href="#" title="준비 중">Robots</a></nav>
+    <nav><a href="#" title="준비 중">Sites</a><a href="#" class="on" id="navMaps" data-screen="library">Maps</a><a href="#" title="준비 중">Sessions</a><a href="#" data-screen="datasets">Datasets</a><a href="#" data-screen="queue">Pipeline</a><a href="#" title="준비 중">Robots</a></nav>
     <div class="right"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg><span id="who">gw.park@raionrobotics.com</span></div></div>
   <div class="sn"><div class="title">Semantic Map Console</div>
-    <div class="tabs"><span class="on" id="tabLibrary">Map library</span><span title="준비 중">Sessions</span><span title="준비 중">Class dictionary</span><span title="준비 중">Processing queue</span></div>
+    <div class="tabs"><span class="on" id="tabLibrary" data-screen="library">Map library</span><span data-screen="datasets">Datasets</span><span title="준비 중">Class dictionary</span><span data-screen="queue" id="tabQueue">Processing queue <em id="queueBadge" hidden></em></span></div>
     <div class="actions"><button class="btn-link" id="btnIngest">Ingest data</button><button class="btn-pill" id="btnBuild">Build new map</button></div></div>
 
   <section class="screen on" id="library">
@@ -98,6 +109,21 @@ pre.log{margin:12px 20px;background:#0f1214;color:#c9d1d9;border-radius:var(--ra
       <div class="right"><span id="resultLabel"></span><span class="sep"></span><span class="f on" data-st="all">All statuses</span><span class="f" data-st="warn">Needs attention</span><span class="f" data-st="ok">OK</span><span class="sep"></span>
         <div class="viewtog"><button class="on" data-view="grid">Grid</button><button data-view="table">Table</button></div></div></div></div>
     <div class="body"><div class="grid" id="grid"></div><div class="table" id="table" hidden></div></div>
+  </section>
+
+  <section class="screen" id="datasets">
+    <div class="hero"><div class="in"><div class="eyebrow">Recorded mcap sessions on /data2</div><h2>Datasets</h2>
+      <p>로봇이 기록한 mcap 세션 폴더입니다. 하나를 골라 <b>Build map</b> 을 누르면 서버 컨테이너에서 빌드가 시작되고, 끝나면 Map library 에 나타납니다.</p>
+      <div class="stats" id="dsStats"></div></div></div>
+    <div class="filters"><div class="in"><div class="search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#7a7a7a" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg><input id="dsq" placeholder="Search datasets"></div>
+      <div class="right"><span id="dsLabel"></span><button class="btn-soft" id="dsRescan" style="height:30px">Rescan</button></div></div></div>
+    <div class="body"><div class="table" id="dsTable"></div></div>
+  </section>
+
+  <section class="screen" id="queue">
+    <div class="hero" style="padding-bottom:28px"><div class="in"><div class="eyebrow">Build jobs · one at a time (shared GPU)</div><h2>Processing queue</h2>
+      <p>웹에서 시작한 빌드의 상태입니다. 단계는 Q 데이터 품질 → A 데이터셋 → S 스캔 → R·B semantic → C 복셀 → D 객체 → E 그래프 → F occupancy → G 패키지 → H 뷰 → V 영상 순서입니다.</p></div></div>
+    <div class="body" id="jobsBody"></div>
   </section>
 
   <section class="screen" id="detail">
@@ -116,6 +142,16 @@ pre.log{margin:12px 20px;background:#0f1214;color:#c9d1d9;border-radius:var(--ra
       <div class="pbody on" id="pLayers"></div><div class="pbody" id="pGraph"></div><div class="pbody" id="pQuality"></div></aside>
   </section>
 </div>
+<div class="modal" id="buildModal"><div class="box" style="width:min(760px,94vw)"><h4>Build new map</h4>
+  <form id="buildForm" class="bform">
+    <label>Dataset<select name="dataset" id="bDataset"></select></label>
+    <div class="row2"><label>Map name<input name="name" id="bName" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,48}" placeholder="예: campus_20260910"></label><label>Map ID (표시 이름)<input name="map_id" id="bMapId" placeholder="비우면 이름과 같음"></label></div>
+    <div class="row2"><label>Logs from<input name="log_from" id="bFrom" type="number"></label><label>Logs to<input name="log_to" id="bTo" type="number"></label></div>
+    <details class="adv"><summary>고급 설정 (기본값으로 두어도 됩니다)</summary><div class="optgrid" id="bOpts"></div></details>
+    <label class="chk"><input type="checkbox" name="overwrite"> 같은 이름의 맵이 있으면 덮어쓰기(건너뛰기 없이 이어서 빌드)</label>
+    <div id="bErr" class="err" hidden></div>
+    <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:6px"><button type="button" class="btn-soft" id="bCancel">취소</button><button type="submit" class="btn-pill">Start build</button></div>
+  </form></div></div>
 <div class="modal" id="modal"><div class="box"><h4 id="mTitle"></h4><p id="mText"></p><pre id="mPre"></pre><div style="display:flex;justify-content:flex-end"><button class="btn-soft" id="mClose">닫기</button></div></div></div>
 
 <script>
@@ -128,7 +164,34 @@ const rerunURL=p=>`${viewerBase()}?url=${encodeURIComponent(fileURL(p))}`;
 const fmt=n=>n==null?"—":Number(n).toLocaleString("ko-KR"), fmtM=n=>n==null?"—":(n>=1e6?(n/1e6).toFixed(2)+"M":n>=1e3?(n/1e3).toFixed(1)+"k":String(n));
 const CLASSES=[["grass","Grass","#79916f"],["path","Path","#8d939b"],["tree","Tree","#4f7a5c"],["person","Person","#d1852f"],["other","Other","#5c99c7"],["unknown(LiDAR only)","Unlabeled (LiDAR only)","#7a7a7a"]];
 const TAGCOL=["#5c99c7","#79916f","#a8adb5","#d1852f","#4f7a5c","#b8562f","#8d939b","#6f7680"];
-let MAPS=[], state={q:"",site:"all",st:"all",view:"grid",cur:null,mode:"pipeline",panel:"layers"};
+let MAPS=[], DATASETS=[], JOBS=[], OPTION_SPEC={}, TOKEN_REQUIRED=false, state={q:"",site:"all",st:"all",view:"grid",cur:null,mode:"pipeline",panel:"layers",screen:"library",dsq:""};
+const OPT_LABEL={lidar_fusion:"LiDAR → depth 융합",mask_bottom_px:"하단 마스킹 (px)",drop_classes:"제외 동적 클래스",vlm_edges:"VLM 관계 엣지",vlm_max_pairs:"VLM 쌍 상한 / 로그",occupancy_res:"Occupancy 해상도 (m)",prob_hit:"prob hit",prob_miss:"prob miss",h_ground:"지면 hits ≥",h_obs:"장애물 hits ≥",clearance:"clearance (m)",band_min:"장애물 밴드 시작 (m)",view_cubes:"rerun 큐브 표현",view_coarse:"큐브 크기 (m)",video_speed:"영상 배속 (0=생략)",video_pipeline:"3분할 영상"};
+function showScreen(name){state.screen=name; document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("on",s.id===name)); document.querySelectorAll("[data-screen]").forEach(el=>el.classList.toggle("on",el.dataset.screen===name)); if(name!=="detail"){state.cur=null; document.querySelectorAll("#stage video").forEach(v=>v.pause());} if(name==="datasets") loadDatasets(); if(name==="queue") loadJobs(); window.scrollTo(0,0);}
+const fmtGB=g=>g>=1?g.toFixed(1)+" GB":Math.round(g*1000)+" MB";
+async function loadDatasets(){const r=await fetch("/api/datasets"); const d=await r.json(); DATASETS=d.datasets; renderDatasets();}
+function renderDatasets(){const q=state.dsq.trim().toLowerCase(); const list=DATASETS.filter(d=>!q||(d.name+" "+d.parent+" "+d.path).toLowerCase().includes(q));
+  document.getElementById("dsStats").innerHTML=[[DATASETS.length,"Datasets"],[DATASETS.reduce((a,d)=>a+d.n_logs,0),"Logs"],[fmtGB(DATASETS.reduce((a,d)=>a+d.size_gb,0)),"Raw mcap"],[DATASETS.filter(d=>d.maps.length).length,"With maps built"]].map(([v,l])=>`<div><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+  document.getElementById("dsLabel").textContent=`Showing ${list.length} of ${DATASETS.length}`;
+  document.getElementById("dsTable").innerHTML=`<div class="trow head ds"><div>Dataset</div><div>Recorded</div><div>Logs</div><div>Range</div><div>Size</div><div>Calibration</div><div>Maps built</div><div></div></div>`+
+   (list.length?list.map(d=>`<div class="trow ds" style="cursor:default"><div class="n" title="${d.path}">${d.name}<div class="m" style="font-weight:400;font-size:12px">${d.parent}</div></div><div class="m">${d.recorded}</div><div>${d.n_logs}${d.contiguous?"":" <span title='번호가 연속되지 않음' style='color:#8a5518'>!</span>"}</div><div class="m">log_${String(d.log_min).padStart(3,"0")}–${String(d.log_max).padStart(3,"0")}</div><div>${fmtGB(d.size_gb)}</div><div>${d.has_calib?"<span class='spill st-ok'>found</span>":"<span class='spill st-bad'>missing</span>"}</div><div>${d.maps.length?d.maps.map(m=>`<a href="#" data-open="${m}">${m}</a>`).join(", "):"<span class='m'>—</span>"}</div><div><button class="btn-pill" data-build="${d.path}" ${d.has_calib&&d.contiguous?"":"disabled title='캘리브레이션 없음 또는 로그 불연속'"}>Build map</button></div></div>`).join(""):`<div class="empty">데이터셋이 없습니다 (log_*.mcap 이 있는 폴더를 /data2 아래에서 찾습니다).</div>`);}
+async function loadJobs(){const r=await fetch("/api/jobs"); const d=await r.json(); JOBS=d.jobs; renderJobs();}
+function renderJobs(){const active=JOBS.filter(j=>j.status==="running"||j.status==="queued").length; const b=document.getElementById("queueBadge"); b.hidden=!active; b.textContent=active;
+  const STEPS="Q,A,S,R,B,C,D,E,F,G,H,V".split(","); const el=document.getElementById("jobsBody");
+  el.innerHTML=JOBS.length?JOBS.map(j=>{const pct=j.status==="done"?100:Math.round(100*(j.step_index||0)/j.n_steps); const st={queued:"st-na",running:"st-ok",done:"st-ok",failed:"st-bad",cancelled:"st-na",unknown:"st-warn"}[j.status]||"st-na"; const el_=j.elapsed_s?`${Math.floor(j.elapsed_s/60)}분 ${j.elapsed_s%60}초`:"";
+    return `<div class="job"><div class="top"><h3>${j.name}</h3><span class="spill ${st}">${j.status}${j.step&&j.status==="running"?` · step ${j.step}`:""}</span><span class="meta">${j.spec?`${j.spec.dataset_name} · log ${String(j.spec.logs[0]).padStart(3,"0")}–${String(j.spec.logs[1]).padStart(3,"0")}`:""} ${el_?"· "+el_:""}${j.note?" · "+j.note:""}</span>
+      <div class="acts">${j.map_ready?`<button class="btn-soft" data-open="${j.name}">Open map</button>`:""}<button class="btn-soft" data-joblog="${j.name}">Log</button>${(j.status==="running"||j.status==="queued")?`<button class="btn-soft" data-cancel="${j.name}">Cancel</button>`:""}</div></div>
+      <div class="prog"><i style="width:${pct}%"></i></div><div class="steps">${STEPS.map((s,i)=>`<span class="${j.status==="done"||i<j.step_index-1?"done":(i===j.step_index-1&&j.status==="running"?"cur":"")}">${s}</span>`).join("")}</div></div>`;}).join(""):`<div class="empty">아직 웹에서 시작한 빌드가 없습니다. Datasets 에서 데이터셋을 골라 Build map 을 누르세요.</div>`;}
+function openBuild(dsPath){const sel=document.getElementById("bDataset"); sel.innerHTML=DATASETS.map(d=>`<option value="${d.path}" ${d.path===dsPath?"selected":""}>${d.name} (${d.n_logs} logs, ${d.recorded})</option>`).join(""); syncBuildForm();
+  const g=document.getElementById("bOpts"); g.innerHTML=Object.entries(OPTION_SPEC).map(([k,sp])=>sp.type==="bool"?`<label>${OPT_LABEL[k]||k}<input type="checkbox" name="opt_${k}" ${sp.default?"checked":""}></label>`:`<label>${OPT_LABEL[k]||k}${sp.range?` <span style="color:var(--color-ink-muted-48)">(${sp.range[0]}–${sp.range[1]})</span>`:""}<input name="opt_${k}" type="${sp.type==="str"?"text":"number"}" value="${sp.default}" ${sp.type==="float"?'step="0.01"':""} ${sp.range?`min="${sp.range[0]}" max="${sp.range[1]}"`:""}></label>`).join("");
+  document.getElementById("bErr").hidden=true; document.getElementById("buildModal").classList.add("on"); document.getElementById("bName").focus();}
+function syncBuildForm(){const d=DATASETS.find(x=>x.path===document.getElementById("bDataset").value); if(!d) return; const f=document.getElementById("bFrom"), t=document.getElementById("bTo"); f.min=t.min=d.log_min; f.max=t.max=d.log_max; f.value=d.log_min; t.value=d.log_max; const n=document.getElementById("bName"); if(!n.value) n.value=(d.parent+"_"+d.name).replace(/[^A-Za-z0-9_-]/g,"_").slice(0,40);}
+async function submitBuild(e){e.preventDefault(); const fd=new FormData(e.target); const body={dataset:fd.get("dataset"),name:fd.get("name"),map_id:fd.get("map_id"),log_from:Number(fd.get("log_from")),log_to:Number(fd.get("log_to")),overwrite:!!fd.get("overwrite"),options:{}};
+  for(const [k,sp] of Object.entries(OPTION_SPEC)){body.options[k]=sp.type==="bool"?!!fd.get("opt_"+k):fd.get("opt_"+k);}
+  const headers={"Content-Type":"application/json"}; if(TOKEN_REQUIRED){const t=localStorage.getItem("portal_token")||prompt("빌드 토큰을 입력하세요"); if(t){headers["X-Portal-Token"]=t; try{localStorage.setItem("portal_token",t);}catch(_){}}}
+  const r=await fetch("/api/build",{method:"POST",headers,body:JSON.stringify(body)}); const j=await r.json();
+  if(!r.ok){const er=document.getElementById("bErr"); er.textContent=j.error||"실패"; er.hidden=false; return;}
+  document.getElementById("buildModal").classList.remove("on"); e.target.reset(); showScreen("queue");}
+async function cancelJob(name){if(!confirm(`${name} 빌드를 취소할까요?`)) return; const headers={}; if(TOKEN_REQUIRED){const t=localStorage.getItem("portal_token"); if(t) headers["X-Portal-Token"]=t;} await fetch(`/api/jobs/${encodeURIComponent(name)}/cancel`,{method:"POST",headers}); loadJobs();}
 function statusOf(m){const q=m.quality||{}; if(!q.topics) return {k:"na",label:"No quality check"}; const late=Object.values(q.topics).some(t=>t.late_start&&t.late_start.length); if(q.missing_total>50||late) return {k:"warn",label:"Needs attention"}; if(q.missing_total>0||q.n_gaps>0) return {k:"ok",label:"Minor gaps"}; return {k:"ok",label:"Quality OK"};}
 function siteOf(m){return (m.mcap_dir||"").split("/").filter(Boolean).slice(-1)[0]||"unknown";}
 function labeledPct(s){const v=(s&&s.voxel_labels)||{}; const tot=Object.values(v).reduce((a,b)=>a+b,0)||1; return Math.round(100*(tot-(v["unknown(LiDAR only)"]||0))/tot);}
@@ -150,8 +213,8 @@ function renderLibrary(){
     <div class="cov"><div class="bar"><i style="width:${lp}%"></i></div><span>${lp}% labeled</span></div></button>`;}).join("");
   table.innerHTML=`<div class="trow head"><div>Map</div><div>Dataset</div><div>Voxels</div><div>Area</div><div>Objects</div><div>Logs</div><div>Built</div><div>Status</div></div>`+list.map(m=>{const s=m.summary||{}, st=statusOf(m); return `<div class="trow" data-open="${m.name}"><div class="n">${m.map_id}</div><div class="m">${siteOf(m)}</div><div>${fmtM(s.voxels)}</div><div>${fmt(areaM2(s))} m²</div><div>${fmt(s.objects)}</div><div>${m.n_logs}</div><div class="m">${m.built||""}</div><div><span class="spill st-${st.k}">${st.label}</span></div></div>`;}).join("");
 }
-function openDetail(name){const m=MAPS.find(x=>x.name===name); if(!m) return; state.cur=m; document.getElementById("library").classList.remove("on"); document.getElementById("detail").classList.add("on"); document.getElementById("tabLibrary").classList.remove("on"); renderDetail(m); window.scrollTo(0,0);}
-function goLibrary(){state.cur=null; document.getElementById("detail").classList.remove("on"); document.getElementById("library").classList.add("on"); document.getElementById("tabLibrary").classList.add("on"); document.querySelectorAll("#stage video").forEach(v=>v.pause());}
+function openDetail(name){const m=MAPS.find(x=>x.name===name); if(!m) return; showScreen("detail"); state.cur=m; renderDetail(m);}
+function goLibrary(){showScreen("library");}
 function renderDetail(m){const s=m.summary||{}, q=m.quality||{}, st=statusOf(m);
   document.getElementById("dName").textContent=m.map_id; document.getElementById("dSub").textContent=`${siteOf(m)} · output/${m.name}`;
   const bounds=q.log_bounds||[]; document.getElementById("dLogCount").textContent=`${m.n_logs} total`;
@@ -187,20 +250,29 @@ function renderDetail(m){const s=m.summary||{}, q=m.quality||{}, st=statusOf(m);
 async function showLog(name){const r=await fetch("/api/log/"+name); const j=await r.json(); modal("Build log · "+name,"sessions/"+name+"_build.out (마지막 200줄)",(j.lines||[j.error]).join("\n"));}
 function modal(t,p,pre){document.getElementById("mTitle").textContent=t; document.getElementById("mText").textContent=p; document.getElementById("mPre").textContent=pre; document.getElementById("modal").classList.add("on");}
 document.addEventListener("click",e=>{
-  const open=e.target.closest("[data-open]"); if(open){openDetail(open.dataset.open); return;}
+  const open=e.target.closest("[data-open]"); if(open){e.preventDefault(); openDetail(open.dataset.open); return;}
+  const sc=e.target.closest("[data-screen]"); if(sc){e.preventDefault(); showScreen(sc.dataset.screen); return;}
+  const bd=e.target.closest("[data-build]"); if(bd){openBuild(bd.dataset.build); return;}
+  if(e.target.closest("#bCancel")||e.target.id==="buildModal"){document.getElementById("buildModal").classList.remove("on"); return;}
+  const cj=e.target.closest("[data-cancel]"); if(cj){cancelJob(cj.dataset.cancel); return;}
+  const jl=e.target.closest("[data-joblog]"); if(jl){showLog(jl.dataset.joblog); return;}
+  if(e.target.closest("#dsRescan")){fetch("/api/datasets/rescan",{method:"POST"}).then(loadDatasets); return;}
   const chip=e.target.closest("[data-site]"); if(chip){state.site=chip.dataset.site; renderLibrary(); return;}
   const st=e.target.closest("span.f[data-st]"); if(st){state.st=st.dataset.st; document.querySelectorAll("span.f").forEach(x=>x.classList.toggle("on",x===st)); renderLibrary(); return;}
   const vw=e.target.closest("[data-view]"); if(vw){state.view=vw.dataset.view; document.querySelectorAll("[data-view]").forEach(x=>x.classList.toggle("on",x===vw)); renderLibrary(); return;}
   const md=e.target.closest("[data-mode]"); if(md){state.mode=md.dataset.mode; renderDetail(state.cur); return;}
   const pt=e.target.closest(".ptab"); if(pt){state.panel=pt.dataset.p; renderDetail(state.cur); return;}
-  if(e.target.closest("#back")||e.target.closest("#tabLibrary")||e.target.closest("#navMaps")){e.preventDefault(); goLibrary(); return;}
+  if(e.target.closest("#back")){goLibrary(); return;}
   if(e.target.closest("#btnLog")||e.target.closest("#btnLog2")){showLog(state.cur.name); return;}
   if(e.target.closest("#mClose")||e.target.id==="modal"){document.getElementById("modal").classList.remove("on"); return;}
-  if(e.target.closest("#btnBuild")){modal("Build new map","컨테이너 offline_3d_semantic_map 안에서 세션 YAML 을 하나 만들고 스크립트를 실행하면 이 라이브러리에 자동으로 나타납니다.",`cd /home/gw.park/offline_semantic_mapping/sessions\ncp session_test_2logs.yaml session_<name>.yaml   # root / mcap_dir / logs 수정\npython build_map_package.py session_<name>.yaml --dry-run\nnohup python build_map_package.py session_<name>.yaml > <name>_build.out 2>&1 &`); return;}
-  if(e.target.closest("#btnIngest")){modal("Ingest data","새 mcap 세션은 /data2 아래에 두고, 캘리브레이션 폴더가 함께 있어야 합니다.",`/data2/<날짜>/<세션폴더>/\n├── log_000.mcap … log_NNN.mcap   (토픽: /livox/lidar, d455_front/rgb, d455_front/depth, /Odometry/base)\n└── raisin_config/calibration/livox_lidar_0_lidar.yaml, d455 yaml`); return;}
+  if(e.target.closest("#btnBuild")){(DATASETS.length?Promise.resolve():loadDatasets()).then(()=>openBuild(DATASETS[0]&&DATASETS[0].path)); return;}
+  if(e.target.closest("#btnIngest")){modal("Ingest data","새 mcap 세션은 /data2 아래에 두고, 캘리브레이션 폴더가 함께 있어야 합니다. 두면 Datasets 탭(Rescan)에 나타납니다.",`/data2/<날짜>/<세션폴더>/\n├── log_000.mcap … log_NNN.mcap   (토픽: /livox/lidar, d455_front/rgb, d455_front/depth, /Odometry/base)\n└── raisin_config/calibration/livox_lidar_0_lidar.yaml, d455 yaml`); return;}
   if(e.target.closest("nav a")&&!e.target.closest("#navMaps")){e.preventDefault();}
 });
 document.getElementById("q").addEventListener("input",e=>{state.q=e.target.value; renderLibrary();});
-async function load(){const r=await fetch("/api/maps"); const d=await r.json(); MAPS=d.maps; RERUN_BASE=d.rerun_base||""; renderLibrary(); if(state.cur){const m=MAPS.find(x=>x.name===state.cur.name); if(m){state.cur=m;}}}
-load(); setInterval(load,60000);
+document.getElementById("dsq").addEventListener("input",e=>{state.dsq=e.target.value; renderDatasets();});
+document.getElementById("bDataset").addEventListener("change",()=>{document.getElementById("bName").value=""; syncBuildForm();});
+document.getElementById("buildForm").addEventListener("submit",submitBuild);
+async function load(){const r=await fetch("/api/maps"); const d=await r.json(); MAPS=d.maps; RERUN_BASE=d.rerun_base||""; OPTION_SPEC=d.option_spec||{}; TOKEN_REQUIRED=!!d.token_required; loadJobs(); if(state.screen==="datasets") loadDatasets(); renderLibrary(); if(state.cur){const m=MAPS.find(x=>x.name===state.cur.name); if(m){state.cur=m;}}}
+load(); setInterval(load,60000); setInterval(()=>{ if(JOBS.some(j=>j.status==="running"||j.status==="queued")) loadJobs(); },5000);
 </script></body></html>
