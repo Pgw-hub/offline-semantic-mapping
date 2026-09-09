@@ -13,8 +13,15 @@ a = ap.parse_args(); R = a.root
 DS = os.path.join(R, "dataset"); SEM = os.path.join(R, "sem")
 logs = a.logs or sorted(os.path.basename(p) for p in glob.glob(os.path.join(DS, "log_*")) if os.path.isdir(os.path.join(p, "results")))
 idx = np.load(os.path.join(SEM, "rgb_index.npz")); sem_stamps = idx["rgb_stamp_ns"].astype(np.int64)
-COL = np.array([(95, 200, 95), (210, 170, 110), (40, 120, 60), (230, 60, 60)], np.float32)[:, ::-1]   # grass, path, tree, person (BGR)
-NAMES = ["grass", "path", "tree", "person"]
+# 클래스 사전(sem/classes.json)에서 이름·색을 읽음 (없으면 초기 4클래스)
+_cj = os.path.join(SEM, "classes.json")
+if os.path.exists(_cj):
+    import json; _cd = json.load(open(_cj, encoding="utf-8"))
+    NAMES = [c["name"] for c in _cd["classes"]]
+    COL = np.array([[int(c["color"][1:3], 16), int(c["color"][3:5], 16), int(c["color"][5:7], 16)] for c in _cd["classes"]], np.float32)[:, ::-1]   # BGR
+else:
+    COL = np.array([(95, 200, 95), (210, 170, 110), (40, 120, 60), (230, 60, 60)], np.float32)[:, ::-1]
+    NAMES = ["grass", "path", "tree", "person"]
 W, H, BAR = 640, 480, 40
 
 def panel_title(img, text):
@@ -22,7 +29,7 @@ def panel_title(img, text):
     return np.vstack([bar, img])
 
 def seg_overlay(rgb, sem):
-    p = sem.astype(np.float32) / 255.0                       # (H,W,4)
+    p = sem.astype(np.float32) / 255.0                       # (H,W,N)
     color = (p[..., :, None] * COL[None, None]).sum(2)       # 확률 가중 색 (H,W,3)
     alpha = np.clip(p.sum(-1, keepdims=True), 0, 1) * 0.65
     out = (rgb.astype(np.float32) * (1 - alpha) + color * alpha).clip(0, 255).astype(np.uint8)
