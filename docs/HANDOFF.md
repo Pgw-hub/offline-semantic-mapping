@@ -230,3 +230,10 @@
 - 콘솔 상시 구동 (2026-09-05): systemd --user 서비스 map-portal.service(:9092) · rerun-viewer.service(:9091, ws 9877, sdk 9876) 등록·enable, linger on → 재부팅/로그아웃 후에도 유지.
   파일 사본 tools/*.service. 모두 0.0.0.0 바인딩이라 사내망에서 http://192.168.100.161:9092/ 로 접근 가능(방화벽은 sudo 없어 미확인). 인증 없음 → 외부 공개는 Tailscale/Cloudflare Access 등 앞단 필요.
   ★rerun --serve 는 --port(SDK)와 ws 포트를 다르게 줘야 함(같으면 즉시 종료). 콘솔 상세 화면의 RGB 단독 탭 제거(3분할에 포함).
+
+## 콘솔에서 빌드 (2026-09-09)
+- Datasets 탭: DATASET_ROOTS(기본 /data2) 아래 깊이≤4 에서 log_*.mcap 폴더 스캔(60s 캐시, Rescan 버튼). 로그 수·범위·연속성·크기·캘리브 유무·이미 빌드된 맵 표시.
+- Build map: 웹 폼(이름·로그 범위·고급 옵션=OPTION_SPEC 범위 검증) → sessions/session_<name>.yaml 생성 → 큐(한 번에 1개) → `docker exec offline_3d_semantic_map python build_map_package.py …`
+  (포털은 호스트 venv 에서 돌고 빌드는 컨테이너). 로그 sessions/<name>_build.out, 큐 상태 sessions/jobs.json. Processing queue 탭: 단계 진행바·Cancel·Log.
+- 포털 재시작 시 진행 중이던 작업은 status=unknown 으로 표시(빌드 자체는 컨테이너에서 계속 돎). 쓰기 동작 보호: env PORTAL_TOKEN 설정 시 X-Portal-Token 필요(기본 미설정 — 사내망 한정 전제).
+- 첫 웹 빌드: web_172218_l01 (172218 세션 log_000~001, VLM off).
