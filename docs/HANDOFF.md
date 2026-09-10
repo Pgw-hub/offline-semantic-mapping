@@ -290,3 +290,12 @@
   매니페스트 frame "SLAM world, PGO-corrected", pose_graph: graph/graph.json.
 - 검증 빌드 sessions/session_web_172935_l02_pgo.yaml (root web_172935_l02_pgo, l02_cdv2_fix 와 동일 옵션 + pose_graph, sem 심볼릭링크 재사용) → 주차장 held-out(log_003) 초기화 재시험 예정.
 - 두 인스턴스 동시 작업 주의: 다른 Claude 인스턴스(gw-park-35)가 build_graph.py 를 덮어쓴 일이 있었음 → 현재 파일이 정식(그쪽 버전 + SLAM 붕괴 가드). 동시에 같은 저장소를 만지지 말 것.
+- 검증 결과 (2026-09-10, geometry/loc_bench.py, held-out log_003 25스캔×2 초기오차 1.5m/20°, 누적 5스캔, 지도 voxels_occ):
+    old 지도 + raw 질의     : 위치 8.7/12.3cm(중앙/p90)  yaw 1.02°/2.47° (최대 3.85°)  성공 96%
+    old 지도 + deskew 질의  : 위치 7.1/10.8cm            yaw 0.07°/0.18° (최대 0.23°)  성공 100%
+    PGO 지도 + raw 질의     : 위치 7.1/ 9.3cm            yaw 0.99°/2.85°               성공 92%
+    PGO 지도 + deskew 질의  : 위치 3.7/ 8.1cm            yaw 0.08°/0.18°               성공 98% (1건 국소해: 스캔 180, 2.9m/16.8°, fitness 0.57)
+  ⇒ 이전 held-out yaw 잔차 2.5~3.8° 의 원인은 SLAM 드리프트가 아니라 회전 중 질의 스캔 skew (log0-10 PGO 상 log_003 구간 오도메트리 yaw 보정 ≤0.1°).
+    질의 deskew 로 yaw 해결, 지도 기하(PGO+deskew) 로 위치 오차 절반. 새 지도 occupancy 셀 3.16M→2.95M(−6.7%, 번짐 감소), 객체 92→74.
+  ★로봇 온라인 초기화도 질의 스캔을 deskew 해서 넣어야 함(/cloud_registered 사용 또는 IMU 보정). localize 서버는 지금 web_172935_l02_pgo + 로그 3,2(deskew 스캔) 로 전환됨.
+  결과 파일: output/web_172935_l02_pgo/{loc_bench.json, loc_bench_oldmap.json}. held-out 질의 스캔은 export_lidar_scans.py --deskew (그래프 없이 원 오도메트리) 로 생성.
