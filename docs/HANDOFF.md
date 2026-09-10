@@ -261,3 +261,8 @@
   시작: tools/start_localize_server.sh <manifest> [logs]. 포털 Localization 탭이 host:9093 을 직접 호출(VSCode 면 9093 도 포워딩).
 - 첫 결과 (지도 web_172935_l05_cdv2_fix, 스캔 log_006#0): 초기 오차 1.5m/20° → 0.017m/0.04° (1.1s); 4.2m/60° 는 yaw 다중 시작으로 → 0.018m/0.04° (4.2s).
 - 배치 스윕(sweep)은 사용자 요청으로 중단 → 대화형 도구로 대체. 필요하면 localize.py --sweep 그대로 사용 가능.
+- 주차장 held-out 초기화 검증 (2026-09-10): 지도 web_172935_l02_cdv2_fix(로그 0~2, dataset/sem 심볼릭링크 재사용) + log_003 스캔(지도 미포함, overlap 0.91~0.99).
+  결과 3스캔: 초기 1.5m/20° → 0.04m/0.16°, 0.11m/3.84°(기준 3° 살짝 초과), 0.03m/2.5°. yaw 다중시작(4m/60°)도 같은 값으로 수렴 → ICP 자체는 수렴, 잔여 yaw 2~4° 는
+  log_002 통과 시점과 log_003 시점 사이 SLAM 오도메트리 드리프트(지도 내부 일관성) 로 추정. in-map(log_002) 스캔은 0.04m/0.04°.
+  Localization 탭: Map/Candidate logs 선택 후 "지도·로그 적용" (POST /api/loc/map). 스캔 목록에 in-map/held-out 표시. 서버 현재 상태: l02 지도, 로그 3,2.
+  ★주의: 서버의 map 전환 실패 시 상태가 반쯤 바뀌던 버그 수정(원자적). 상대 경로는 저장소 루트 기준.
