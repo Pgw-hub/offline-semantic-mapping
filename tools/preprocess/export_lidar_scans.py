@@ -26,6 +26,7 @@ def slerp(q0, q1, u):
 
 ap = argparse.ArgumentParser()
 ap.add_argument("mcap"); ap.add_argument("calib"); ap.add_argument("out"); ap.add_argument("--max-range", type=float, default=40.0)
+ap.add_argument("--deskew", action="store_true", help="그래프 없이 원 오도메트리로 점별 시각 deskew (held-out 질의 스캔용)")
 ap.add_argument("--pose-graph", help="graph/ 디렉터리 — PGO 보정 자세 + 점별 시각 deskew 로 world 점 생성")
 a = ap.parse_args()
 os.makedirs(a.out, exist_ok=True)
@@ -46,10 +47,20 @@ o = np.argsort(gt_ns); gt_ns = np.array(gt_ns)[o]; gt_pos = np.array(gt_pos)[o];
 gt_quat /= np.linalg.norm(gt_quat, axis=1, keepdims=True)
 
 pp = None
-if a.pose_graph:
+if a.pose_graph or a.deskew:
     import sys; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "geometry"))
-    from pose_provider import PoseProvider
-    pp = PoseProvider(a.pose_graph); print("pose graph:", a.pose_graph, pp.meta, "· deskew on")
+    if a.pose_graph:
+        from pose_provider import PoseProvider
+        pp = PoseProvider(a.pose_graph); print("pose graph:", a.pose_graph, pp.meta, "· deskew on")
+    else:                                                   # 원 오도메트리 보간기(Odom)를 같은 인터페이스로 감쌈
+        from deskew import Odom
+        class _Raw:
+            def __init__(s_, od): s_.od = od
+            def at_many(s_, t):
+                R, p, ok = s_.od.at(np.asarray(t, np.int64)); T = np.tile(np.eye(4), (len(t), 1, 1)); T[:, :3, :3] = R; T[:, :3, 3] = p; return T, ok
+            def at(s_, ns):
+                T, ok = s_.at_many([int(ns)]); return T[0] if ok[0] else None
+        pp = _Raw(Odom(gt_ns, gt_pos, gt_quat)); print("deskew on (raw odometry)")
 n_ok = 0
 for i, (ns, xyz, ot) in enumerate(scans):
     rng = np.linalg.norm(xyz, axis=1); keep = (rng > 0.6) & (rng < a.max_range)
