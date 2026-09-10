@@ -1,0 +1,26 @@
+# 웹 콘솔에서 생성 2026-09-09 11:12 · 데이터셋 KR-RRT-2604-008_20260827_172218
+root: web_172218_cdv2
+mcap_dir: /data2/20260827/20260827/KR-RRT-2604-008_20260827_172218
+logs:
+- 0
+- 1
+options:
+  map_id: 172218 log0-1 · outdoor_v2 dict
+  lidar_fusion: true
+  mask_bottom_px: 60
+  drop_classes: person
+  vlm_edges: false
+  vlm_max_pairs: 30
+  occupancy_res: 0.2
+  prob_hit: 0.85
+  prob_miss: 0.45
+  costmap:
+    h_ground: 2
+    h_obs: 3
+    clearance: 1.4
+    band_min: 0.3
+  view_cubes: false
+  view_coarse: 0.3
+  video_speed: 15
+  video_pipeline: true
+  classdict: outdoor_v2

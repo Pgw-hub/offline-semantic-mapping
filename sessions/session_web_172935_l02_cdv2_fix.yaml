@@ -6,7 +6,7 @@ logs:
 - 1
 - 2
 options:
-  map_id: 172935 log0-2 · outdoor_v2 · fix (held-out parking test: log_003)
+  map_id: "172935 log0-2 · outdoor_v2 · fix (held-out parking test, log_003)"
   lidar_fusion: true
   mask_bottom_px: 60
   drop_classes: person
