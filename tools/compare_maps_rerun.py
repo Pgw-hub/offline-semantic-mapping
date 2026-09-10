@@ -41,6 +41,15 @@ def log_map(prefix, mp, sub):
 
 A = MapPackage(a.a); B = MapPackage(a.b)
 sa = log_map(a.label_a, A, a.sub); sb = log_map(a.label_b, B, a.sub)
+if A.occ is not None and B.occ is not None and A.occ["res"] == B.occ["res"]:      # Difference: 한쪽에만 occupied 인 셀
+    R = A.occ["res"]
+    def keys(O): I = O["ijk"][O["state"] == 1].astype(np.int64) + (1 << 20); return (I[:, 0] << 42) | (I[:, 1] << 21) | I[:, 2]
+    ka, kb = keys(A.occ), keys(B.occ); only_a = np.setdiff1d(ka, kb); only_b = np.setdiff1d(kb, ka)
+    def xyz(k): m = (1 << 21) - 1; return (np.stack([(k >> 42) & m, (k >> 21) & m, k & m], -1).astype(np.float64) - (1 << 20) + 0.5) * R
+    rr.log("difference/only_in_" + a.label_a.split()[0], rr.Points3D(xyz(only_a).astype(np.float32), colors=[[230, 60, 60]], radii=R * 0.45))
+    rr.log("difference/only_in_" + a.label_b.split()[0], rr.Points3D(xyz(only_b).astype(np.float32), colors=[[60, 120, 255]], radii=R * 0.45))
+    rr.log("difference/common", rr.Points3D(xyz(np.intersect1d(ka, kb)).astype(np.float32), colors=[[150, 150, 150]], radii=R * 0.2))
+    print(f"occupancy 차이: 공통 {len(np.intersect1d(ka, kb)):,} · {a.label_a} 만 {len(only_a):,} · {a.label_b} 만 {len(only_b):,}")
 print(a.label_a, sa); print(a.label_b, sb)
 hide = lambda p: [f"- /{p}/voxels/unknown", f"- /{p}/voxels/other", f"- /{p}/occupancy/**"]
 va = rrb.Spatial3DView(origin=f"/{a.label_a}", name=f"{a.label_a}", contents=[f"+ /{a.label_a}/**"] + hide(a.label_a))
@@ -50,6 +59,7 @@ ob = rrb.Spatial3DView(origin=f"/{a.label_b}", name=f"{a.label_b} occupancy", co
 bp = rrb.Blueprint(rrb.Tabs(
     rrb.Horizontal(va, vb, name="Side by side"),
     rrb.Horizontal(oa, ob, name="Occupancy side by side"),
+    rrb.Spatial3DView(origin="/difference", name="Difference (red=old only, blue=new only)"),
     rrb.Spatial3DView(origin="/", name="Both (toggle in tree)", contents=[f"+ /{a.label_a}/voxels/semantic/**", f"+ /{a.label_b}/voxels/semantic/**"]),
     rrb.Spatial3DView(origin=f"/{a.label_a}", name=f"{a.label_a} only", contents=[f"+ /{a.label_a}/**"] + hide(a.label_a)),
     rrb.Spatial3DView(origin=f"/{a.label_b}", name=f"{a.label_b} only", contents=[f"+ /{a.label_b}/**"] + hide(a.label_b))),
