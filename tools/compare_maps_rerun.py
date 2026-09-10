@@ -31,16 +31,25 @@ def log_map(prefix, mp, sub):
         if tag == "person": continue
         cen = np.array(o.get("center_w"), float); ext = np.array(o.get("extent") or [0.5] * 3, float)
         rr.log(f"{prefix}/objects/{tag.replace(' ', '_')}_{i}", rr.Boxes3D(centers=[cen], half_sizes=[ext / 2], labels=[tag], colors=[[255, 200, 40]]))
+    if mp.occ is not None:                                   # 확률적 occupancy 의 occupied 셀 — 높이 색. 기하 번짐(deskew/PGO) 차이는 여기서 가장 잘 보임
+        O = mp.occ; occ = O["state"] == 1; C = (O["ijk"][occ].astype(np.float64) + 0.5) * O["res"]
+        z = C[:, 2]; zn = np.clip((z - np.percentile(z, 2)) / max(np.percentile(z, 98) - np.percentile(z, 2), 1e-3), 0, 1)
+        col = (np.stack([zn, 1 - np.abs(zn - 0.5) * 2, 1 - zn], 1) * 255).astype(np.uint8)
+        rr.log(f"{prefix}/occupancy/occupied", rr.Points3D(C.astype(np.float32), colors=col, radii=O["res"] * 0.45))
+        print(f"  {prefix}: occupancy occupied {int(occ.sum()):,} cells")
     return {n: int((lab == i).sum()) for i, n in enumerate(mp.classes + ["other", "unknown"])}
 
 A = MapPackage(a.a); B = MapPackage(a.b)
 sa = log_map(a.label_a, A, a.sub); sb = log_map(a.label_b, B, a.sub)
 print(a.label_a, sa); print(a.label_b, sb)
-hide = lambda p: [f"- /{p}/voxels/unknown", f"- /{p}/voxels/other"]
+hide = lambda p: [f"- /{p}/voxels/unknown", f"- /{p}/voxels/other", f"- /{p}/occupancy/**"]
 va = rrb.Spatial3DView(origin=f"/{a.label_a}", name=f"{a.label_a}", contents=[f"+ /{a.label_a}/**"] + hide(a.label_a))
 vb = rrb.Spatial3DView(origin=f"/{a.label_b}", name=f"{a.label_b}", contents=[f"+ /{a.label_b}/**"] + hide(a.label_b))
+oa = rrb.Spatial3DView(origin=f"/{a.label_a}", name=f"{a.label_a} occupancy", contents=[f"+ /{a.label_a}/occupancy/**"])
+ob = rrb.Spatial3DView(origin=f"/{a.label_b}", name=f"{a.label_b} occupancy", contents=[f"+ /{a.label_b}/occupancy/**"])
 bp = rrb.Blueprint(rrb.Tabs(
     rrb.Horizontal(va, vb, name="Side by side"),
+    rrb.Horizontal(oa, ob, name="Occupancy side by side"),
     rrb.Spatial3DView(origin="/", name="Both (toggle in tree)", contents=[f"+ /{a.label_a}/voxels/semantic/**", f"+ /{a.label_b}/voxels/semantic/**"]),
     rrb.Spatial3DView(origin=f"/{a.label_a}", name=f"{a.label_a} only", contents=[f"+ /{a.label_a}/**"] + hide(a.label_a)),
     rrb.Spatial3DView(origin=f"/{a.label_b}", name=f"{a.label_b} only", contents=[f"+ /{a.label_b}/**"] + hide(a.label_b))),
