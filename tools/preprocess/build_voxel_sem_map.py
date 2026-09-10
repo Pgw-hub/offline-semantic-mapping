@@ -78,6 +78,8 @@ def main():
     ap.add_argument("--depth-stride", type=int, default=3)
     ap.add_argument("--mask-bottom", type=int, default=60)
     ap.add_argument("--lidar-max", type=float, default=40.0)
+    ap.add_argument("--edge-px", type=int, default=4, help="클래스 경계에서 이 픽셀 안의 라벨은 쓰지 않음 (실루엣 오염 방지, 0=끔)")
+    ap.add_argument("--require-depth", type=int, default=1, help="1: 카메라 depth 가 없는 픽셀에는 LiDAR 점 라벨을 주지 않음 (가림 검사 불가 → 보류)")
     a = ap.parse_args()
 
     Kc, Wc, Hc = load_K(a.calib, "d455_front_color_caminfo.yaml")
@@ -141,7 +143,14 @@ def main():
         T_wc = traj[j]; T_cw = np.linalg.inv(T_wc)
         dep = cv2.imread(os.path.join(a.cg_dir, "results", "depth%06d.png" % j), cv2.IMREAD_UNCHANGED).astype(np.float32)/1000.0
         rgb = cv2.imread(os.path.join(a.cg_dir, "results", "frame%06d.jpg" % j))[:, :, ::-1]
-        sem = np.load(os.path.join(a.sem_dir, "sem", "%06d.npz" % si))["sem"]   # (480,640,4) uint8
+        sem = np.load(os.path.join(a.sem_dir, "sem", "%06d.npz" % si))["sem"]   # (480,640,N) uint8
+        # 클래스 경계 마스크: argmax 라벨(무라벨=NCH)이 (2k+1) 창 안에서 바뀌는 픽셀 → 라벨 보류
+        if a.edge_px > 0:
+            lab_img = np.where(sem.max(-1) >= 77, sem.argmax(-1), NCH).astype(np.uint8)      # 0.3*255
+            kern = np.ones((2 * a.edge_px + 1, 2 * a.edge_px + 1), np.uint8)
+            edge = cv2.erode(lab_img, kern) != cv2.dilate(lab_img, kern)
+        else:
+            edge = np.zeros(sem.shape[:2], bool)
 
         # (a) depth 카메라 점 — 보이는 표면이므로 픽셀 semantic 직접
         z = dep[vv, uu]
@@ -150,7 +159,7 @@ def main():
         pc = np.stack([(uc-cx)/fx*zc, (vc-cy)/fy*zc, zc], -1)
         pw = pc @ T_wc[:3, :3].T + T_wc[:3, 3]
         K_list.append(pack(np.floor(pw/VOX).astype(np.int32)))
-        RGB_list.append(rgb[vc, uc]); SEM_list.append(sem[vc, uc]); HAS_list.append(np.ones(len(zc), bool))
+        RGB_list.append(rgb[vc, uc]); SEM_list.append(sem[vc, uc]); HAS_list.append(~edge[vc, uc])   # 경계 픽셀은 라벨 보류
         FR_list.append(np.full(len(zc), fi, np.int32))
 
         # (b) LiDAR 점 — 카메라 z-buffer 로 가림 판정
@@ -171,8 +180,9 @@ def main():
             has = np.zeros(len(pw), bool)
             dcam = np.zeros(len(pw), np.float32)
             dcam[infov] = dep[v[infov], u[infov]]
-            # 보임: 카메라 depth 가 없거나(원거리) lidar z 가 카메라 표면과 일치
-            vis = infov & ((dcam <= 0) | (np.abs(zl - dcam) < 0.25 + 0.05*zl))
+            # 보임: lidar z 가 카메라 표면과 일치. depth 없는 픽셀은 (require_depth=0 일 때만) 통과, 클래스 경계 픽셀은 보류
+            vis = infov & (((dcam <= 0) & (not a.require_depth)) | ((dcam > 0) & (np.abs(zl - dcam) < 0.25 + 0.05*zl)))
+            vis[vis] &= ~edge[v[vis], u[vis]]
             has[vis] = True
             semv = np.zeros((len(pw), NCH), np.uint8); rgbv = np.zeros((len(pw), 3), np.uint8)
             semv[vis] = sem[v[vis], u[vis]]; rgbv[vis] = rgb[v[vis], u[vis]]

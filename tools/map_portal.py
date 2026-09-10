@@ -22,7 +22,7 @@ OPTION_SPEC = {   # 웹 폼에서 받는 옵션: (타입, 기본값, 범위)
     "occupancy_res": ("float", 0.2, (0.1, 0.5)), "prob_hit": ("float", 0.85, (0.5, 0.99)), "prob_miss": ("float", 0.45, (0.05, 0.5)),
     "h_ground": ("int", 2, (1, 10)), "h_obs": ("int", 3, (1, 10)), "clearance": ("float", 1.4, (0.5, 3.0)), "band_min": ("float", 0.3, (0.1, 1.0)),
     "view_cubes": ("bool", False, None), "view_coarse": ("float", 0.3, (0.1, 1.0)), "video_speed": ("int", 15, (0, 60)), "video_pipeline": ("bool", True, None),
-    "classdict": ("str", "default", None)}
+    "classdict": ("str", "default", None), "label_edge_px": ("int", 4, (0, 12)), "require_depth": ("bool", True, None)}
 HTML = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "map_portal.html"), encoding="utf-8").read()
 sys.path.insert(0, ROOT); import classdict as CD
 ADE_LABELS = json.load(open(os.path.join(ROOT, "classdicts", "ade20k_labels.json"))) if os.path.exists(os.path.join(ROOT, "classdicts", "ade20k_labels.json")) else []
@@ -128,7 +128,7 @@ def make_yaml(spec):
                      "vlm_edges": opts["vlm_edges"], "vlm_max_pairs": opts["vlm_max_pairs"], "occupancy_res": opts["occupancy_res"], "prob_hit": opts["prob_hit"], "prob_miss": opts["prob_miss"],
                      "costmap": {"h_ground": opts["h_ground"], "h_obs": opts["h_obs"], "clearance": opts["clearance"], "band_min": opts["band_min"]},
                      "view_cubes": opts["view_cubes"], "view_coarse": opts["view_coarse"], "video_speed": opts["video_speed"], "video_pipeline": opts["video_pipeline"],
-                     "classdict": opts["classdict"]}}
+                     "classdict": opts["classdict"], "label_edge_px": opts["label_edge_px"], "require_depth": opts["require_depth"]}}
     if opts["classdict"] != "default" and not os.path.exists(os.path.join(CD.DIR, f"{opts['classdict']}.json")): raise ValueError(f"클래스 사전 '{opts['classdict']}' 없음")
     import yaml as _y
     path = os.path.join(SESS, f"session_{name}.yaml"); os.makedirs(SESS, exist_ok=True)

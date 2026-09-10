@@ -41,7 +41,7 @@ class Build:
         self.D = {k: os.path.join(self.root, k) for k in ("dataset", "sem", "voxel", "compiled", "logs")}
         self.opt = {"lidar_fusion": True, "mask_bottom_px": 60, "drop_classes": "person", "scene_cloud": 0, "vlm_edges": True, "vlm_max_pairs": 30,
                     "vlm_model": "Qwen/Qwen2.5-VL-32B-Instruct", "occupancy_res": 0.2, "prob_hit": 0.85, "prob_miss": 0.45,
-                    "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "view_cubes": False, "view_sub": 1, "video_speed": 15, "video_width": 960, "video_pipeline": True, "quality_img_stride": 15, "classdict": "default", "map_id": os.path.basename(self.root),
+                    "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "view_cubes": False, "view_sub": 1, "video_speed": 15, "video_width": 960, "video_pipeline": True, "quality_img_stride": 15, "classdict": "default", "label_edge_px": 4, "require_depth": True, "map_id": os.path.basename(self.root),
                     "frame": "SLAM world (/Odometry/base)"}
         self.opt.update(cfg.get("options", {}))
         for d in self.D.values():
@@ -107,7 +107,8 @@ class Build:
         for log in self.logs:
             out = os.path.join(self.D["voxel"], f"{log}_voxsem.npz"); outs.append(out)
             if self.done("C", out): continue
-            self.run([PY, f"{TOOLS}/build_voxel_sem_map.py", self.mcap(log), self.calib, self.ds(log), self.D["sem"], out, "--mask-bottom", str(self.opt["mask_bottom_px"])], logname=f"C_{log}.log")
+            self.run([PY, f"{TOOLS}/build_voxel_sem_map.py", self.mcap(log), self.calib, self.ds(log), self.D["sem"], out, "--mask-bottom", str(self.opt["mask_bottom_px"]),
+                      "--edge-px", str(self.opt["label_edge_px"]), "--require-depth", "1" if self.opt["require_depth"] else "0"], logname=f"C_{log}.log")
         sess = os.path.join(self.D["voxel"], "session_voxsem.npz")
         if not self.done("C", sess):
             self.run([PY, f"{CG}/merge_voxels.py", sess] + outs, logname="C_merge.log")
