@@ -25,9 +25,9 @@ STATE = {"source": a.source}
 
 
 def build(source, manifest=None, logs=None):
-    if manifest: a.manifest = manifest
-    if logs: a.logs = logs
-    mp = MapPackage(a.manifest); ex = tuple(x for x in a.exclude.split(",") if x)
+    manifest = manifest or a.manifest; logs = logs or a.logs
+    mp = MapPackage(manifest); ex = tuple(x for x in a.exclude.split(",") if x)       # 실패하면 여기서 예외 → 아래 상태 변경 없음
+    a.manifest, a.logs = manifest, logs
     in_map = set(mp.man.get("source", {}).get("logs", []))
     pts = map_points(mp, source, ex); t = time.time()
     import open3d as o3d
@@ -44,7 +44,7 @@ def build(source, manifest=None, logs=None):
     STATE["bev"] = {"x0": float(k0[0] * R), "y0": float(k0[1] * R), "res": R, "w": W, "h": H}     # 픽셀(u,v) → x = x0+(u+0.5)res, y = y0+(H-1-v+0.5)res
     # 스캔 후보 (보류 로그, 지도 범위 안, 커버리지)
     scans = []
-    for lg in [int(x) for x in a.logs.split(",")]:
+    for lg in [int(x) for x in str(logs).split(",") if str(x).strip()]:
         files = sorted(glob.glob(os.path.join(a.scans, f"log_{lg:03d}", "lidar_scans", "*.npz")))
         for i in range(0, len(files) - a.accum, a.stride):
             P, org = load_scans(files, a.accum, i)
@@ -159,7 +159,7 @@ class H(http.server.BaseHTTPRequestHandler):
                 except Exception as e: return self.js({"error": str(e)}, 400)
             if u.path == "/api/loc/map":                      # 지도·후보 로그 교체: {manifest (root 기준 상대/절대), logs "0,1,2"}
                 try:
-                    m = body["manifest"]; m = m if os.path.isabs(m) else os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), m)
+                    m = body["manifest"]; m = m if os.path.isabs(m) else os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), m)   # <repo>/…
                     build(body.get("source", STATE["source"]), manifest=m, logs=body.get("logs", a.logs)); return self.js({"ok": True, "manifest": a.manifest, "logs": a.logs, "scans": len(STATE["scans"])})
                 except Exception as e: return self.js({"error": str(e)}, 400)
         self.js({"error": "unknown"}, 404)
