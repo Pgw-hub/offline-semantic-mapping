@@ -269,3 +269,13 @@
 - PCD 내보내기 (2026-09-10): export_pcd.py <manifest> out.pcd --source voxels|voxels_occ|occupancy --exclude unknown,person,… --min-nsem N --occ-filter 1/0.
   PCD v0.7 binary, 필드 x y z rgb(packed float, PCL 관례) label(uint32; 사전 순서, other=N, unknown=N+1) + <out>_legend.json. 포털 상세 "Download PCD…" 대화상자(클래스 체크, 기본 unknown·person 제외).
   캐시: output/<맵>/compiled/export/<맵>_<src>_no-…_<hash>.pcd. Open3D 는 xyz+rgb 만 읽음(label 은 numpy 로).
+
+## 기하 재구성 투트랙 (2026-09-10) — geom_rebuild / paint_slam
+- 배경: 현재 맵은 raw(비-deskew) 스캔을 프론트엔드 `/Odometry/base`(드리프트, 루프클로저 없음) 에 그대로 얹음 → 주차장 held-out yaw 2~4°, 지도 내부 불일치.
+  로봇 SLAM(refer/raisin_plugin/raisin_lidar_slam_plugin, DLIO+GTSAM iSAM2, 반경 루프클로저+GICP) 은 키프레임 그래프를 갖지만 우리 mcap 에 `/pgo/keyframe_cloud`·`/path/pgo` 가 없음.
+- 트랙 1 `geom_rebuild` 컨테이너(같은 이미지 + gtsam pip): 서버가 기하를 다시 만든다 — deskew → 키프레임 → 오프라인 PGO → graph/graph.json.
+- 트랙 2 `paint_slam` 컨테이너: 로봇 SLAM 키프레임 그래프 위에 의미만 입힌다. 로봇 데이터가 없어 트랙 1 그래프를 대용 입력으로 사용. 공유 규격 geometry/GRAPH_FORMAT.md.
+- 시각 정합 확인: 모든 토픽 header.stamp 는 같은 시계(ns epoch), mcap log_time 은 header 보다 40~100ms 늦음. 키프레임 stamp = LiDAR 스캔 header stamp. Livox CustomMsg 점별 `ot` = 0~100ms 오프셋(99% 단조).
+- deskew 검증 (geometry/deskew.py, deskew_eval.py; 172935/log_002, 이동 구간 81쌍 연속 스캔 NN 중앙값):
+  raw 7.93cm → deskew 6.93cm (−12.6%), "헤더=스캔 끝" 가설은 8.85cm 로 악화 ⇒ `/Odometry/base` 와 스캔 header 는 스캔 시작 시각. 지면 두께 지표는 skew 에 무감(8.0→8.3cm) 이라 폐기.
+- refer/ (497MB, 로봇 플러그인 복사본) 은 .gitignore.
