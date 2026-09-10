@@ -89,6 +89,11 @@ pre.log{margin:12px 20px;background:#0f1214;color:#c9d1d9;border-radius:var(--ra
 .job .prog{height:4px;border-radius:9999px;background:var(--color-hairline);overflow:hidden;margin:12px 0 8px}.job .prog i{display:block;height:100%;background:var(--color-primary);transition:width .4s var(--ease)}
 .job .steps{display:flex;gap:4px;font-size:11px;color:var(--color-ink-muted-48)}.job .steps span{flex:1;text-align:center;padding:3px 0;border-radius:4px;background:var(--color-canvas-parchment)}.job .steps span.done{background:rgba(0,102,204,.12);color:#0066cc}.job .steps span.cur{background:var(--color-primary);color:#fff}
 .job .acts{margin-left:auto;display:flex;gap:8px}
+.locwrap{flex:1;display:grid;grid-template-columns:300px 1fr;min-height:0}.locside{border-right:1px solid var(--color-hairline);padding:18px 20px;display:flex;flex-direction:column;gap:12px;overflow-y:auto}.lochead{display:flex;justify-content:space-between;align-items:baseline;font-size:15px}.lochead .m{font-size:12px;color:var(--color-ink-muted-48)}
+.locl{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--color-ink-muted-48)}.locl select{height:32px;border:1px solid var(--color-hairline);border-radius:var(--radius-sm);padding:0 8px;font:400 13px var(--font-text);color:var(--color-ink);background:var(--color-canvas)}.locl.chk{flex-direction:row;align-items:center;gap:8px;color:var(--color-ink-muted-80);font-size:13px}
+.lochelp{font-size:12.5px;color:var(--color-ink-muted-48);line-height:1.5}.locbtns{display:flex;gap:8px;flex-wrap:wrap}
+.locres{font-size:13px;line-height:1.6}.locres table{border-collapse:collapse;width:100%}.locres td{padding:3px 4px;border-bottom:1px solid var(--color-hairline)}.locres td.n{text-align:right;font-variant-numeric:tabular-nums;font-weight:600}.locres .ok{color:#2b7a3d}.locres .bad{color:#8f3d1c}
+.locstage{position:relative;background:#1c1c1e;min-height:0;overflow:hidden}.locstage canvas{width:100%;height:100%;display:block;cursor:crosshair}.lochud{position:absolute;left:14px;top:12px;font-size:12px;color:rgba(255,255,255,.75);pointer-events:none;white-space:pre}
 .cdwrap{display:grid;grid-template-columns:260px 1fr;gap:20px}.cdlist{border:1px solid var(--color-hairline);border-radius:var(--radius-lg);padding:14px;align-self:start}.cdhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:14px}
 .cditem{padding:10px 12px;border-radius:var(--radius-sm);cursor:pointer;font-size:14px}.cditem:hover{background:var(--color-canvas-parchment)}.cditem.on{background:var(--color-canvas-parchment);font-weight:600}.cditem .m{font-size:12px;color:var(--color-ink-muted-48);font-weight:400}
 .cdedit{border:1px solid var(--color-hairline);border-radius:var(--radius-lg);padding:20px 22px;min-height:300px}.cdedit .top{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}.cdedit label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--color-ink-muted-48)}.cdedit input,.cdedit select{height:32px;border:1px solid var(--color-hairline);border-radius:var(--radius-sm);padding:0 10px;font:400 14px var(--font-text);color:var(--color-ink);background:var(--color-canvas)}
@@ -102,10 +107,10 @@ table.cdt input[type=text]{width:120px}table.cdt input[type=number]{width:70px}t
 </style></head><body>
 <div class="app">
   <div class="gn"><div class="logo"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7v10l9 5 9-5V7z"/><path d="M3 7l9 5 9-5"/><path d="M12 12v10"/></svg><span>RAION</span></div>
-    <nav><a href="#" title="준비 중">Sites</a><a href="#" class="on" id="navMaps" data-screen="library">Maps</a><a href="#" title="준비 중">Sessions</a><a href="#" data-screen="datasets">Datasets</a><a href="#" data-screen="queue">Pipeline</a><a href="#" title="준비 중">Robots</a></nav>
+    <nav><a href="#" title="준비 중">Sites</a><a href="#" class="on" id="navMaps" data-screen="library">Maps</a><a href="#" title="준비 중">Sessions</a><a href="#" data-screen="datasets">Datasets</a><a href="#" data-screen="queue">Pipeline</a><a href="#" data-screen="localize">Localize</a><a href="#" title="준비 중">Robots</a></nav>
     <div class="right"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg><span id="who">gw.park@raionrobotics.com</span></div></div>
   <div class="sn"><div class="title">Semantic Map Console</div>
-    <div class="tabs"><span class="on" id="tabLibrary" data-screen="library">Map library</span><span data-screen="datasets">Datasets</span><span data-screen="classdicts">Class dictionary</span><span data-screen="queue" id="tabQueue">Processing queue <em id="queueBadge" hidden></em></span></div>
+    <div class="tabs"><span class="on" id="tabLibrary" data-screen="library">Map library</span><span data-screen="datasets">Datasets</span><span data-screen="classdicts">Class dictionary</span><span data-screen="queue" id="tabQueue">Processing queue <em id="queueBadge" hidden></em></span><span data-screen="localize">Localization</span></div>
     <div class="actions"><button class="btn-link" id="btnIngest">Ingest data</button><button class="btn-pill" id="btnBuild">Build new map</button></div></div>
 
   <section class="screen on" id="library">
@@ -135,6 +140,23 @@ table.cdt input[type=text]{width:120px}table.cdt input[type=number]{width:70px}t
     <div class="body cdwrap">
       <aside class="cdlist"><div class="cdhead"><b>Dictionaries</b><button class="btn-soft" id="cdNew" style="height:28px;padding:0 10px">New</button></div><div id="cdItems"></div></aside>
       <div class="cdedit" id="cdEdit"></div>
+    </div>
+  </section>
+
+  <section class="screen" id="localize">
+    <div class="locwrap">
+      <div class="locside">
+        <div class="lochead"><b>Initial pose test</b><span id="locSrc" class="m"></span></div>
+        <label class="locl">Scan (held-out log)<select id="locScan"></select></label>
+        <label class="locl">Map source<select id="locSource"><option value="voxels_occ">voxels_occ (표면 복셀 ∩ occupancy)</option><option value="voxels">voxels (표면 복셀)</option><option value="occupancy">occupancy (occupied 셀)</option></select></label>
+        <label class="chk locl"><input type="checkbox" id="locMulti"> yaw 다중 시작 (±30/60/90/180°)</label>
+        <div class="lochelp">지도 위를 <b>클릭</b>하면 위치, <b>드래그</b>하면 heading 이 정해집니다. 초록 = 정답 자세(스캔 원본), 주황 = 내가 준 초기 자세, 청록 = 정합 결과.</div>
+        <div class="locbtns"><button class="btn-pill" id="locRun" disabled>Localize</button><button class="btn-soft" id="locGT">정답 근처로</button><button class="btn-soft" id="locReset">초기화</button></div>
+        <div id="locRes" class="locres"></div>
+        <div class="locbtns"><a class="btn-soft" id="locRrd" target="_blank" rel="noopener" hidden>rerun 에서 보기</a></div>
+        <div class="lochelp" id="locStatus"></div>
+      </div>
+      <div class="locstage"><canvas id="locCanvas"></canvas><div class="lochud" id="locHud"></div></div>
     </div>
   </section>
 
@@ -207,8 +229,54 @@ function renderClassdicts(){document.getElementById("cdItems").innerHTML=CDS.map
 function readEditor(){const e=document.getElementById("cdEdit"); const c=JSON.parse(JSON.stringify(cdCur)); if(c.name!=="default"&&e.querySelector("#cdName")){c.name=e.querySelector("#cdName").value.trim(); c.description=e.querySelector("#cdDesc").value; e.querySelectorAll("tr[data-i]").forEach(tr=>{const i=+tr.dataset.i; c.classes[i].name=tr.querySelector(".f-name").value.trim(); c.classes[i].role=tr.querySelector(".f-role").value; c.classes[i].cost=Number(tr.querySelector(".f-cost").value); c.classes[i].color=tr.querySelector(".f-color").value;});} return c;}
 async function saveClassdict(){const c=readEditor(); const headers={"Content-Type":"application/json"}; if(TOKEN_REQUIRED){const t=localStorage.getItem("portal_token"); if(t) headers["X-Portal-Token"]=t;}
   const r=await fetch("/api/classdicts",{method:"POST",headers,body:JSON.stringify(c)}); const j=await r.json(); const er=document.getElementById("cdErr"); if(!r.ok){er.textContent=j.error||"실패"; er.hidden=false; return;} cdCur=j.classdict; await loadClassdicts();}
+/* ---------------- Localization (interactive) ---------------- */
+const LOC={base:null,info:null,scan:null,pts:null,init:null,drag:null,result:null,anim:null,view:{s:1,ox:0,oy:0},img:null};
+function locBase(){return LOC.base||(LOC.base=`http://${host}:9093`);}
+async function locLoad(){const st=document.getElementById("locStatus"); try{const r=await fetch(locBase()+"/api/loc/info"); LOC.info=await r.json();}catch(e){st.textContent="localize 서버(:9093)에 연결할 수 없습니다. 컨테이너에서 tools/start_localize_server.sh 를 실행하세요."; return;}
+  document.getElementById("locSrc").textContent=`${LOC.info.source} · ${fmt(LOC.info.n_pts)} pts · ${LOC.info.scans.length} scans`; document.getElementById("locSource").value=LOC.info.source;
+  const sel=document.getElementById("locScan"); sel.innerHTML=LOC.info.scans.map(s=>`<option value="${s.id}">#${s.id} ${s.log} scan ${s.idx} · overlap ${s.overlap}</option>`).join("");
+  LOC.img=new Image(); LOC.img.onload=()=>{locFit(); locDraw();}; LOC.img.src=locBase()+"/api/loc/bev.png?"+Date.now();
+  if(LOC.info.scans.length) await locPickScan(LOC.info.scans[0].id); st.textContent="";}
+async function locPickScan(id){const r=await fetch(locBase()+"/api/loc/scan?id="+id); LOC.scan=await r.json(); LOC.pts=LOC.scan.points; LOC.init=null; LOC.result=null; document.getElementById("locRun").disabled=true; document.getElementById("locRrd").hidden=true; document.getElementById("locRes").innerHTML=""; locFit(); locDraw();}
+function locFit(){const cv=document.getElementById("locCanvas"); const box=cv.parentElement.getBoundingClientRect(); cv.width=Math.max(300,box.width); cv.height=Math.max(300,box.height); if(!LOC.info) return; const b=LOC.info.bev; const s=Math.min(cv.width/b.w, cv.height/b.h)*0.96; LOC.view={s, ox:(cv.width-b.w*s)/2, oy:(cv.height-b.h*s)/2};
+  if(LOC.scan){ /* 스캔 정답 위치 중심으로 3배 확대 */ const g=LOC.scan.gt; const [u,v]=w2p(g.x,g.y); const zs=3; LOC.view.s=s*zs; LOC.view.ox=cv.width/2-u*zs; LOC.view.oy=cv.height/2-v*zs; }}
+function w2p(x,y){const b=LOC.info.bev; return [(x-b.x0)/b.res-0.5, b.h-1-((y-b.y0)/b.res-0.5)];}          /* world → bev 픽셀 */
+function p2w(u,v){const b=LOC.info.bev; return [b.x0+(u+0.5)*b.res, b.y0+(b.h-1-v+0.5)*b.res];}
+function c2p(cx,cy){return [(cx-LOC.view.ox)/LOC.view.s,(cy-LOC.view.oy)/LOC.view.s];}                       /* canvas → bev 픽셀 */
+function p2c(u,v){return [u*LOC.view.s+LOC.view.ox, v*LOC.view.s+LOC.view.oy];}
+function drawScan(ctx,pose,color,alpha){if(!LOC.pts) return; const c=Math.cos(pose.yaw_deg*Math.PI/180), s=Math.sin(pose.yaw_deg*Math.PI/180); ctx.fillStyle=color; ctx.globalAlpha=alpha; const step=Math.max(1,Math.floor(LOC.pts.length/2500));
+  for(let i=0;i<LOC.pts.length;i+=step){const p=LOC.pts[i]; const x=pose.x+c*p[0]-s*p[1], y=pose.y+s*p[0]+c*p[1]; const [u,v]=w2p(x,y); const [cx,cy]=p2c(u,v); ctx.fillRect(cx-1,cy-1,2,2);} ctx.globalAlpha=1;}
+function drawPose(ctx,pose,color,label){const [u,v]=w2p(pose.x,pose.y); const [cx,cy]=p2c(u,v); const L=2.0/LOC.info.bev.res*LOC.view.s; const a=-pose.yaw_deg*Math.PI/180; ctx.strokeStyle=color; ctx.fillStyle=color; ctx.lineWidth=2.5; ctx.beginPath(); ctx.arc(cx,cy,6,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+L*Math.cos(a),cy+L*Math.sin(a)); ctx.stroke();
+  ctx.font="12px system-ui"; ctx.fillText(label,cx+9,cy-9);}
+function locDraw(){const cv=document.getElementById("locCanvas"); if(!cv||!LOC.info) return; const ctx=cv.getContext("2d"); ctx.fillStyle="#1c1c1e"; ctx.fillRect(0,0,cv.width,cv.height); if(LOC.img&&LOC.img.complete){ctx.imageSmoothingEnabled=false; ctx.drawImage(LOC.img,LOC.view.ox,LOC.view.oy,LOC.info.bev.w*LOC.view.s,LOC.info.bev.h*LOC.view.s);}
+  if(LOC.scan){drawScan(ctx,LOC.scan.gt,"#5ce07a",0.55); drawPose(ctx,LOC.scan.gt,"#5ce07a","GT");}
+  if(LOC.anim){drawScan(ctx,LOC.anim,"#ffe14a",0.9); drawPose(ctx,LOC.anim,"#ffe14a","icp");}
+  else if(LOC.result){drawScan(ctx,LOC.result.final,"#3fd0ff",0.9); drawPose(ctx,LOC.result.final,"#3fd0ff","registered");}
+  if(LOC.init){drawScan(ctx,LOC.init,"#ff8a3d",LOC.result?0.35:0.8); drawPose(ctx,LOC.init,"#ff8a3d","init");}
+  const g=LOC.scan?LOC.scan.gt:null; document.getElementById("locHud").textContent=`${LOC.info.source} · scale ${(LOC.view.s/LOC.info.bev.res*1).toFixed(1)} px/m
+`+(g?`GT  x ${g.x.toFixed(2)}  y ${g.y.toFixed(2)}  yaw ${g.yaw_deg.toFixed(1)}°
+`:"")+(LOC.init?`init x ${LOC.init.x.toFixed(2)}  y ${LOC.init.y.toFixed(2)}  yaw ${LOC.init.yaw_deg.toFixed(1)}°`:"클릭: 위치 · 드래그: heading");}
+function locCanvasPos(e){const r=e.target.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top];}
+async function locRun(){if(!LOC.init||!LOC.scan) return; const btn=document.getElementById("locRun"); btn.disabled=true; btn.textContent="정합 중…"; LOC.result=null; LOC.anim=null;
+  const r=await fetch(locBase()+"/api/loc/localize",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:LOC.scan.id,x:LOC.init.x,y:LOC.init.y,yaw_deg:LOC.init.yaw_deg,multi_yaw:document.getElementById("locMulti").checked})}); const j=await r.json(); btn.disabled=false; btn.textContent="Localize";
+  if(j.error){document.getElementById("locRes").innerHTML=`<div class="bad">${j.error}</div>`; return;}
+  /* 애니메이션: init → 각 ICP 단계 자세로 보간 */ const keys=[LOC.init,...j.stages.map(s=>s.pose)]; let k=0,t=0; const step=()=>{ if(k>=keys.length-1){LOC.anim=null; LOC.result=j; locDraw(); return;} const A=keys[k],B=keys[k+1]; t+=0.06; const u=Math.min(1,t); let dy=B.yaw_deg-A.yaw_deg; dy=((dy+540)%360)-180; LOC.anim={x:A.x+(B.x-A.x)*u,y:A.y+(B.y-A.y)*u,yaw_deg:A.yaw_deg+dy*u}; locDraw(); if(u>=1){k++;t=0;} requestAnimationFrame(step);}; requestAnimationFrame(step);
+  document.getElementById("locRes").innerHTML=`<table><tr><td>초기 오차</td><td class="n">${j.err_init_m} m · ${j.err_init_deg}°</td></tr><tr><td>정합 후 오차</td><td class="n ${j.ok?"ok":"bad"}">${j.err_m} m · ${j.err_deg}°</td></tr><tr><td>판정</td><td class="n ${j.ok?"ok":"bad"}">${j.ok?"수렴 (0.3 m·3° 이내)":"실패"}</td></tr><tr><td>fitness / rmse</td><td class="n">${j.fitness} / ${j.rmse}</td></tr><tr><td>시간</td><td class="n">${j.ms} ms · 지도 ${fmt(j.map_pts_used)} pts</td></tr>${j.multi_yaw_pick_deg?`<tr><td>선택된 yaw 시작</td><td class="n">${j.multi_yaw_pick_deg}°</td></tr>`:""}</table>`;
+  const a=document.getElementById("locRrd"); a.hidden=true; fetch(locBase()+"/api/loc/rrd",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({id:LOC.scan.id,x:LOC.init.x,y:LOC.init.y,yaw_deg:LOC.init.yaw_deg})}).then(r=>r.json()).then(rr=>{ if(rr.rrd){const rel=rr.rrd.split("/output/")[1]; a.href=rerunURL("output/"+rel); a.hidden=false;} });}
+(function(){document.addEventListener("DOMContentLoaded",()=>{}); const cv=document.getElementById("locCanvas"); if(!cv) return;
+  cv.addEventListener("mousedown",e=>{if(!LOC.info) return; const [cx,cy]=locCanvasPos(e); const [u,v]=c2p(cx,cy); const [x,y]=p2w(u,v); LOC.drag={x,y}; LOC.init={x,y,yaw_deg:LOC.init?LOC.init.yaw_deg:0}; LOC.result=null; locDraw();});
+  cv.addEventListener("mousemove",e=>{if(!LOC.drag) return; const [cx,cy]=locCanvasPos(e); const [u,v]=c2p(cx,cy); const [x,y]=p2w(u,v); const dx=x-LOC.drag.x, dy=y-LOC.drag.y; if(Math.hypot(dx,dy)>0.3) LOC.init.yaw_deg=Math.atan2(dy,dx)*180/Math.PI; locDraw();});
+  window.addEventListener("mouseup",()=>{if(LOC.drag){LOC.drag=null; document.getElementById("locRun").disabled=!LOC.init; locDraw();}});
+  cv.addEventListener("wheel",e=>{e.preventDefault(); const [cx,cy]=locCanvasPos(e); const f=e.deltaY<0?1.15:1/1.15; const [u,v]=c2p(cx,cy); LOC.view.s*=f; LOC.view.ox=cx-u*LOC.view.s; LOC.view.oy=cy-v*LOC.view.s; locDraw();},{passive:false});
+  window.addEventListener("resize",()=>{if(state.screen==="localize"){locFit(); locDraw();}});
+  document.getElementById("locScan").addEventListener("change",e=>locPickScan(+e.target.value));
+  document.getElementById("locSource").addEventListener("change",async e=>{document.getElementById("locStatus").textContent="지도 소스 교체 중… (수 초)"; await fetch(locBase()+"/api/loc/source",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:e.target.value})}); await locLoad();});
+  document.getElementById("locRun").addEventListener("click",locRun);
+  document.getElementById("locReset").addEventListener("click",()=>{LOC.init=null; LOC.result=null; document.getElementById("locRun").disabled=true; document.getElementById("locRes").innerHTML=""; locDraw();});
+  document.getElementById("locGT").addEventListener("click",()=>{if(!LOC.scan) return; const g=LOC.scan.gt; const r=1.5, a=Math.random()*Math.PI*2; LOC.init={x:g.x+r*Math.cos(a),y:g.y+r*Math.sin(a),yaw_deg:g.yaw_deg+(Math.random()*60-30)}; LOC.result=null; document.getElementById("locRun").disabled=false; locDraw();});
+})();
 const OPT_LABEL={lidar_fusion:"LiDAR → depth 융합",mask_bottom_px:"하단 마스킹 (px)",drop_classes:"제외 동적 클래스",vlm_edges:"VLM 관계 엣지",vlm_max_pairs:"VLM 쌍 상한 / 로그",occupancy_res:"Occupancy 해상도 (m)",prob_hit:"prob hit",prob_miss:"prob miss",h_ground:"지면 hits ≥",h_obs:"장애물 hits ≥",clearance:"clearance (m)",band_min:"장애물 밴드 시작 (m)",view_cubes:"rerun 큐브 표현",view_coarse:"큐브 크기 (m)",video_speed:"영상 배속 (0=생략)",video_pipeline:"3분할 영상",label_edge_px:"라벨 경계 보류 (px)",require_depth:"depth 없는 픽셀 라벨 보류"};
-function showScreen(name){state.screen=name; document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("on",s.id===name)); document.querySelectorAll("[data-screen]").forEach(el=>el.classList.toggle("on",el.dataset.screen===name)); if(name!=="detail"){state.cur=null; document.querySelectorAll("#stage video").forEach(v=>v.pause());} if(name==="datasets") loadDatasets(); if(name==="queue") loadJobs(); if(name==="classdicts") loadClassdicts(); window.scrollTo(0,0);}
+function showScreen(name){state.screen=name; document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("on",s.id===name)); document.querySelectorAll("[data-screen]").forEach(el=>el.classList.toggle("on",el.dataset.screen===name)); if(name!=="detail"){state.cur=null; document.querySelectorAll("#stage video").forEach(v=>v.pause());} if(name==="datasets") loadDatasets(); if(name==="queue") loadJobs(); if(name==="classdicts") loadClassdicts(); if(name==="localize"){ locLoad().then(()=>{locFit(); locDraw();}); } window.scrollTo(0,0);}
 const fmtGB=g=>g>=1?g.toFixed(1)+" GB":Math.round(g*1000)+" MB";
 async function loadDatasets(){const r=await fetch("/api/datasets"); const d=await r.json(); DATASETS=d.datasets; renderDatasets();}
 function renderDatasets(){const q=state.dsq.trim().toLowerCase(); const list=DATASETS.filter(d=>!q||(d.name+" "+d.parent+" "+d.path).toLowerCase().includes(q));

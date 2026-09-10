@@ -18,3 +18,4 @@ sessions/*.out
 output/
 data2_cg
 sessions/jobs.json
+output/*/localize/
