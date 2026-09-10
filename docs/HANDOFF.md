@@ -247,3 +247,8 @@
 - 오케스트레이터 options.classdict (기본 default). sem/ 이 다른 사전으로 만들어져 있으면 중단(--force B 또는 새 root). 매니페스트에 classdict 전체 기록.
 - 포털 Class dictionary 탭: 목록/편집(ADE 라벨 검색 추가, 역할, 코스트, 색)/Duplicate/Save/Delete, 빌드 폼에 사전 선택. classdicts/ade20k_labels.json 은 컨테이너에서 모델 config 로 덤프.
 - 예시 사전 outdoor_v2 (car=obstacle, building/wall/fence=context) → 웹 빌드 web_172218_cdv2 로 검증 중.
+- 라벨 오염 수정 (2026-09-10): build_voxel_sem_map --edge-px 4 (클래스 경계 4px 안 라벨 보류) + --require-depth 1 (depth 없는 픽셀엔 LiDAR 라벨 안 줌). 옵션 label_edge_px/require_depth (기본 4/true).
+  172935 log0-5 outdoor_v2 비교: 차량 위 0~1.2m 오라벨 19,973→10,344 (-48%), 라벨 복셀 -9%(경계·원거리 배경이 unknown 으로), car -13%.
+  남은 오라벨의 원인: 차 지붕·유리의 반사(SegFormer 가 tree/building 으로 판정) → 세그 정확도 몫. 후처리(차량 덩어리 위 0.6m 관측≤2 재배정)는 미적용.
+  비교 rrd: tools/compare_maps_rerun.py A B out.rrd (before/·after/ 나란히) → output/web_172935_l05_cdv2_fix/compiled/compare_before_after.rrd.
+  ★비교 빌드 요령: 새 root 에 dataset/·sem/ 심볼릭링크 → C 부터만 재실행 (4분).
