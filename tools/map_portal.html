@@ -147,7 +147,9 @@ table.cdt input[type=text]{width:120px}table.cdt input[type=number]{width:70px}t
     <div class="locwrap">
       <div class="locside">
         <div class="lochead"><b>Initial pose test</b><span id="locSrc" class="m"></span></div>
-        <label class="locl">Scan (held-out log)<select id="locScan"></select></label>
+        <label class="locl">Map<select id="locMap"></select></label>
+        <label class="locl">Candidate logs (쉼표; 지도에 든 로그는 in-map 표시)<input id="locLogs" value="6,7,8,9,10" style="height:30px;border:1px solid var(--color-hairline);border-radius:var(--radius-sm);padding:0 8px;font:400 13px var(--font-text)"> <button class="btn-soft" id="locApply" style="height:28px;padding:0 10px;margin-top:4px">지도·로그 적용</button></label>
+        <label class="locl">Scan<select id="locScan"></select></label>
         <label class="locl">Map source<select id="locSource"><option value="voxels_occ">voxels_occ (표면 복셀 ∩ occupancy)</option><option value="voxels">voxels (표면 복셀)</option><option value="occupancy">occupancy (occupied 셀)</option></select></label>
         <label class="chk locl"><input type="checkbox" id="locMulti"> yaw 다중 시작 (±30/60/90/180°)</label>
         <div class="lochelp">지도 위를 <b>클릭</b>하면 위치, <b>드래그</b>하면 heading 이 정해집니다. 초록 = 정답 자세(스캔 원본), 주황 = 내가 준 초기 자세, 청록 = 정합 결과.</div>
@@ -234,7 +236,8 @@ const LOC={base:null,info:null,scan:null,pts:null,init:null,drag:null,result:nul
 function locBase(){return LOC.base||(LOC.base=`http://${host}:9093`);}
 async function locLoad(){const st=document.getElementById("locStatus"); try{const r=await fetch(locBase()+"/api/loc/info"); LOC.info=await r.json();}catch(e){st.textContent="localize 서버(:9093)에 연결할 수 없습니다. 컨테이너에서 tools/start_localize_server.sh 를 실행하세요."; return;}
   document.getElementById("locSrc").textContent=`${LOC.info.source} · ${fmt(LOC.info.n_pts)} pts · ${LOC.info.scans.length} scans`; document.getElementById("locSource").value=LOC.info.source;
-  const sel=document.getElementById("locScan"); sel.innerHTML=LOC.info.scans.map(s=>`<option value="${s.id}">${s.log} scan ${s.idx} · overlap ${s.overlap}</option>`).join("");
+  const sel=document.getElementById("locScan"); sel.innerHTML=LOC.info.scans.map(s=>`<option value="${s.id}">${s.log} scan ${s.idx} · overlap ${s.overlap}${s.in_map?" · in-map":" · held-out"}</option>`).join("");
+  document.getElementById("locLogs").value=LOC.info.logs||""; const ms=document.getElementById("locMap"); if(!ms.options.length||ms.dataset.filled!=="1"){ms.innerHTML=MAPS.map(m=>`<option value="output/${m.name}/compiled/map_manifest.json">${m.name} — logs ${m.logs.join(",").replace(/log_0*/g,"")}</option>`).join(""); ms.dataset.filled="1";} const cur=[...ms.options].find(o=>o.value.includes(`/${LOC.info.map_name}/`)); if(cur) ms.value=cur.value;
   LOC.img=new Image(); LOC.img.onload=()=>{locFit(); locDraw();}; LOC.img.src=locBase()+"/api/loc/bev.png?"+Date.now();
   if(LOC.info.scans.length) await locPickScan(LOC.info.scans[0].id); st.textContent="";}
 async function locPickScan(id){const r=await fetch(locBase()+"/api/loc/scan?id="+encodeURIComponent(id)); LOC.scan=await r.json(); if(LOC.scan.error){document.getElementById("locStatus").textContent=LOC.scan.error; return;} LOC.pts=LOC.scan.points; LOC.init=null; LOC.result=null; document.getElementById("locRun").disabled=true; document.getElementById("locRrd").hidden=true; document.getElementById("locRes").innerHTML=""; locFit(); locDraw();}
@@ -274,6 +277,7 @@ async function locRun(){if(!LOC.init||!LOC.scan) return; const btn=document.getE
   document.getElementById("locScan").addEventListener("change",e=>locPickScan(e.target.value));
   document.getElementById("locSource").addEventListener("change",async e=>{document.getElementById("locStatus").textContent="지도 소스 교체 중… (수 초)"; await fetch(locBase()+"/api/loc/source",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({source:e.target.value})}); await locLoad();});
   document.getElementById("locRun").addEventListener("click",locRun);
+  document.getElementById("locApply").addEventListener("click",async()=>{document.getElementById("locStatus").textContent="지도·스캔 후보 다시 준비 중… (30초~1분)"; const r=await fetch(locBase()+"/api/loc/map",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({manifest:document.getElementById("locMap").value,logs:document.getElementById("locLogs").value})}); const j=await r.json(); if(j.error){document.getElementById("locStatus").textContent=j.error; return;} await locLoad();});
   document.getElementById("locReset").addEventListener("click",()=>{LOC.init=null; LOC.result=null; document.getElementById("locRun").disabled=true; document.getElementById("locRes").innerHTML=""; locDraw();});
   document.getElementById("locGT").addEventListener("click",()=>{if(!LOC.scan) return; const g=LOC.scan.gt; const r=1.5, a=Math.random()*Math.PI*2; LOC.init={x:g.x+r*Math.cos(a),y:g.y+r*Math.sin(a),yaw_deg:g.yaw_deg+(Math.random()*60-30)}; LOC.result=null; document.getElementById("locRun").disabled=false; locDraw();});
 })();

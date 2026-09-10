@@ -24,8 +24,11 @@ LOCK = threading.Lock()
 STATE = {"source": a.source}
 
 
-def build(source):
+def build(source, manifest=None, logs=None):
+    if manifest: a.manifest = manifest
+    if logs: a.logs = logs
     mp = MapPackage(a.manifest); ex = tuple(x for x in a.exclude.split(",") if x)
+    in_map = set(mp.man.get("source", {}).get("logs", []))
     pts = map_points(mp, source, ex); t = time.time()
     import open3d as o3d
     tree = o3d.geometry.KDTreeFlann(o3d.geometry.PointCloud(o3d.utility.Vector3dVector(pts)))
@@ -50,8 +53,9 @@ def build(source):
             Q = P[:: max(1, len(P) // 1500)]
             near = sum(1 for q in Q if tree.search_radius_vector_3d(q, 0.3)[0] > 0); ov = near / len(Q)
             if ov < 0.4: continue
-            scans.append({"id": f"log_{lg:03d}_{i:06d}", "log": f"log_{lg:03d}", "idx": i, "files": files, "origin": org.tolist(), "overlap": round(ov, 2), "n_pts": int(len(P))})
-    STATE["scans"] = scans; STATE["scan_by_id"] = {s["id"]: s for s in scans}
+            scans.append({"id": f"log_{lg:03d}_{i:06d}", "log": f"log_{lg:03d}", "idx": i, "files": files, "origin": org.tolist(), "overlap": round(ov, 2), "n_pts": int(len(P)),
+                          "in_map": f"log_{lg:03d}" in in_map})
+    STATE["scans"] = scans; STATE["scan_by_id"] = {s["id"]: s for s in scans}; STATE["in_map_logs"] = list(in_map)
     print(f"[loc] source={source} pts={len(pts):,} scans={len(scans)} (kd-tree {STATE['built_s']}s)", flush=True)
 
 
@@ -133,7 +137,8 @@ class H(http.server.BaseHTTPRequestHandler):
     def _get(self):
         u = urllib.parse.urlparse(self.path); q = urllib.parse.parse_qs(u.query)
         if u.path == "/api/loc/info":
-            return self.js({"source": STATE["source"], "n_pts": STATE["n_pts"], "bbox": STATE["bbox"], "bev": STATE["bev"], "manifest": a.manifest, "accum": a.accum,
+            return self.js({"source": STATE["source"], "n_pts": STATE["n_pts"], "bbox": STATE["bbox"], "bev": STATE["bev"], "manifest": a.manifest, "accum": a.accum, "logs": a.logs,
+                            "map_name": os.path.basename(os.path.dirname(os.path.dirname(a.manifest))), "map_logs": sorted(STATE.get("in_map_logs", [])),
                             "scans": [{k: v for k, v in s.items() if k != "files"} for s in STATE["scans"]]})
         if u.path == "/api/loc/bev.png":
             self._hdr(200, "image/png"); self.wfile.write(STATE["bev_png"]); return
@@ -151,6 +156,11 @@ class H(http.server.BaseHTTPRequestHandler):
                 return self.js(write_rrd(s, float(body["x"]), float(body["y"]), float(body.get("yaw_deg", 0)), out))
             if u.path == "/api/loc/source":
                 try: build(body["source"]); return self.js({"ok": True, "source": STATE["source"], "n_pts": STATE["n_pts"], "scans": len(STATE["scans"])})
+                except Exception as e: return self.js({"error": str(e)}, 400)
+            if u.path == "/api/loc/map":                      # 지도·후보 로그 교체: {manifest (root 기준 상대/절대), logs "0,1,2"}
+                try:
+                    m = body["manifest"]; m = m if os.path.isabs(m) else os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), m)
+                    build(body.get("source", STATE["source"]), manifest=m, logs=body.get("logs", a.logs)); return self.js({"ok": True, "manifest": a.manifest, "logs": a.logs, "scans": len(STATE["scans"])})
                 except Exception as e: return self.js({"error": str(e)}, 400)
         self.js({"error": "unknown"}, 404)
 
