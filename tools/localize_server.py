@@ -50,8 +50,8 @@ def build(source):
             Q = P[:: max(1, len(P) // 1500)]
             near = sum(1 for q in Q if tree.search_radius_vector_3d(q, 0.3)[0] > 0); ov = near / len(Q)
             if ov < 0.4: continue
-            scans.append({"id": len(scans), "log": f"log_{lg:03d}", "idx": i, "files": files, "origin": org.tolist(), "overlap": round(ov, 2), "n_pts": int(len(P))})
-    STATE["scans"] = scans
+            scans.append({"id": f"log_{lg:03d}_{i:06d}", "log": f"log_{lg:03d}", "idx": i, "files": files, "origin": org.tolist(), "overlap": round(ov, 2), "n_pts": int(len(P))})
+    STATE["scans"] = scans; STATE["scan_by_id"] = {s["id"]: s for s in scans}
     print(f"[loc] source={source} pts={len(pts):,} scans={len(scans)} (kd-tree {STATE['built_s']}s)", flush=True)
 
 
@@ -120,7 +120,17 @@ class H(http.server.BaseHTTPRequestHandler):
     def js(self, obj, code=200):
         b = json.dumps(obj, ensure_ascii=False).encode(); self._hdr(code, "application/json; charset=utf-8"); self.wfile.write(b)
     def do_OPTIONS(self): self._hdr(204, "text/plain")
+    def scan(self, sid):
+        s = STATE.get("scan_by_id", {}).get(str(sid))
+        if s is None: raise KeyError(f"스캔 {sid} 없음 (지도 소스가 바뀌어 목록이 갱신됨 — 스캔을 다시 선택)")
+        return s
     def do_GET(self):
+        try: return self._get()
+        except Exception as e: return self.js({"error": f"{type(e).__name__}: {e}"}, 500)
+    def do_POST(self):
+        try: return self._post()
+        except Exception as e: return self.js({"error": f"{type(e).__name__}: {e}"}, 500)
+    def _get(self):
         u = urllib.parse.urlparse(self.path); q = urllib.parse.parse_qs(u.query)
         if u.path == "/api/loc/info":
             return self.js({"source": STATE["source"], "n_pts": STATE["n_pts"], "bbox": STATE["bbox"], "bev": STATE["bev"], "manifest": a.manifest, "accum": a.accum,
@@ -128,16 +138,16 @@ class H(http.server.BaseHTTPRequestHandler):
         if u.path == "/api/loc/bev.png":
             self._hdr(200, "image/png"); self.wfile.write(STATE["bev_png"]); return
         if u.path == "/api/loc/scan":
-            s = STATE["scans"][int(q["id"][0])]; P, org = scan_local(s); P = P[:: max(1, len(P) // 4000)]
+            s = self.scan(q["id"][0]); P, org = scan_local(s); P = P[:: max(1, len(P) // 4000)]
             return self.js({"id": s["id"], "gt": pose_of(yaw_T(org[0], org[1], 0, org[2])), "points": np.round(P, 2).tolist(), "n_full": s["n_pts"]})
         self.js({"error": "unknown"}, 404)
-    def do_POST(self):
+    def _post(self):
         u = urllib.parse.urlparse(self.path); n = int(self.headers.get("Content-Length", "0") or 0); body = json.loads(self.rfile.read(n) or b"{}")
         with LOCK:
             if u.path == "/api/loc/localize":
-                s = STATE["scans"][int(body["id"])]; return self.js(localize(s, float(body["x"]), float(body["y"]), float(body.get("yaw_deg", 0)), bool(body.get("multi_yaw", False))))
+                s = self.scan(body["id"]); return self.js(localize(s, float(body["x"]), float(body["y"]), float(body.get("yaw_deg", 0)), bool(body.get("multi_yaw", False))))
             if u.path == "/api/loc/rrd":
-                s = STATE["scans"][int(body["id"])]; out = os.path.join(os.path.dirname(os.path.dirname(a.manifest)), "localize", f"loc_scan{s['id']}.rrd"); os.makedirs(os.path.dirname(out), exist_ok=True)
+                s = self.scan(body["id"]); out = os.path.join(os.path.dirname(os.path.dirname(a.manifest)), "localize", f"loc_{s['id']}.rrd"); os.makedirs(os.path.dirname(out), exist_ok=True)
                 return self.js(write_rrd(s, float(body["x"]), float(body["y"]), float(body.get("yaw_deg", 0)), out))
             if u.path == "/api/loc/source":
                 try: build(body["source"]); return self.js({"ok": True, "source": STATE["source"], "n_pts": STATE["n_pts"], "scans": len(STATE["scans"])})
