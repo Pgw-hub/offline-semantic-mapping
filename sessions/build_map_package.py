@@ -8,6 +8,7 @@
   python build_map_package.py <session.yaml> --force D    # 해당 단계 산출물 지우고 다시
   python build_map_package.py <session.yaml> --dry-run    # 명령만 출력
 단계:
+  P  posegraph  (options.pose_graph: true) mcap → graph/ : deskew 키프레임 + 루프클로저 + GTSAM PGO (geometry/build_graph.py). 이후 A,S,C 가 보정 자세 사용
   A  dataset    mcap → dataset/<log>/ (results/, traj.txt, stamps.npz, lidar_world/)   [로그별]
   S  scans      mcap → dataset/<log>/lidar_scans/ (스캔별 world 점+원점)                [로그별]
   R  rgb        mcap → sem/rgb/ (LiDAR 시각 10Hz RGB) + rgb_index.npz                  [세션]
@@ -42,8 +43,10 @@ class Build:
         self.opt = {"lidar_fusion": True, "mask_bottom_px": 60, "drop_classes": "person", "scene_cloud": 0, "vlm_edges": True, "vlm_max_pairs": 30,
                     "vlm_model": "Qwen/Qwen2.5-VL-32B-Instruct", "occupancy_res": 0.2, "prob_hit": 0.85, "prob_miss": 0.45,
                     "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "view_cubes": False, "view_sub": 1, "video_speed": 15, "video_width": 960, "video_pipeline": True, "quality_img_stride": 15, "classdict": "default", "label_edge_px": 4, "require_depth": True, "map_id": os.path.basename(self.root),
-                    "frame": "SLAM world (/Odometry/base)"}
+                    "frame": "SLAM world (/Odometry/base)", "pose_graph": False}
         self.opt.update(cfg.get("options", {}))
+        self.graph = os.path.join(self.root, "graph")
+        if self.opt["pose_graph"] and "frame" not in cfg.get("options", {}): self.opt["frame"] = "SLAM world, PGO-corrected (geometry/build_graph.py)"
         for d in self.D.values():
             if not dry: os.makedirs(d, exist_ok=True)
         self.t0 = time.time(); self.log_f = None if dry else open(os.path.join(self.D["logs"], "build.log"), "a")
@@ -72,20 +75,27 @@ class Build:
         if ok: self.say(f"  건너뜀 (있음): {path}")
         return ok
     def mcap(self, log): return os.path.join(self.mcap_dir, f"{log}.mcap")
+    def pg(self): return ["--pose-graph", self.graph] if self.opt["pose_graph"] else []
     def ds(self, log): return os.path.join(self.D["dataset"], log)
 
     # ---- 단계 ----
+    def step_P(self):
+        if not self.opt["pose_graph"]: self.say("  pose_graph 꺼짐 → 생략"); return
+        if self.done("P", os.path.join(self.graph, "graph.json")): return
+        nums = ",".join(str(int(l[4:])) for l in self.logs)
+        self.run([PY, f"{REPO}/geometry/build_graph.py", self.mcap_dir, "--logs", nums, "--out", self.graph, "--rrd"], env={"CUDA_VISIBLE_DEVICES": ""}, logname="P.log")
+
     def step_A(self):
         for log in self.logs:
             out = self.ds(log)
             if self.done("A", os.path.join(out, "stamps.npz"), lambda: len(glob.glob(os.path.join(out, "results", "frame*.jpg"))) > 100): continue
-            cmd = [PY, f"{TOOLS}/mcap_to_cg.py", self.mcap(log), self.calib, out] + (["--lidar"] if self.opt["lidar_fusion"] else [])
+            cmd = [PY, f"{TOOLS}/mcap_to_cg.py", self.mcap(log), self.calib, out] + (["--lidar"] if self.opt["lidar_fusion"] else []) + self.pg()
             self.run(cmd, logname=f"A_{log}.log")
     def step_S(self):
         for log in self.logs:
             out = os.path.join(self.ds(log), "lidar_scans")
             if self.done("S", out, lambda: len(glob.glob(os.path.join(out, "*.npz"))) > 100): continue
-            self.run([PY, f"{TOOLS}/export_lidar_scans.py", self.mcap(log), self.calib, out], logname=f"S_{log}.log")
+            self.run([PY, f"{TOOLS}/export_lidar_scans.py", self.mcap(log), self.calib, out] + self.pg(), logname=f"S_{log}.log")
     def step_R(self):
         idx = os.path.join(self.D["sem"], "rgb_index.npz")
         if self.done("R", idx): return
@@ -108,7 +118,7 @@ class Build:
             out = os.path.join(self.D["voxel"], f"{log}_voxsem.npz"); outs.append(out)
             if self.done("C", out): continue
             self.run([PY, f"{TOOLS}/build_voxel_sem_map.py", self.mcap(log), self.calib, self.ds(log), self.D["sem"], out, "--mask-bottom", str(self.opt["mask_bottom_px"]),
-                      "--edge-px", str(self.opt["label_edge_px"]), "--require-depth", "1" if self.opt["require_depth"] else "0"], logname=f"C_{log}.log")
+                      "--edge-px", str(self.opt["label_edge_px"]), "--require-depth", "1" if self.opt["require_depth"] else "0"] + self.pg(), logname=f"C_{log}.log")
         sess = os.path.join(self.D["voxel"], "session_voxsem.npz")
         if not self.done("C", sess):
             self.run([PY, f"{CG}/merge_voxels.py", sess] + outs, logname="C_merge.log")
@@ -162,7 +172,7 @@ class Build:
                  "edges_object_terrain": ("compiled/voxel_session_relations.json", "객체-지형 관계 (bbox 발자국 아래 지배 지형)"),
                  "edges_vlm": ("compiled/session_edges_vlm.json", "VLM 판정 엣지 (Qwen2.5-VL)")}
         cdj = os.path.join(self.D["sem"], "classes.json"); cdict = json.load(open(cdj)) if os.path.exists(cdj) else None
-        m = {"map_id": self.opt["map_id"], "frame": self.opt["frame"], "voxel_m": 0.1, "grid_axes": "row=x, col=y", "occupancy_res_m": self.opt["occupancy_res"], "classdict": cdict,
+        m = {"map_id": self.opt["map_id"], "frame": self.opt["frame"], "pose_graph": ("graph/graph.json" if self.opt["pose_graph"] else None), "voxel_m": 0.1, "grid_axes": "row=x, col=y", "occupancy_res_m": self.opt["occupancy_res"], "classdict": cdict,
              "built": time.strftime("%Y-%m-%d %H:%M"), "source": {"mcap_dir": self.mcap_dir, "logs": self.logs, "calib": self.calib}, "options": self.opt, "files": {}}
         for k, (p, desc) in files.items():
             full = os.path.join(self.root, p)
@@ -242,7 +252,7 @@ class Build:
             self.chown_outputs()
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("session_yaml"); ap.add_argument("--steps", default="Q,A,S,R,B,C,D,E,F,G,H,V")
+    ap = argparse.ArgumentParser(); ap.add_argument("session_yaml"); ap.add_argument("--steps", default="Q,P,A,S,R,B,C,D,E,F,G,H,V")
     ap.add_argument("--force", default="", help="다시 만들 단계 (쉼표)"); ap.add_argument("--dry-run", action="store_true")
     a = ap.parse_args(); cfg = yaml.safe_load(open(a.session_yaml))
     b = Build(cfg, dry=a.dry_run, force=[s for s in a.force.split(",") if s])

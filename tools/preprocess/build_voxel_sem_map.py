@@ -79,6 +79,7 @@ def main():
     ap.add_argument("--mask-bottom", type=int, default=60)
     ap.add_argument("--lidar-max", type=float, default=40.0)
     ap.add_argument("--edge-px", type=int, default=4, help="클래스 경계에서 이 픽셀 안의 라벨은 쓰지 않음 (실루엣 오염 방지, 0=끔)")
+    ap.add_argument("--pose-graph", help="graph/ 디렉터리 — 자세를 PGO 보정값으로 교체")
     ap.add_argument("--require-depth", type=int, default=1, help="1: 카메라 depth 가 없는 픽셀에는 LiDAR 점 라벨을 주지 않음 (가림 검사 불가 → 보류)")
     a = ap.parse_args()
 
@@ -110,6 +111,11 @@ def main():
         u = (ns-gt_ns[i-1])/(gt_ns[i]-gt_ns[i-1])
         T = np.eye(4); T[:3, :3] = quat_wxyz_to_R(slerp(gt_quat[i-1], gt_quat[i], u)); T[:3, 3] = gt_pos[i-1]*(1-u)+gt_pos[i]*u
         return T
+
+    if a.pose_graph:                                   # PGO 보정 자세(geometry/build_graph.py 산출)로 교체
+        import sys as _s; _s.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "geometry"))
+        from pose_provider import PoseProvider
+        _pp = PoseProvider(a.pose_graph); pose_at = _pp.at; print("pose graph:", a.pose_graph, _pp.meta)
 
     # --- cg 데이터셋 (D455 depth, rgb, c2w) ---
     st = np.load(os.path.join(a.cg_dir, "stamps.npz"))["stamps"]

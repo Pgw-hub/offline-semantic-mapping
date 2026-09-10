@@ -71,6 +71,7 @@ def main():
     ap.add_argument("--lidar", action="store_true", help="LiDAR 를 depth 에 융합 (D455 없는 픽셀 채움)")
     ap.add_argument("--lidar-win", type=float, default=0.4, help="프레임 주변 누적 창(초, ±)")
     ap.add_argument("--lidar-max", type=float, default=40.0, help="LiDAR depth 상한(m)")
+    ap.add_argument("--pose-graph", help="geometry/build_graph.py 산출 graph/ 디렉터리 — 자세를 PGO 보정값으로 교체")
     a = ap.parse_args()
 
     Kc, Wc, Hc = load_K(a.calib, "d455_front_color_caminfo.yaml")
@@ -130,6 +131,11 @@ def main():
         q = slerp(gt_quat[i - 1], gt_quat[i], u)
         T = np.eye(4); T[:3, :3] = quat_wxyz_to_R(q / np.linalg.norm(q)); T[:3, 3] = pos
         return T
+
+    if a.pose_graph:                                   # PGO 보정 자세(geometry/build_graph.py 산출)로 교체
+        import sys as _s; _s.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "geometry"))
+        from pose_provider import PoseProvider
+        _pp = PoseProvider(a.pose_graph); pose_at = _pp.at; print("pose graph:", a.pose_graph, _pp.meta)
 
     l_stamps = np.array(sorted(lidar), dtype=np.int64)
     if a.lidar:

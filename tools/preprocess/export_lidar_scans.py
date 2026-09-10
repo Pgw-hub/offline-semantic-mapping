@@ -26,6 +26,7 @@ def slerp(q0, q1, u):
 
 ap = argparse.ArgumentParser()
 ap.add_argument("mcap"); ap.add_argument("calib"); ap.add_argument("out"); ap.add_argument("--max-range", type=float, default=40.0)
+ap.add_argument("--pose-graph", help="graph/ 디렉터리 — PGO 보정 자세 + 점별 시각 deskew 로 world 점 생성")
 a = ap.parse_args()
 os.makedirs(a.out, exist_ok=True)
 tr = yaml.safe_load(open(os.path.join(a.calib, "livox_lidar_0_lidar.yaml")))["transform"]
@@ -37,23 +38,39 @@ with open(a.mcap, "rb") as f:
         if ch.topic == "/livox/lidar":
             sec, nsec = struct.unpack_from("<iI", msg.data, 0); N, = struct.unpack_from("<I", msg.data, 24)
             p = np.frombuffer(msg.data, dtype=LIDAR_DT, count=N, offset=28)
-            scans.append((sec*10**9+nsec, np.stack([-p["x"], -p["y"], p["z"]], -1).astype(np.float32)))
+            scans.append((sec*10**9+nsec, np.stack([-p["x"], -p["y"], p["z"]], -1).astype(np.float32), p["ot"].astype(np.int64)))
         else:
             v = struct.unpack_from("<7d", msg.data, 8); sec, nsec = struct.unpack_from("<iI", msg.data, 0)
             gt_ns.append(sec*10**9+nsec); gt_pos.append(v[0:3]); gt_quat.append([v[6], v[3], v[4], v[5]])
 o = np.argsort(gt_ns); gt_ns = np.array(gt_ns)[o]; gt_pos = np.array(gt_pos)[o]; gt_quat = np.array(gt_quat)[o]
 gt_quat /= np.linalg.norm(gt_quat, axis=1, keepdims=True)
 
+pp = None
+if a.pose_graph:
+    import sys; sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "geometry"))
+    from pose_provider import PoseProvider
+    pp = PoseProvider(a.pose_graph); print("pose graph:", a.pose_graph, pp.meta, "· deskew on")
 n_ok = 0
-for i, (ns, xyz) in enumerate(scans):
-    k = np.searchsorted(gt_ns, ns)
-    if k == 0 or k == len(gt_ns) or gt_ns[k]-gt_ns[k-1] > 250e6:
-        continue
-    u = (ns-gt_ns[k-1])/(gt_ns[k]-gt_ns[k-1])
-    R = q2R(slerp(gt_quat[k-1], gt_quat[k], u)); t = gt_pos[k-1]*(1-u)+gt_pos[k]*u
+for i, (ns, xyz, ot) in enumerate(scans):
     rng = np.linalg.norm(xyz, axis=1); keep = (rng > 0.6) & (rng < a.max_range)
-    pw = xyz[keep] @ R.T + (R @ t_bl + t)
-    origin = (R @ t_bl + t).astype(np.float32)
+    if pp is not None:
+        T0 = pp.at(ns)
+        if T0 is None: continue
+        ot = ot if ot.max() < 2_000_000_000 else ot - ot.min(); nb = 64
+        bins = np.minimum((ot[keep] * nb // max(int(ot.max()) + 1, 1)).astype(int), nb - 1)
+        Tb, okb = pp.at_many(ns + ((np.arange(nb) + 0.5) * (ot.max() + 1) / nb).astype(np.int64))
+        if not okb.all(): continue
+        Pl = xyz[keep].astype(np.float64) + t_bl
+        pw = np.einsum("nij,nj->ni", Tb[bins, :3, :3], Pl) + Tb[bins, :3, 3]        # 점별 측정 시각의 보정 자세로 world
+        origin = (T0[:3, :3] @ t_bl + T0[:3, 3]).astype(np.float32)
+    else:
+        k = np.searchsorted(gt_ns, ns)
+        if k == 0 or k == len(gt_ns) or gt_ns[k]-gt_ns[k-1] > 250e6:
+            continue
+        u = (ns-gt_ns[k-1])/(gt_ns[k]-gt_ns[k-1])
+        R = q2R(slerp(gt_quat[k-1], gt_quat[k], u)); t = gt_pos[k-1]*(1-u)+gt_pos[k]*u
+        pw = xyz[keep] @ R.T + (R @ t_bl + t)
+        origin = (R @ t_bl + t).astype(np.float32)
     np.savez(os.path.join(a.out, "%06d.npz" % i), xyz=pw.astype(np.float32), origin=origin, stamp_ns=np.int64(ns))
     n_ok += 1
 print("스캔 %d/%d 저장 → %s" % (n_ok, len(scans), a.out))
