@@ -266,3 +266,6 @@
   log_002 통과 시점과 log_003 시점 사이 SLAM 오도메트리 드리프트(지도 내부 일관성) 로 추정. in-map(log_002) 스캔은 0.04m/0.04°.
   Localization 탭: Map/Candidate logs 선택 후 "지도·로그 적용" (POST /api/loc/map). 스캔 목록에 in-map/held-out 표시. 서버 현재 상태: l02 지도, 로그 3,2.
   ★주의: 서버의 map 전환 실패 시 상태가 반쯤 바뀌던 버그 수정(원자적). 상대 경로는 저장소 루트 기준.
+- PCD 내보내기 (2026-09-10): export_pcd.py <manifest> out.pcd --source voxels|voxels_occ|occupancy --exclude unknown,person,… --min-nsem N --occ-filter 1/0.
+  PCD v0.7 binary, 필드 x y z rgb(packed float, PCL 관례) label(uint32; 사전 순서, other=N, unknown=N+1) + <out>_legend.json. 포털 상세 "Download PCD…" 대화상자(클래스 체크, 기본 unknown·person 제외).
+  캐시: output/<맵>/compiled/export/<맵>_<src>_no-…_<hash>.pcd. Open3D 는 xyz+rgb 만 읽음(label 은 numpy 로).
