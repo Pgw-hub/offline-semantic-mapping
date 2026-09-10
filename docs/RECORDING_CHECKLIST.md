@@ -13,6 +13,12 @@
 | `d455_front/rgb`, `d455_front/depth`(aligned) | 의미 부여 | 지금까지와 동일. 헤더 시각 = 같은 시계 |
 | (선택) `/imu`, GPS | 트랙 1 개선용 | 있으면 좋음 |
 
+## mcap recorder 설정 (raisin_mcap_recorder_plugin/config/params.yaml `record_topics`)
+- 추가(config 만으로 됨): `"/Odometry/base odom"`, `"/path/pgo path"` — 이전 데이터셋엔 /Odometry/base 만 있었음
+- **레코더에 PointCloud2·KeyframeCloud 직렬화기가 없음** → `/cloud_registered`, `/pgo/keyframe_cloud` 는 소스 추가 + 재빌드 필요. 초안: docs/mcap_recorder_pointcloud2.patch.md. 빌드 전이면 두 줄은 무시됨.
+- 이미지: `d455_front/rgb rgb_image`, `d455_front/depth depth_image` 의 `off` 를 지우거나 웹 UI 에서 켜기 (이전과 동일)
+- 그래도 안 되면 대안: /cloud_registered 없이 `/livox/lidar` + `/Odometry/base` + 저장된 `<name>.txt`/`.pcd` 만으로도 트랙 2 진행 가능 (deskew 는 우리 쪽에서, 키프레임 클라우드는 raw 스캔에서 재구성)
+
 ## 종료 시 로봇에서 저장해 올 파일 (`save_point_cloud_map` 서비스, log/map/<name>/)
 - `<name>.pcd` — 키프레임 클라우드를 보정 자세로 합친 전역 지도. ★실로봇은 `result.save_map_voxel_size: 0.5` 로 다운샘플 → **0.05~0.1 로 바꿔서 저장** (기본값이면 의미 입히기엔 너무 거침)
 - `<name>.txt` — 키프레임 궤적, TUM 형식 `# timestamp tx ty tz qx qy qz qw` (초 단위 double, 키프레임 보정 자세). **이게 keyframe_cloud 의 자세 정답** (idx 순서·timestamp 로 매칭)
