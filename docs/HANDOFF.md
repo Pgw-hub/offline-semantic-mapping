@@ -252,3 +252,12 @@
   남은 오라벨의 원인: 차 지붕·유리의 반사(SegFormer 가 tree/building 으로 판정) → 세그 정확도 몫. 후처리(차량 덩어리 위 0.6m 관측≤2 재배정)는 미적용.
   비교 rrd: tools/compare_maps_rerun.py A B out.rrd (before/·after/ 나란히) → output/web_172935_l05_cdv2_fix/compiled/compare_before_after.rrd.
   ★비교 빌드 요령: 새 root 에 dataset/·sem/ 심볼릭링크 → C 부터만 재실행 (4분).
+
+## 초기 위치 잡기 (2026-09-10)
+- localize.py: 정합용 지도 = map_points(source: voxels | voxels_occ(표면복셀 ∩ occupancy≠free, 동적 제거) | occupancy), 제외 클래스 기본 person,car.
+  다중 스케일 point-to-plane ICP(0.4/2.5m → 0.2/1.0 → 0.1/0.4). --sweep 는 보류 로그 스캔(0.5s 누적)에 (r, dyaw) 오차를 주고 수렴 성공률 표. 정합 1회 ≈ 2s(전역 340만 점).
+- tools/localize_server.py (:9093, 컨테이너, 포트 공개를 위해 컨테이너 재생성 -p 9093:9093): 지도 메모리 상주, 스캔 후보(보류 로그 6~10, 커버리지≥0.4) 186개,
+  요청마다 초기 자세 주변 40m crop → ICP ≈1.1s. 결과: 단계별 자세·최종·fitness/rmse·정답 대비 오차. rrd 는 RecordingStream 을 만들고 disconnect 로 flush(전역 rr.save 는 서버에서 안 씀).
+  시작: tools/start_localize_server.sh <manifest> [logs]. 포털 Localization 탭이 host:9093 을 직접 호출(VSCode 면 9093 도 포워딩).
+- 첫 결과 (지도 web_172935_l05_cdv2_fix, 스캔 log_006#0): 초기 오차 1.5m/20° → 0.017m/0.04° (1.1s); 4.2m/60° 는 yaw 다중 시작으로 → 0.018m/0.04° (4.2s).
+- 배치 스윕(sweep)은 사용자 요청으로 중단 → 대화형 도구로 대체. 필요하면 localize.py --sweep 그대로 사용 가능.
