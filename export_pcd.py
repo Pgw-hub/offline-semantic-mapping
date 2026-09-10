@@ -25,13 +25,17 @@ def write_pcd(path, xyz, rgb=None, label=None):
     return n
 
 
-def export(manifest, out, source="voxels", exclude=("person", "car")):
+def export(manifest, out, source="voxels", exclude=(), min_nsem=0, occ_filter=None):
+    """exclude: 클래스 이름 + 'other' + 'unknown' 중 뺄 것. occ_filter: None(소스 기본) / True / False — occupancy free·동적 복셀 제거 여부"""
     mp = MapPackage(manifest); names = mp.classes; lab = mp.labels(); n_cls = len(names)
+    exclude = tuple(exclude)
     if source in ("voxels", "voxels_occ"):
         keep = np.ones(len(lab), bool)
-        if source == "voxels_occ":
-            ex = [names.index(c) for c in exclude if c in names]; keep &= ~np.isin(lab, ex)
-            if mp.occ is not None: keep &= (mp.surf_state != 0) & ~mp.surf_removed
+        ex = [names.index(c) for c in exclude if c in names] + ([n_cls] if "other" in exclude else []) + ([n_cls + 1] if "unknown" in exclude else [])
+        keep &= ~np.isin(lab, ex)
+        use_occ = (source == "voxels_occ") if occ_filter is None else bool(occ_filter)
+        if use_occ and mp.occ is not None: keep &= (mp.surf_state != 0) & ~mp.surf_removed
+        if min_nsem > 0: keep &= mp.n_sem >= min_nsem
         xyz = mp.voxel_centers()[keep]; rgb = mp.rgb[keep]; label = lab[keep]
     elif source == "occupancy":
         O = mp.occ; occm = O["state"] == 1; xyz = ((O["ijk"] + 0.5) * O["res"])[occm]; rgb = None; label = None
@@ -39,12 +43,14 @@ def export(manifest, out, source="voxels", exclude=("person", "car")):
         raise ValueError(source)
     n = write_pcd(out, xyz, rgb, label)
     legend = {"source": source, "points": int(n), "frame": mp.man.get("frame"), "label_ids": {**{i: c for i, c in enumerate(names)}, n_cls: "other", n_cls + 1: "unknown"},
-              "classdict": mp.classdict.get("name"), "excluded": list(exclude) if source == "voxels_occ" else [], "rgb": "packed uint32 (r<<16|g<<8|b) stored as float bits (PCL convention)"}
+              "classdict": mp.classdict.get("name"), "excluded": list(exclude), "min_nsem": min_nsem, "occupancy_filter": (source == "voxels_occ") if occ_filter is None else bool(occ_filter),
+              "rgb": "packed uint32 (r<<16|g<<8|b) stored as float bits (PCL convention)"}
     json.dump(legend, open(os.path.splitext(out)[0] + "_legend.json", "w"), ensure_ascii=False, indent=1)
     return n
 
 
 if __name__ == "__main__":
-    ap = argparse.ArgumentParser(); ap.add_argument("manifest"); ap.add_argument("out"); ap.add_argument("--source", default="voxels", choices=["voxels", "voxels_occ", "occupancy"]); ap.add_argument("--exclude", default="person,car")
-    a = ap.parse_args(); t = time.time(); n = export(a.manifest, a.out, a.source, tuple(x for x in a.exclude.split(",") if x))
+    ap = argparse.ArgumentParser(); ap.add_argument("manifest"); ap.add_argument("out"); ap.add_argument("--source", default="voxels", choices=["voxels", "voxels_occ", "occupancy"])
+    ap.add_argument("--exclude", default="", help="뺄 클래스 (쉼표; other, unknown 포함 가능)"); ap.add_argument("--min-nsem", type=int, default=0); ap.add_argument("--occ-filter", type=int, default=-1, help="1/0 강제, -1 = 소스 기본")
+    a = ap.parse_args(); t = time.time(); n = export(a.manifest, a.out, a.source, tuple(x for x in a.exclude.split(",") if x), a.min_nsem, None if a.occ_filter < 0 else bool(a.occ_filter))
     print(f"{n:,} points → {a.out} ({os.path.getsize(a.out)/1e6:.1f} MB, {time.time()-t:.1f}s)")

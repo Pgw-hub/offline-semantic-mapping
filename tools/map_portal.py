@@ -217,12 +217,16 @@ class H(http.server.SimpleHTTPRequestHandler):
             if src not in ("voxels", "voxels_occ", "occupancy"): return self.send_json({"error": "source"}, 400)
             man = os.path.join(OUT, name, "compiled", "map_manifest.json")
             if not os.path.exists(man): return self.send_json({"error": "no map"}, 404)
-            exp = os.path.join(OUT, name, "compiled", "export"); os.makedirs(exp, exist_ok=True); out = os.path.join(exp, f"{name}_{src}.pcd")
+            exclude = tuple(x for x in q.get("exclude", [""])[0].split(",") if x); min_nsem = int(q.get("min_nsem", ["0"])[0]); occf = q.get("occ", [""])[0]; occ_filter = None if occf == "" else occf == "1"
+            import hashlib; tag = hashlib.md5(f"{src}|{','.join(sorted(exclude))}|{min_nsem}|{occ_filter}".encode()).hexdigest()[:8]
+            fname = f"{name}_{src}" + (f"_no-{'-'.join(sorted(exclude))}" if exclude else "") + (f"_n{min_nsem}" if min_nsem else "") + ("" if occ_filter is None else ("_occ" if occ_filter else "_noocc")) + f"_{tag}.pcd"
+            exp = os.path.join(OUT, name, "compiled", "export"); os.makedirs(exp, exist_ok=True); out = os.path.join(exp, fname)
             if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(man):
                 try:
-                    import export_pcd; export_pcd.export(man, out, src)
+                    import export_pcd; export_pcd.export(man, out, src, exclude, min_nsem, occ_filter)
                 except Exception as e: return self.send_json({"error": f"PCD 생성 실패: {e}"}, 500)
-            return self.send_json({"ok": True, "path": f"output/{name}/compiled/export/{name}_{src}.pcd", "legend": f"output/{name}/compiled/export/{name}_{src}_legend.json", "bytes": os.path.getsize(out)})
+            rel = f"output/{name}/compiled/export/{fname}"
+            return self.send_json({"ok": True, "path": rel, "legend": rel[:-4] + "_legend.json", "bytes": os.path.getsize(out)})
         if p.startswith("/api/log/"):
             name = os.path.basename(p[len("/api/log/"):]); f = os.path.join(ROOT, "sessions", f"{name}_build.out")
             if not os.path.exists(f): return self.send_json({"error": "no log"}, 404)
