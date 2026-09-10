@@ -212,6 +212,17 @@ class H(http.server.SimpleHTTPRequestHandler):
             return self.send_json({"jobs": JOBS.view(), "container": CONTAINER})
         if p == "/api/classdicts":
             return self.send_json({"classdicts": CD.list_all(), "roles": CD.ROLES, "role_cost": CD.ROLE_GROUND_COST, "ade_labels": ADE_LABELS})
+        if p.startswith("/api/maps/") and p.endswith("/pcd"):
+            name = os.path.basename(p[len("/api/maps/"):-len("/pcd")]); q = urllib.parse.parse_qs(u.query); src = q.get("source", ["voxels"])[0]
+            if src not in ("voxels", "voxels_occ", "occupancy"): return self.send_json({"error": "source"}, 400)
+            man = os.path.join(OUT, name, "compiled", "map_manifest.json")
+            if not os.path.exists(man): return self.send_json({"error": "no map"}, 404)
+            exp = os.path.join(OUT, name, "compiled", "export"); os.makedirs(exp, exist_ok=True); out = os.path.join(exp, f"{name}_{src}.pcd")
+            if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(man):
+                try:
+                    import export_pcd; export_pcd.export(man, out, src)
+                except Exception as e: return self.send_json({"error": f"PCD 생성 실패: {e}"}, 500)
+            return self.send_json({"ok": True, "path": f"output/{name}/compiled/export/{name}_{src}.pcd", "legend": f"output/{name}/compiled/export/{name}_{src}_legend.json", "bytes": os.path.getsize(out)})
         if p.startswith("/api/log/"):
             name = os.path.basename(p[len("/api/log/"):]); f = os.path.join(ROOT, "sessions", f"{name}_build.out")
             if not os.path.exists(f): return self.send_json({"error": "no log"}, 404)
