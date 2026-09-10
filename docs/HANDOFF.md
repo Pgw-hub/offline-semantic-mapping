@@ -279,3 +279,14 @@
 - deskew 검증 (geometry/deskew.py, deskew_eval.py; 172935/log_002, 이동 구간 81쌍 연속 스캔 NN 중앙값):
   raw 7.93cm → deskew 6.93cm (−12.6%), "헤더=스캔 끝" 가설은 8.85cm 로 악화 ⇒ `/Odometry/base` 와 스캔 header 는 스캔 시작 시각. 지면 두께 지표는 skew 에 무감(8.0→8.3cm) 이라 폐기.
 - refer/ (497MB, 로봇 플러그인 복사본) 은 .gitignore.
+- 오프라인 PGO 구현 (geometry/build_graph.py, 2026-09-10): 로그별 스트리밍 → deskew 키프레임(1m/10°, 앞뒤 ±2 스캔 누적, 5cm) → 오도메트리 엣지 →
+  루프 후보(반경 8m, 인덱스 차 ≥40, i 당 최근접 1개) GICP(0.1m, 1.5→0.6m corr) + point-to-plane 마무리, 수락 fitness≥0.55·rmse≤0.10 → GTSAM LM(Huber) → 2라운드.
+  오도메트리 점프>5m(SLAM 붕괴) 가드. 산출 graph/graph.json + clouds + odom_log_XXX.npz + graph_view.rrd(before/after). 실행: geom_rebuild 또는 offline_3d_semantic_map(gtsam pip 설치함) 컨테이너.
+  172935 log0-10 (895 kf, 654s): 루프 55, 자세 변화 평균 0.16m 최대 0.32m, 루프 잔차 rms 0.9cm, 101s. held-out 재방문 쌍 60개 GICP 일관성(geometry/graph_eval.py):
+  odom 초기화 5.4cm(p90 9.9) → PGO 2.5cm(p90 4.6) 중앙값 — 재방문 불일치 −54%. 회전은 0.15°→0.14°(이미 작음). output/geom_172935_l00_10/graph/{graph_view,eval}.rrd
+  log0-2 만(231 kf): 루프 3, 자세 변화 ≤7cm → 짧은 구간은 PGO 효과 미미, 이득은 주로 deskew.
+- 파이프라인 연결: geometry/pose_provider.py(PoseProvider.at, Δ 보간) · tools/preprocess/{mcap_to_cg,build_voxel_sem_map,export_lidar_scans}.py --pose-graph (export 는 점별 deskew) ·
+  오케스트레이터 단계 P + options.pose_graph(기본 false) · 포털 빌드 폼 체크박스 "PGO 기하 재구성", 상세 Stats "Geometry" 행(kf/loops/shift/revisit, before/after rerun 링크).
+  매니페스트 frame "SLAM world, PGO-corrected", pose_graph: graph/graph.json.
+- 검증 빌드 sessions/session_web_172935_l02_pgo.yaml (root web_172935_l02_pgo, l02_cdv2_fix 와 동일 옵션 + pose_graph, sem 심볼릭링크 재사용) → 주차장 held-out(log_003) 초기화 재시험 예정.
+- 두 인스턴스 동시 작업 주의: 다른 Claude 인스턴스(gw-park-35)가 build_graph.py 를 덮어쓴 일이 있었음 → 현재 파일이 정식(그쪽 버전 + SLAM 붕괴 가드). 동시에 같은 저장소를 만지지 말 것.

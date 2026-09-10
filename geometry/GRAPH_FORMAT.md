@@ -5,7 +5,10 @@
 ```
 <root>/graph/
 ├── graph.json          메타 + 노드 목록 + 엣지 목록
-└── clouds/%06d.npz     노드별 deskew 된 LiDAR 클라우드 (base 프레임, float32 xyz [+ intensity])
+├── clouds/%06d.npz     노드별 deskew 된 LiDAR 클라우드 (base 프레임, float32 xyz; 서버 PGO 는 앞뒤 ±2 스캔 누적·5cm 다운샘플)
+├── odom_log_XXX.npz    (선택) 원 /Odometry/base 전체 {ns, pos, quat_wxyz} — 임의 시각 자세 보간용. graph.json 의 odom_files 가 가리킴
+├── graph_view.rrd      (선택) before(odom)/after(PGO) 비교 rerun
+└── eval_heldout.json   (선택) 최적화에 안 쓴 재방문 쌍 GICP 일관성 (geometry/graph_eval.py)
 ```
 
 ## graph.json
@@ -25,9 +28,14 @@
   "edges": [
     {"from": 0, "to": 1, "type": "odom | loop | gps | prior", "T_rel": [[...4x4...]], "info": [6개 대각 정보량], "fitness": 0.97}
   ],
+  "odom_files": {"log_000": "odom_log_000.npz"},   // 서버 PGO 산출에만 있음. 로봇 SLAM 산출은 T_odom 노드값만으로 보간(정밀도 낮음) 하거나 /Odometry/base 를 같이 저장
   "loops": 12, "optimized_at": "2026-09-11 10:20", "residual_rms_m": 0.03
 }
 ```
+
+## 소비자 (읽는 쪽)
+- `geometry/pose_provider.py` PoseProvider(graph_dir).at(ns) → 보정 자세. Δ_k=T_corr(k)·T_odom(k)⁻¹ 를 인접 노드 사이에서 보간(위치 선형·회전 slerp) → 노드 경계 점프 없음.
+- 파이프라인: mcap_to_cg / build_voxel_sem_map / export_lidar_scans 의 `--pose-graph <graph_dir>` (export 는 점별 deskew 까지). 오케스트레이터 options.pose_graph: true → 단계 P 가 그래프를 만들고 A/S/C 에 전달.
 
 ## 규약
 - 노드 시각 = 그 keyframe 의 **LiDAR 스캔 헤더 시각**. 플러그인의 KeyframeCloud.header.stamp 도 같은 값(`raisin::toTimestamp(scan_stamp_)`).

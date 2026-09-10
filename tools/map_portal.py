@@ -22,7 +22,8 @@ OPTION_SPEC = {   # 웹 폼에서 받는 옵션: (타입, 기본값, 범위)
     "occupancy_res": ("float", 0.2, (0.1, 0.5)), "prob_hit": ("float", 0.85, (0.5, 0.99)), "prob_miss": ("float", 0.45, (0.05, 0.5)),
     "h_ground": ("int", 2, (1, 10)), "h_obs": ("int", 3, (1, 10)), "clearance": ("float", 1.4, (0.5, 3.0)), "band_min": ("float", 0.3, (0.1, 1.0)),
     "view_cubes": ("bool", False, None), "view_coarse": ("float", 0.3, (0.1, 1.0)), "video_speed": ("int", 15, (0, 60)), "video_pipeline": ("bool", True, None),
-    "classdict": ("str", "default", None), "label_edge_px": ("int", 4, (0, 12)), "require_depth": ("bool", True, None)}
+    "classdict": ("str", "default", None), "label_edge_px": ("int", 4, (0, 12)), "require_depth": ("bool", True, None),
+    "pose_graph": ("bool", False, None)}
 HTML = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "map_portal.html"), encoding="utf-8").read()
 sys.path.insert(0, ROOT); import classdict as CD
 ADE_LABELS = json.load(open(os.path.join(ROOT, "classdicts", "ade20k_labels.json"))) if os.path.exists(os.path.join(ROOT, "classdicts", "ade20k_labels.json")) else []
@@ -128,7 +129,7 @@ def make_yaml(spec):
                      "vlm_edges": opts["vlm_edges"], "vlm_max_pairs": opts["vlm_max_pairs"], "occupancy_res": opts["occupancy_res"], "prob_hit": opts["prob_hit"], "prob_miss": opts["prob_miss"],
                      "costmap": {"h_ground": opts["h_ground"], "h_obs": opts["h_obs"], "clearance": opts["clearance"], "band_min": opts["band_min"]},
                      "view_cubes": opts["view_cubes"], "view_coarse": opts["view_coarse"], "video_speed": opts["video_speed"], "video_pipeline": opts["video_pipeline"],
-                     "classdict": opts["classdict"], "label_edge_px": opts["label_edge_px"], "require_depth": opts["require_depth"]}}
+                     "classdict": opts["classdict"], "label_edge_px": opts["label_edge_px"], "require_depth": opts["require_depth"], "pose_graph": opts["pose_graph"]}}
     if opts["classdict"] != "default" and not os.path.exists(os.path.join(CD.DIR, f"{opts['classdict']}.json")): raise ValueError(f"클래스 사전 '{opts['classdict']}' 없음")
     import yaml as _y
     path = os.path.join(SESS, f"session_{name}.yaml"); os.makedirs(SESS, exist_ok=True)
@@ -180,7 +181,17 @@ def scan_maps():
         if os.path.exists(qp):
             try: qual["log_bounds"] = json.load(open(qp)).get("log_bounds", [])
             except Exception: pass
-        maps.append({"name": name, "quality": qual, "quality_rrd": rel("data_quality.rrd"), "bev": rel("bev.png"), "tags": dict(sorted(tags.items(), key=lambda kv: -kv[1])), "edges_sample": edges_sample, "map_id": man.get("map_id", name), "built": man.get("built", ""), "frame": man.get("frame", ""),
+        graph = None; gp = os.path.join(OUT, name, "graph", "graph.json")
+        if os.path.exists(gp):
+            try:
+                import numpy as _np
+                g = json.load(open(gp)); To = _np.array([n["T_odom"] for n in g["nodes"]])[:, :3, 3]; Tc = _np.array([n["T_corr"] for n in g["nodes"]])[:, :3, 3]
+                sh = _np.linalg.norm(Tc - To, axis=1); ev = os.path.join(OUT, name, "graph", "eval_heldout.json")
+                graph = {"source": g.get("source"), "keyframes": len(g["nodes"]), "loops": g.get("loops", 0), "shift_mean_m": round(float(sh.mean()), 3), "shift_max_m": round(float(sh.max()), 3),
+                         "rrd": f"output/{name}/graph/graph_view.rrd" if os.path.exists(os.path.join(OUT, name, "graph", "graph_view.rrd")) else None,
+                         "eval": json.load(open(ev)) if os.path.exists(ev) else None, "eval_rrd": f"output/{name}/graph/eval.rrd" if os.path.exists(os.path.join(OUT, name, "graph", "eval.rrd")) else None}
+            except Exception as ex: graph = {"error": str(ex)}
+        maps.append({"name": name, "quality": qual, "graph": graph, "quality_rrd": rel("data_quality.rrd"), "bev": rel("bev.png"), "tags": dict(sorted(tags.items(), key=lambda kv: -kv[1])), "edges_sample": edges_sample, "map_id": man.get("map_id", name), "built": man.get("built", ""), "frame": man.get("frame", ""),
                      "mcap_dir": man.get("source", {}).get("mcap_dir", ""), "logs": logs, "n_logs": len(logs), "calib": man.get("source", {}).get("calib", ""),
                      "options": man.get("options", {}), "files": man.get("files", {}), "package_mb": round(size / 1e6, 1),
                      "summary": summ, "rrd": rel("map_package.rrd"), "manifest": f"output/{name}/compiled/map_manifest.json",
