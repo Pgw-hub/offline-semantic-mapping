@@ -308,3 +308,8 @@
 - geometry/build_graph.py: 점프 가드가 두 번째 로그에서 logs.index 로 죽던 버그 수정. 이 데이터셋은 실시간 오도메트리 점프 때문에 자체 PGO(odom 엣지) 부적합 → 로봇 PGO 자세 사용.
 - 빌드: sessions/session_web_103657_l00_09_robotpgo.yaml (log0-9, 0~600s, 자세=로봇 PGO 546 노드). 전 구간(l00_13)은 <name>.txt 확보 후 --traj 로 graph 재생성 → 재빌드 (sem 은 심볼릭링크 재사용).
 - geometry/robot_pgo_path.py 는 초기 진단용(robot_graph.py 로 대체).
+- ★20260911 데이터 기하 판정 (2026-09-11 오후): 실시간 /Odometry/base 의 점프 3건(248/416/584s, 3~4m)과 로봇 최종 /path/pgo 의 같은 자리 3.5m 계단이 일치.
+  점프 제거(dejump) 오도메트리로 자체 PGO(build_graph --dejump --loop-radius 12 --max-shift 10, output/web_103657_l00_09/graph)를 돌리면 log_009↔log_003 재방문에서 GICP 5~7m 이동(fit 0.9)
+  루프 5개 수락, 최적화 후 루프 잔차 rms 0.57m(1차 데이터셋 0.9cm) → 루프끼리 불일치. 점프 제거 후 드리프트가 7m 라는 뜻이면 점프=PGO 보정이 맞지만, 주차장 반복 구조의
+  거짓 정합 가능성도 있어 이 그래프는 지도 빌드에 쓰지 않음(rrd 만 남김). 639.6s(96샘플)·725.6s(101샘플) 창은 자세가 10초간 20m/s 로 미끄러짐 = SLAM 붕괴 또는 거짓 루프클로저, 최종 /path/pgo 에도 9.6m 계단과 2m+ 간격 113개.
+  ⇒ 이 데이터셋에서 신뢰할 수 있는 구간은 0~600s(log0-9). 지도는 로봇 최종 PGO 자세(robot_graph.py, 시각 복원 ±0.1s)로 빌드 중(web_103657_l00_09_robotpgo). 로봇 저장 지도(.pcd/.txt)로 교차 확인 예정.
