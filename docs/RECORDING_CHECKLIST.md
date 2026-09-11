@@ -48,3 +48,11 @@
 2. keyframe_cloud 한 개의 점 수 (~1만 이상이면 다운샘플 완화 성공).
 3. `/path/pgo` 마지막 메시지 poses 수 == 마지막 keyframe idx+1.
 4. `<name>.txt` 줄 수 == 키프레임 수, timestamp 가 keyframe_cloud header.stamp 와 일치.
+
+## 시뮬레이션 데이터셋 (트랙 2 첫 시도, 2026-09-11 계획)
+- lidar_slam 은 `Raibo.real_robot: false` 면 sim 모드: keyframe_cloud 발행 다운샘플 없음(원본), save_point_cloud_map 복셀 0.1 m 고정, `sim_evaluation` 자동 켜져
+  `<name>_gt.pcd` / `<name>_gt.txt`(정답 지도·궤적) 도 함께 저장 → 우리 지도 정합 정확도 평가에 그대로 사용.
+- 저장 위치: `<workspace>/log/map/<name>/{<name>.pcd, <name>.txt, <name>_gt.pcd, <name>_gt.txt, <name>_sc.bin, waypoints}` 폴더째 가져올 것.
+- 레코더: `/Odometry/truth odom`(기본 있음, sim 에서만 값이 옴) + `/Odometry/base odom` + `/path/pgo path` + d455 raw rgb/depth(off 제거). `/cloud_registered`·`/pgo/keyframe_cloud` 는 pointcloud2 패치 빌드에서만.
+- 주의: 매핑은 `start_mapping` 으로 시작(Mapping 모드 아니면 keyframe/path 발행 없음). 종료 전 `save_point_cloud_map` 호출. raisin_config(calibration) 포함.
+- 1분 테스트 후 확인: `/path/pgo` 마지막 poses 수 == `<name>.txt` 줄 수, `.txt` timestamp 가 `/Odometry/base` stamp 와 일치, mcap 메시지 크기가 점 수에 따라 변하는지(고정 크기면 오독).
