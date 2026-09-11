@@ -69,7 +69,8 @@ if __name__ == "__main__":
     print(f"오도메트리 {len(ns)} 샘플 {(ns[-1]-ns[0])/1e9:.0f}s · 루프클로저 점프 샘플 {len(jumps)} · /path/pgo 마지막 poses {0 if P is None else len(P)} [{time.time()-t0:.0f}s]")
     if a.traj:
         D = np.loadtxt(a.traj, comments="#"); kf_ns = (D[:, 0] * 1e9).round().astype(np.int64); Tp = np.array([T_of(r[1:4], r[4:8]) for r in D]); src = f"robot lidar_slam saveMap traj ({os.path.basename(a.traj)})"
-        k = np.searchsorted(ns, kf_ns); k = np.clip(k, 0, len(ns) - 1); near = np.abs(ns[k] - kf_ns) / 1e6; print(f"TUM 궤적 {len(D)} 키프레임 · 오도메트리 stamp 와 차이 중앙 {np.median(near):.1f}ms 최대 {near.max():.1f}ms")
+        k = np.clip(np.searchsorted(ns, kf_ns), 1, len(ns) - 1); k = np.where(np.abs(ns[k - 1] - kf_ns) < np.abs(ns[k] - kf_ns), k - 1, k)   # 가장 가까운 오도메트리 샘플
+        near = np.abs(ns[k] - kf_ns) / 1e6; print(f"TUM 궤적 {len(D)} 키프레임 · 오도메트리 stamp 와 차이 중앙 {np.median(near):.1f}ms 최대 {near.max():.1f}ms (>50ms {int((near>50).sum())}개)")
         j = k; err = np.zeros(len(D))
     else:
         assert P is not None, "/path/pgo 없음"
@@ -80,9 +81,11 @@ if __name__ == "__main__":
         keep = np.isfinite(err) & (err <= a.max_err); keep[0] = True
         if a.tmax: keep &= (kf_ns - ns[0]) / 1e9 <= a.tmax
         print(f"노드 필터: {len(keep)} → {keep.sum()} (오차>{a.max_err}m 또는 tmax 초과 제외)"); Tp, j, err, kf_ns = Tp[keep], j[keep], err[keep], kf_ns[keep]
-    # 세그먼트별 보정 Δ_k = T_corr·T_odom⁻¹ 의 일관성 (점프 사이에서는 거의 상수여야 함)
-    To = T[j]; D_ = Tp @ np.linalg.inv(To); dpos = np.linalg.norm(np.diff(D_[:, :3, 3], axis=0), axis=1); seg_jump = np.array([((jumps > kf_ns[i]) & (jumps <= kf_ns[i+1])).any() for i in range(len(kf_ns) - 1)])
-    print(f"Δ 연속성(점프 없는 구간) 중앙 {np.median(dpos[~seg_jump])*100:.1f}cm p90 {np.percentile(dpos[~seg_jump],90)*100:.1f}cm 최대 {dpos[~seg_jump].max()*100:.0f}cm · 점프 걸친 구간 {seg_jump.sum()}개 Δ 변화 중앙 {np.median(dpos[seg_jump])*100 if seg_jump.any() else 0:.0f}cm")
+    # 연속 노드 간 상대이동 일관성: PGO 상대이동 vs 실시간 오도메트리 상대이동 (점프 없는 구간은 수 cm 여야 함)
+    To = T[j]; rp = np.einsum("nij,njk->nik", np.linalg.inv(Tp[:-1]), Tp[1:]); ro = np.einsum("nij,njk->nik", np.linalg.inv(To[:-1]), To[1:])
+    dpos = np.linalg.norm(rp[:, :3, 3] - ro[:, :3, 3], axis=1); dyaw = np.abs(np.degrees(wrap(np.arctan2(rp[:, 1, 0], rp[:, 0, 0]) - np.arctan2(ro[:, 1, 0], ro[:, 0, 0]))))
+    seg_jump = np.array([((jumps > kf_ns[i]) & (jumps <= kf_ns[i+1])).any() for i in range(len(kf_ns) - 1)]); ok_ = ~seg_jump
+    print(f"연속 노드 상대이동 (PGO vs 오도메트리, 점프 없는 {ok_.sum()}구간): 위치 차 중앙 {np.median(dpos[ok_])*100:.1f}cm p90 {np.percentile(dpos[ok_],90)*100:.1f}cm 최대 {dpos[ok_].max()*100:.0f}cm · yaw 차 중앙 {np.median(dyaw[ok_]):.2f}° 최대 {dyaw[ok_].max():.1f}° · 점프 걸친 구간 {seg_jump.sum()}개")
     corr = np.linalg.norm(Tp[:, :3, 3] - To[:, :3, 3], axis=1); print(f"최종 PGO − 실시간 /Odometry/base: 위치 차 중앙 {np.median(corr)*100:.0f}cm p90 {np.percentile(corr,90)*100:.0f}cm 최대 {corr.max()*100:.0f}cm")
     os.makedirs(a.out, exist_ok=True)
     for name, (n_, p_, qx_) in per_log.items():
