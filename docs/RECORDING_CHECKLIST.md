@@ -1,5 +1,16 @@
 # 2차 데이터셋 녹화 체크리스트 (트랙 2: 로봇 SLAM 기하 위에 의미 입히기)
 
+## ★ 20260911_103657 녹화 결과 점검 (2026-09-11)
+- `/cloud_registered` **손상**: `pointcloud`(Livox CustomMsg) typekey 로 기록 → 실제 메시지는 sensor_msgs::PointCloud2. 메시지마다 2,308 B(필드 테이블 x,y,z,intensity,t,timestamp + 메모리 쓰레기), 점 데이터 없음. 복구 불가.
+  → 레코더에 `pointcloud2` typekey 추가(docs/mcap_recorder_pointcloud2.patch.md) 후 `"/cloud_registered pointcloud2"` 로 다시 녹화해야 함.
+- `/pgo/keyframe_cloud` 없음 (config 에 안 넣었거나 typekey 없어 무시).
+- `/Odometry/base` 는 Mapping 모드에서 **PGO 보정이 실시간 반영된 자세** (getPublishWorldBase). 루프클로저마다 수 m 점프
+  (248s 3.8m · 416s 4.2m · 584s 2.9m · 639.6s ~10m(96샘플 동안 두 프레임을 번갈아 발행) · 725.6s ~9.6m(101샘플)). 즉 실시간 오도메트리로 지도를 만들면 프레임이 섞임.
+- `/path/pgo` 998 키프레임(824s, 1m 간격). pose 별 stamp 없음 → geometry/robot_graph.py 가 오도메트리 상대이동 매칭으로 시각 복원(636s 이전은 오차 ≤15cm, 이후 번갈아 발행 창 때문에 불확실).
+  **로봇 저장 `<name>.txt`(TUM, timestamp 포함)를 받으면 `--traj` 로 정확히 대체.**
+- raisin_config 미포함 → 20260827 것 복사해 사용(같은 로봇).
+
+
 근거: refer/raisin_plugin/raisin_lidar_slam_plugin 소스 (2026-09-10 확인)
 
 ## mcap 에 녹화할 토픽

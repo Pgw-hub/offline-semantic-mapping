@@ -24,6 +24,8 @@ class PoseProvider:
         self.ns = np.array([n["stamp_ns"] for n in g["nodes"]], np.int64)
         To = np.array([n["T_odom"] for n in g["nodes"]]); Tc = np.array([n["T_corr"] for n in g["nodes"]])
         D = Tc @ np.linalg.inv(To); self.dq = _R2q(D[:, :3, :3]); self.dp = D[:, :3, 3]
+        # 로봇 PGO 그래프(robot_graph.py): 노드 k 직전 구간에 실시간 오도메트리 점프(루프클로저 반영)가 있으면 jump_ns → 그 구간은 Δ 를 보간하지 않고 점프 시각에서 계단식 전환
+        self.jump_ns = np.array([n.get("jump_ns", -1) for n in g["nodes"]], np.int64)
         ns, pos, q = [], [], []
         for f in g["odom_files"].values():
             o = np.load(os.path.join(graph_dir, f)); ns.append(o["ns"]); pos.append(o["pos"]); q.append(o["quat_wxyz"])
@@ -33,6 +35,7 @@ class PoseProvider:
         """t (N,) → Δ(t) (N,4,4): 감싸는 두 노드 Δ 의 보간. 첫/마지막 노드 밖은 끝 노드 값."""
         t = np.asarray(t, np.int64); k = np.clip(np.searchsorted(self.ns, t), 1, len(self.ns) - 1)
         u = np.clip((t - self.ns[k - 1]) / np.maximum(self.ns[k] - self.ns[k - 1], 1), 0, 1).astype(float)
+        jn = self.jump_ns[k]; has = jn > 0; u = np.where(has, (t >= jn).astype(float), u)
         R = R_batch(slerp_batch(self.dq[k - 1], self.dq[k], u)); p = self.dp[k - 1] * (1 - u)[:, None] + self.dp[k] * u[:, None]
         D = np.tile(np.eye(4), (len(t), 1, 1)); D[:, :3, :3] = R; D[:, :3, 3] = p; return D
     def at_many(self, t):

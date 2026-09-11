@@ -299,3 +299,12 @@
     질의 deskew 로 yaw 해결, 지도 기하(PGO+deskew) 로 위치 오차 절반. 새 지도 occupancy 셀 3.16M→2.95M(−6.7%, 번짐 감소), 객체 92→74.
   ★로봇 온라인 초기화도 질의 스캔을 deskew 해서 넣어야 함(/cloud_registered 사용 또는 IMU 보정). localize 서버는 지금 web_172935_l02_pgo + 로그 3,2(deskew 스캔) 로 전환됨.
   결과 파일: output/web_172935_l02_pgo/{loc_bench.json, loc_bench_oldmap.json}. held-out 질의 스캔은 export_lidar_scans.py --deskew (그래프 없이 원 오도메트리) 로 생성.
+
+## 2차 데이터셋 20260911_103657 (2026-09-11)
+- /home/gw.park/raisin_logs/20260911/... → /data2/20260911/KR-RRT-2604-008_20260911_103657 로 복사(컨테이너 마운트). 14 로그 824s 19GB, raisin_config 는 20260827 복사.
+- 점검 결과는 docs/RECORDING_CHECKLIST.md 상단. 요약: /cloud_registered 손상(typekey 오류), /Odometry/base 는 PGO 실시간 보정 포함(루프클로저 점프 ≤10m), /path/pgo 998kf(stamp 없음).
+- geometry/robot_graph.py: 로봇 최종 PGO(/path/pgo 마지막 메시지 또는 --traj <name>.txt) → graph/ (PoseProvider 규약). /path/pgo 는 점프 제거 오도메트리와 상대이동 매칭으로 시각 복원,
+  --tmax/--max-err 로 신뢰 노드만. 노드 jump_ns → pose_provider.delta 가 그 구간은 보간 대신 점프 시각에서 계단 전환.
+- geometry/build_graph.py: 점프 가드가 두 번째 로그에서 logs.index 로 죽던 버그 수정. 이 데이터셋은 실시간 오도메트리 점프 때문에 자체 PGO(odom 엣지) 부적합 → 로봇 PGO 자세 사용.
+- 빌드: sessions/session_web_103657_l00_09_robotpgo.yaml (log0-9, 0~600s, 자세=로봇 PGO 546 노드). 전 구간(l00_13)은 <name>.txt 확보 후 --traj 로 graph 재생성 → 재빌드 (sem 은 심볼릭링크 재사용).
+- geometry/robot_pgo_path.py 는 초기 진단용(robot_graph.py 로 대체).

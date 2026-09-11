@@ -38,7 +38,7 @@ def extract_keyframes(mcap_dir, logs, t_bl, kf_dist, kf_rot_deg, accum, rmin, rm
         jump = np.linalg.norm(np.diff(odom.pos, axis=0), axis=1); bad = np.where(jump > 5.0)[0]   # SLAM 붕괴(172935 log_011~) 감지
         if len(bad):
             cut = odom.ns[bad[0]]; print(f"  ★ {name}: 오도메트리 점프 {jump[bad[0]]:.1f}m @ +{(cut-odom.ns[0])/1e9:.0f}s → 이후 스캔 제외, 다음 로그부터 중단", flush=True)
-            scans = [s for s in scans if s[0] < cut]; logs = list(logs[: logs.index(li) + 1])
+            scans = [s for s in scans if s[0] < cut]; logs = list(logs[: list(logs).index(li) + 1]) if li in logs else list(logs)
         odom_all[name] = odom
         # 스캔별 deskew 결과 캐시(누적용): (Pb0, R0, p0)
         dsk = [None] * len(scans)

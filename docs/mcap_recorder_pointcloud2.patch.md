@@ -1,5 +1,7 @@
 # mcap_recorder: PointCloud2 / KeyframeCloud 기록 추가 (초안, 미빌드)
 
+★ 20260911_103657 녹화에서 `/cloud_registered` 를 `pointcloud` typekey 로 기록한 결과: 매 메시지 2.3KB 헤더 조각만 남고 점 데이터 손실 (CustomMsg 구조체로 PointCloud2 를 재해석). 아래 패치 없이는 어떤 config 로도 기록 불가.
+
 대상: `raisin_mcap_recorder_plugin/src/mcap_recorder_plugin.cpp`
 현재 레코더의 typekey 11종에는 `sensor_msgs::msg::PointCloud2` 와 `raisin_interfaces::msg::KeyframeCloud` 가 없어
 `/cloud_registered`, `/pgo/keyframe_cloud` 는 config 에 적어도 "unknown typekey" 로 무시된다. 아래를 추가하고 재빌드.
