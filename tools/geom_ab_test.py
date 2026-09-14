@@ -19,7 +19,7 @@ from deskew import Odom
 import yaml
 
 ap = argparse.ArgumentParser(); ap.add_argument("mcap_dir"); ap.add_argument("out"); ap.add_argument("--logs"); ap.add_argument("--sub", type=int, default=4, help="지표 계산용 점 서브샘플")
-ap.add_argument("--rmax", type=float, default=40.0); ap.add_argument("--rmin", type=float, default=0.8); ap.add_argument("--cell", type=float, default=0.1)
+ap.add_argument("--view-sub", type=int, default=3, help="rrd 3D 점 추가 서브샘플 (지표와 무관, 파일 크기용)"); ap.add_argument("--rmax", type=float, default=40.0); ap.add_argument("--rmin", type=float, default=0.8); ap.add_argument("--cell", type=float, default=0.1)
 a = ap.parse_args(); t_all = time.time()
 files = sorted(glob.glob(os.path.join(a.mcap_dir, "log_*.mcap")))
 if a.logs: lo, hi = (a.logs.split(",") + [None])[:2]; files = [f for f in files if int(os.path.basename(f)[4:7]) in range(int(lo), int(hi or lo) + 1)]
@@ -125,7 +125,8 @@ import rerun as rr, rerun.blueprint as rrb
 rr.init("geom_ab"); rr.save(os.path.join(a.out, "ab_view.rrd"))
 def zcol(P): z = P[:, 2]; lo, hi = np.percentile(z, 2), np.percentile(z, 98); zn = np.clip((z - lo) / max(hi - lo, 1e-3), 0, 1); return (np.stack([zn, 1 - np.abs(zn - 0.5) * 2, 1 - zn], 1) * 255).astype(np.uint8)
 # 3D: 화면 픽셀 크기 점(음수 radii = ui points) — 카메라 거리와 무관하게 얇게 보임
-rr.log("raw/points", rr.Points3D(A_all, colors=zcol(A_all), radii=-1.2)); rr.log("registered/points", rr.Points3D(B_all, colors=zcol(B_all), radii=-1.2)); rr.log("rawfix/points", rr.Points3D(C_all, colors=zcol(C_all), radii=-1.2))
+vs = a.view_sub; Av, Bv, Cv = A_all[::vs], B_all[::vs], C_all[::vs]
+rr.log("raw/points", rr.Points3D(Av, colors=zcol(Av), radii=0.015)); rr.log("registered/points", rr.Points3D(Bv, colors=zcol(Bv), radii=0.015)); rr.log("rawfix/points", rr.Points3D(Cv, colors=zcol(Cv), radii=0.015))
 # BEV 래스터 (2 cm): 카메라 조작 없이 비교. 값 = 셀 점 수(로그 스케일) → 벽 두께가 그대로 폭으로 보임
 def bev(P, x0, y0, x1, y1, res):
     W, H = int(np.ceil((x1 - x0) / res)), int(np.ceil((y1 - y0) / res)); u = ((P[:, 0] - x0) / res).astype(int); v = ((y1 - P[:, 1]) / res).astype(int)
