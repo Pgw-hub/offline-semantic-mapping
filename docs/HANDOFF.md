@@ -315,3 +315,13 @@
   ⇒ 이 데이터셋에서 신뢰할 수 있는 구간은 0~600s(log0-9). 지도는 로봇 최종 PGO 자세(robot_graph.py, 시각 복원 ±0.1s)로 빌드 중(web_103657_l00_09_robotpgo). 로봇 저장 지도(.pcd/.txt)로 교차 확인 예정.
 - ✔ web_103657_l00_09_robotpgo 빌드 완료 (2026-09-11, 3,283s): 복셀 1,951만(라벨 622만) · occupancy 2,463만 셀(occupied 685만) · 객체 333 · 코스트맵 1136×1412@0.2m · 패키지 241MB.
   BEV 상 사각 루프 + 남서 지선 경로가 한 장으로 이어짐(3~4m 계단 자리의 이중 벽은 뷰어에서 확인 필요). 포털 목록에 등록됨. 다음: 로봇 .pcd/.txt 와 교차 확인 → 트랙 2.
+
+## 기하 번짐 지배 요인 분석 (2026-09-14)
+- sim 20260914_043619 (tools/geom_ab_test.py, output/geom_ab_0914_043619): raw+/Odometry/base vs /cloud_registered. 차이는 base 프레임 상수 (-1.1,-2.3,+3.3) cm = lidar_slam 하드코딩 imu→lidar 오프셋.
+  빼면 5cm 셀 426k→289k, 두께 2.1→0.1 cm 로 registered 와 동일. 시각 오프셋 스윕: 0 ms 최적, ±10 ms 당 +1.6 cm.
+- 실로봇 172935 log_001/002 (tools/blur_by_motion.py, PGO 자세): 스캔 간 일관성 정지 2.3 cm · 직진 3.0~4.2 · 급회전 4.2~4.5 (deskew ON) / 6.5~8.5 (OFF).
+  ⇒ 실로봇에서 가장 큰 요인은 deskew(회전 시 −35~45%), 그다음 이동 중 자세 오차(직진에서 정지 대비 +1~2 cm; 10 Hz 자세 보간이 보행 진동을 못 담는 탓으로 추정), 바닥은 센서 노이즈 ~2.3 cm.
+  외부파라미터 δ 스윕(tools/extrinsic_search.py): calib(0,0,0) 최적, 지표 곡면이 ±6 cm 에서 4.0~4.2 cm 로 평탄 → 실로봇에선 4 cm 레버암이 노이즈 바닥 아래.
+- 103657 재빌드 web_103657_l00_09_robotpgo_ext (lidar_extrinsic: slam): 두께 6.83→6.84 cm, 일관성 3.44→3.47, 5cm 셀 +0.2%, 지도 전체 3.7 cm 강체 이동. 개선 없음.
+  (이 데이터셋 번짐 6.8 cm 는 /path/pgo 시각 복원 ±0.1 s 지터가 지배 — <name>.txt 확보 시 재확인)
+- 결론: geometry/extrinsics.py 기본 calib 유지(실로봇), sim 세션만 lidar_extrinsic: slam. 다음 개선 후보 = 스캔 내 자세 보간에 robot_state(18 Hz base pose) 또는 IMU 적분 사용.
