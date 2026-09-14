@@ -8,7 +8,7 @@ from deskew import read_mcap, deskew_scan
 import yaml
 ap = argparse.ArgumentParser(); ap.add_argument("mcap"); ap.add_argument("calib"); ap.add_argument("out"); ap.add_argument("--n", type=int, default=25); ap.add_argument("--top", type=int, default=3)
 a = ap.parse_args()
-tr = yaml.safe_load(open(os.path.join(a.calib, "livox_lidar_0_lidar.yaml")))["transform"]; t_bl = np.array([tr["translation"][k] for k in "xyz"])
+from extrinsics import lidar_t_bl; t_bl = lidar_t_bl(a.calib if "a" in dir() else C)
 odom, scans = read_mcap(a.mcap)
 yaw = np.degrees(np.unwrap(np.arctan2(2 * (odom.q[:, 0] * odom.q[:, 3] + odom.q[:, 1] * odom.q[:, 2]), 1 - 2 * (odom.q[:, 2] ** 2 + odom.q[:, 3] ** 2))))
 rate = np.abs(np.gradient(yaw, odom.ns / 1e9))                          # deg/s

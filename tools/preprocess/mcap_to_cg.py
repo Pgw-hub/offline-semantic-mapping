@@ -10,6 +10,7 @@ import argparse, os, struct, zlib
 
 import cv2
 import numpy as np
+import sys as _s, os as _o; _s.path.insert(0, _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), '..', '..', 'geometry')); from extrinsics import lidar_t_bl
 import yaml
 from mcap.reader import make_reader
 
@@ -88,7 +89,7 @@ def main():
     ud = np.clip(ud, 0, Wd - 1); vd = np.clip(vd, 0, Hd - 1)
 
     # base->lidar (항등회전 + 평행이동; 점의 180° 보정은 decode_lidar 에서)
-    T_bl = np.eye(4); T_bl[:3, 3] = [-0.0579, 0.0, 0.20932]
+    T_bl = np.eye(4); T_bl[:3, 3] = lidar_t_bl(a.calib)                      # geometry/extrinsics.py (LIDAR_EXTRINSIC=slam|calib)
 
     # --- 1pass: odometry + depth 압축본 (+lidar) 적재 ---
     gt_ns, gt_pos, gt_quat = [], [], []

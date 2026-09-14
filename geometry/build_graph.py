@@ -221,7 +221,7 @@ if __name__ == "__main__":
     else:
         mcap_dir = a.src; logs = parse_logs(a.logs or "0"); out = a.out or os.path.join(mcap_dir, "graph")
     if a.logs: logs = parse_logs(a.logs)
-    tr = yaml.safe_load(open(os.path.join(mcap_dir, "raisin_config/calibration/livox_lidar_0_lidar.yaml")))["transform"]; t_bl = np.array([tr["translation"][k] for k in "xyz"])
+    from extrinsics import lidar_extrinsic; t_bl, _, ext_mode = lidar_extrinsic(os.path.join(mcap_dir, "raisin_config/calibration")); print(f"    LiDAR 외부파라미터 [{ext_mode}] t_bl={np.round(t_bl,4).tolist()}")
     print(f"[1] 키프레임 추출: {mcap_dir} logs={logs} (kf {a.kf_dist}m/{a.kf_rot}°, accum ±{a.accum})", flush=True)
     dj = None
     if a.dejump:

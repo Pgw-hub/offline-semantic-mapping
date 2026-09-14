@@ -3,7 +3,7 @@
 출력: <out_dir>/%06d.npz {xyz (N,3) float32 world, origin (3,) float32 world, stamp_ns}
 사용: python3 export_lidar_scans.py <log.mcap> <calib_dir> <out_dir> [--max-range 40]
 """
-import argparse, os, struct
+import argparse, os, struct, sys
 import numpy as np, yaml
 from mcap.reader import make_reader
 
@@ -30,8 +30,8 @@ ap.add_argument("--deskew", action="store_true", help="그래프 없이 원 오�
 ap.add_argument("--pose-graph", help="graph/ 디렉터리 — PGO 보정 자세 + 점별 시각 deskew 로 world 점 생성")
 a = ap.parse_args()
 os.makedirs(a.out, exist_ok=True)
-tr = yaml.safe_load(open(os.path.join(a.calib, "livox_lidar_0_lidar.yaml")))["transform"]
-t_bl = np.array([tr["translation"][k] for k in "xyz"])       # 회전은 항등 (점의 180° 보정은 디코더에서)
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "geometry")); from extrinsics import lidar_t_bl
+t_bl = lidar_t_bl(a.calib)                                   # 회전은 항등 (점의 180° 보정은 디코더에서). LIDAR_EXTRINSIC=slam|calib
 
 gt_ns, gt_pos, gt_quat, scans = [], [], [], []
 with open(a.mcap, "rb") as f:

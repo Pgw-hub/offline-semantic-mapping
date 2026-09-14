@@ -13,6 +13,7 @@
 import argparse, glob, os, struct, zlib
 import cv2
 import numpy as np
+import sys as _s, os as _o; _s.path.insert(0, _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), '..', '..', 'geometry')); from extrinsics import lidar_t_bl
 import yaml
 from mcap.reader import make_reader
 
@@ -85,7 +86,7 @@ def main():
 
     Kc, Wc, Hc = load_K(a.calib, "d455_front_color_caminfo.yaml")
     T_bc = load_T(a.calib, "d455_front_color.yaml")
-    T_bl = np.eye(4); T_bl[:3, 3] = [-0.0579, 0.0, 0.20932]
+    T_bl = np.eye(4); T_bl[:3, 3] = lidar_t_bl(a.calib)                      # geometry/extrinsics.py (LIDAR_EXTRINSIC=slam|calib)
     fx, fy, cx, cy = Kc[0, 0], Kc[1, 1], Kc[0, 2], Kc[1, 2]
 
     # --- mcap: odom + lidar ---

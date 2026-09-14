@@ -43,7 +43,7 @@ class Build:
         self.opt = {"lidar_fusion": True, "mask_bottom_px": 60, "drop_classes": "person", "scene_cloud": 0, "vlm_edges": True, "vlm_max_pairs": 30,
                     "vlm_model": "Qwen/Qwen2.5-VL-32B-Instruct", "occupancy_res": 0.2, "prob_hit": 0.85, "prob_miss": 0.45,
                     "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "view_cubes": False, "view_sub": 1, "video_speed": 15, "video_width": 960, "video_pipeline": True, "quality_img_stride": 15, "classdict": "default", "label_edge_px": 4, "require_depth": True, "map_id": os.path.basename(self.root),
-                    "frame": "SLAM world (/Odometry/base)", "pose_graph": False}
+                    "frame": "SLAM world (/Odometry/base)", "pose_graph": False, "lidar_extrinsic": "slam"}
         self.opt.update(cfg.get("options", {}))
         self.graph = os.path.join(self.root, "graph")
         if self.opt["pose_graph"] and "frame" not in cfg.get("options", {}): self.opt["frame"] = "SLAM world, PGO-corrected (geometry/build_graph.py)"
@@ -58,7 +58,7 @@ class Build:
     def run(self, cmd, cwd=None, env=None, logname=None):
         self.say("$ " + (" ".join(cmd) if isinstance(cmd, list) else cmd))
         if self.dry: return 0
-        e = dict(os.environ); e.update(env or {})
+        e = dict(os.environ); e["LIDAR_EXTRINSIC"] = str(self.opt.get("lidar_extrinsic", "slam")); e.update(env or {})
         lf = open(os.path.join(self.D["logs"], logname), "a") if logname else None
         p = subprocess.run(cmd, cwd=cwd, env=e, shell=isinstance(cmd, str), stdout=lf or None, stderr=subprocess.STDOUT if lf else None)
         if lf: lf.close()

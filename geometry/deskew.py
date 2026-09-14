@@ -88,7 +88,7 @@ def ground_thickness(P_base):
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("mcap"); ap.add_argument("calib"); ap.add_argument("out", nargs="?"); ap.add_argument("--measure", action="store_true"); ap.add_argument("--stride", type=int, default=1)
     a = ap.parse_args()
-    tr = yaml.safe_load(open(os.path.join(a.calib, "livox_lidar_0_lidar.yaml")))["transform"]; t_bl = np.array([tr["translation"][k] for k in "xyz"])
+    from extrinsics import lidar_t_bl; t_bl = lidar_t_bl(a.calib)
     odom, scans = read_mcap(a.mcap); t = time.time()
     if a.out: os.makedirs(a.out, exist_ok=True)
     th_raw, th_dsk, n_ok = [], [], 0

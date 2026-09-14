@@ -4,7 +4,7 @@
 import sys, numpy as np, open3d as o3d, yaml, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); from deskew import read_mcap, deskew_scan
 S = "/data2/20260827/20260827/KR-RRT-2604-008_20260827_172935"; C = S + "/raisin_config/calibration"
-tr = yaml.safe_load(open(C + "/livox_lidar_0_lidar.yaml"))["transform"]; t_bl = np.array([tr["translation"][k] for k in "xyz"])
+from extrinsics import lidar_t_bl; t_bl = lidar_t_bl(a.calib if "a" in dir() else C)
 odom, scans = read_mcap(S + "/log_002.mcap")
 def pose(t):
     R, p, ok = odom.at(np.array([t])); return (R[0], p[0]) if ok[0] else (None, None)
