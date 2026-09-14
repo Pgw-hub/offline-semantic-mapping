@@ -56,3 +56,17 @@
 - 레코더: `/Odometry/truth odom`(기본 있음, sim 에서만 값이 옴) + `/Odometry/base odom` + `/path/pgo path` + d455 raw rgb/depth(off 제거). `/cloud_registered`·`/pgo/keyframe_cloud` 는 pointcloud2 패치 빌드에서만.
 - 주의: 매핑은 `start_mapping` 으로 시작(Mapping 모드 아니면 keyframe/path 발행 없음). 종료 전 `save_point_cloud_map` 호출. raisin_config(calibration) 포함.
 - 1분 테스트 후 확인: `/path/pgo` 마지막 poses 수 == `<name>.txt` 줄 수, `.txt` timestamp 가 `/Odometry/base` stamp 와 일치, mcap 메시지 크기가 점 수에 따라 변하는지(고정 크기면 오독).
+
+## ★ 20260914_033204 (sim, railab_raibo, dungok_nav_testbed_2f) 점검 결과 (2026-09-14)
+| 항목 | 상태 |
+|---|---|
+| `/cloud_registered` PointCloud2 | ✔ 새 `pointcloud2` typekey 로 정상 (스캔당 ~21.8k 점, 690~740 KB, 필드 x,y,z,intensity,t) — 파서 geometry/pc2_reader.py |
+| `/livox/lidar` | ✔ sim 은 CustomMsg 가 아니라 PointCloud2(x,y,z,intensity,tag,line,t). 점별 t 가 전부 0 → sim 에선 deskew 불필요/불가. 우리 파이프라인 리더에 PointCloud2 분기 필요 |
+| `/Odometry/base` | ✔ 10 Hz, cloud_registered 와 stamp 일치 |
+| `d455_front/rgb`, `d455_front/depth` | ✘ config 에 켜져 있으나 메시지 0개 → sim 에서 카메라가 발행되지 않음. 의미 부여 불가 |
+| `/path/pgo` | ✘ recorder config 에 없음 |
+| `/pgo/keyframe_cloud` | ✘ config 에 없음 (typekey 도 없음) |
+| `/Odometry/truth` | ✘ config 에 있으나 0개 (sim GT 발행 안 됨) |
+| 저장 지도 `log/map/<name>/` (.pcd/.txt/_gt) | ✘ 없음. raisin_config/map 은 GIS 타일(korea.mbtiles) |
+| raisin_config/calibration | ✔ (실로봇 시리얼의 d455 설정 그대로) |
+| 길이 | sim 시각 기준 45 s (log_000 33.6 s + log_001 11.4 s; wall 80 s), 이동 범위 6×3 m |
