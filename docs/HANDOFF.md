@@ -325,3 +325,6 @@
 - 103657 재빌드 web_103657_l00_09_robotpgo_ext (lidar_extrinsic: slam): 두께 6.83→6.84 cm, 일관성 3.44→3.47, 5cm 셀 +0.2%, 지도 전체 3.7 cm 강체 이동. 개선 없음.
   (이 데이터셋 번짐 6.8 cm 는 /path/pgo 시각 복원 ±0.1 s 지터가 지배 — <name>.txt 확보 시 재확인)
 - 결론: geometry/extrinsics.py 기본 calib 유지(실로봇), sim 세션만 lidar_extrinsic: slam. 다음 개선 후보 = 스캔 내 자세 보간에 robot_state(18 Hz base pose) 또는 IMU 적분 사용.
+- 172935 재빌드 web_172935_l02_pgo_ext (lidar_extrinsic: slam, P 부터 재실행 — 루프 3, 자세 변화 ≤0.11 m): calib 대비 5cm 셀 +3.1%(2.33M→2.40M), 일관성 2.33→2.48 cm, 두께 5.13→5.39 cm → 오히려 소폭 나빠짐.
+  held-out log_003 초기화(loc_bench, 50 시행): old+calib질의 3.7/9.4 cm · new+slam질의 4.5/8.8 cm · (교차) new+calib질의 3.1/7.7 — 표본 노이즈 범위, 개선 아님.
+  ⇒ 실로봇에서는 calib 값이 맞다(확정). SLAM 하드코딩 오프셋은 sim 에서만 유효(driver/flip 관례 차이). 두 _ext 지도는 비교용으로 포털에 남김.
