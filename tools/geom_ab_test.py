@@ -124,7 +124,22 @@ json.dump(M, open(os.path.join(a.out, "ab_metrics.json"), "w"), indent=1)
 import rerun as rr, rerun.blueprint as rrb
 rr.init("geom_ab"); rr.save(os.path.join(a.out, "ab_view.rrd"))
 def zcol(P): z = P[:, 2]; lo, hi = np.percentile(z, 2), np.percentile(z, 98); zn = np.clip((z - lo) / max(hi - lo, 1e-3), 0, 1); return (np.stack([zn, 1 - np.abs(zn - 0.5) * 2, 1 - zn], 1) * 255).astype(np.uint8)
-rr.log("raw/points", rr.Points3D(A_all, colors=zcol(A_all), radii=0.02)); rr.log("registered/points", rr.Points3D(B_all, colors=zcol(B_all), radii=0.02)); rr.log("rawfix/points", rr.Points3D(C_all, colors=zcol(C_all), radii=0.02))
+# 3D: 화면 픽셀 크기 점(음수 radii = ui points) — 카메라 거리와 무관하게 얇게 보임
+rr.log("raw/points", rr.Points3D(A_all, colors=zcol(A_all), radii=-1.2)); rr.log("registered/points", rr.Points3D(B_all, colors=zcol(B_all), radii=-1.2)); rr.log("rawfix/points", rr.Points3D(C_all, colors=zcol(C_all), radii=-1.2))
+# BEV 래스터 (2 cm): 카메라 조작 없이 비교. 값 = 셀 점 수(로그 스케일) → 벽 두께가 그대로 폭으로 보임
+def bev(P, x0, y0, x1, y1, res):
+    W, H = int(np.ceil((x1 - x0) / res)), int(np.ceil((y1 - y0) / res)); u = ((P[:, 0] - x0) / res).astype(int); v = ((y1 - P[:, 1]) / res).astype(int)
+    m = (u >= 0) & (u < W) & (v >= 0) & (v < H); img = np.zeros((H, W), np.int32); np.add.at(img, (v[m], u[m]), 1); return img
+def gray(img): g = np.log1p(img) / max(np.log1p(img).max(), 1e-6); out = (255 - g * 255).astype(np.uint8); return np.stack([out] * 3, -1)
+allp = np.concatenate([A_all, B_all]); x0, y0 = np.percentile(allp[:, 0], 0.5) - 1, np.percentile(allp[:, 1], 0.5) - 1; x1, y1 = np.percentile(allp[:, 0], 99.5) + 1, np.percentile(allp[:, 1], 99.5) + 1
+zlo, zhi = np.percentile(allp[:, 2], 5), np.percentile(allp[:, 2], 95); band = lambda P: P[(P[:, 2] > zlo + 0.3 * (zhi - zlo)) & (P[:, 2] < zlo + 0.9 * (zhi - zlo))]   # 바닥·천장 제외한 벽 높이 띠
+IA, IB, IC = bev(band(A_all), x0, y0, x1, y1, 0.02), bev(band(B_all), x0, y0, x1, y1, 0.02), bev(band(C_all), x0, y0, x1, y1, 0.02)
+for nm, im in (("bev/A_raw_odometry", IA), ("bev/B_cloud_registered", IB), ("bev/A_fixed", IC)): rr.log(nm, rr.Image(gray(im)))
+diff = np.full(IA.shape + (3,), 255, np.uint8); ra, rb = IA > 0, IB > 0; diff[ra & rb] = (170, 170, 170); diff[ra & ~rb] = (230, 60, 60); diff[~ra & rb] = (60, 120, 255); rr.log("bev/difference_red_raw_blue_registered", rr.Image(diff))
+# 벽 단면 확대: A 에서 점이 가장 많이 몰린 벽 주변 3×3 m 를 1 cm 로
+vmax = np.unravel_index(np.argmax(IB * (IA > 0)), IB.shape); cx, cy = x0 + vmax[1] * 0.02, y1 - vmax[0] * 0.02
+for nm, P in (("zoom/A_raw_odometry", A_all), ("zoom/B_cloud_registered", B_all), ("zoom/A_fixed", C_all)): rr.log(nm, rr.Image(gray(bev(band(P), cx - 1.5, cy - 1.5, cx + 1.5, cy + 1.5, 0.01))))
+print(f"BEV {IA.shape[1]}x{IA.shape[0]} @2cm (x {x0:.1f}..{x1:.1f}, y {y0:.1f}..{y1:.1f}) · 확대 중심 ({cx:.1f},{cy:.1f}) 3x3m @1cm")
 kA = np.unique(np.floor(A_all / a.cell).astype(np.int64), axis=0); kB = np.unique(np.floor(B_all / a.cell).astype(np.int64), axis=0)
 sA = {tuple(k) for k in kA}; sB = {tuple(k) for k in kB}; oa = np.array(sorted(sA - sB)); ob = np.array(sorted(sB - sA)); both = np.array(sorted(sA & sB))
 c = lambda K: ((K + 0.5) * a.cell).astype(np.float32)
@@ -135,7 +150,10 @@ rr.log("odometry", rr.LineStrips3D([odom.pos.astype(np.float32)], colors=[[255, 
 rr.log("per_scan/raw_vs_registered_cm", rr.SeriesLine(name="median cm"));
 for i, (ts, m_, p9) in enumerate(per_scan): rr.set_time_sequence("scan", i); rr.log("per_scan/raw_vs_registered_cm", rr.Scalar(m_ * 100))
 rr.send_blueprint(rrb.Blueprint(rrb.Tabs(
-    rrb.Horizontal(rrb.Spatial3DView(origin="/raw", name="A: raw + odometry"), rrb.Spatial3DView(origin="/registered", name="B: /cloud_registered"), name="Side by side"),
+    rrb.Horizontal(rrb.Spatial2DView(origin="/bev/A_raw_odometry", name="A: raw + odometry (BEV 2cm, 벽 높이 띠)"), rrb.Spatial2DView(origin="/bev/B_cloud_registered", name="B: /cloud_registered"), name="BEV A | B"),
+    rrb.Horizontal(rrb.Spatial2DView(origin="/zoom/A_raw_odometry", name="A: raw + odometry (3x3m, 1cm)"), rrb.Spatial2DView(origin="/zoom/B_cloud_registered", name="B: /cloud_registered"), rrb.Spatial2DView(origin="/zoom/A_fixed", name="A': raw + 오프셋 보정"), name="벽 단면 확대 A | B | A'"),
+    rrb.Spatial2DView(origin="/bev/difference_red_raw_blue_registered", name="BEV Difference (red raw-only, blue registered-only, grey both)"),
+    rrb.Horizontal(rrb.Spatial3DView(origin="/raw", name="A: raw + odometry"), rrb.Spatial3DView(origin="/registered", name="B: /cloud_registered"), name="3D Side by side"),
     rrb.Horizontal(rrb.Spatial3DView(origin="/rawfix", name=f"A': raw + odometry (offset {np.round(off_b*100,1).tolist()}cm, dt {best_d:+d}ms)"), rrb.Spatial3DView(origin="/registered", name="B: /cloud_registered"), name="Side by side (fixed)"),
     rrb.Spatial3DView(origin="/", name=f"Difference {a.cell}m (red raw-only, blue registered-only)", contents=["+ /difference/**", "+ /odometry"]),
     rrb.TimeSeriesView(origin="/per_scan", name="per-scan raw↔registered distance")), collapse_panels=True))
