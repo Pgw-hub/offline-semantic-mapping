@@ -328,3 +328,11 @@
 - 172935 재빌드 web_172935_l02_pgo_ext (lidar_extrinsic: slam, P 부터 재실행 — 루프 3, 자세 변화 ≤0.11 m): calib 대비 5cm 셀 +3.1%(2.33M→2.40M), 일관성 2.33→2.48 cm, 두께 5.13→5.39 cm → 오히려 소폭 나빠짐.
   held-out log_003 초기화(loc_bench, 50 시행): old+calib질의 3.7/9.4 cm · new+slam질의 4.5/8.8 cm · (교차) new+calib질의 3.1/7.7 — 표본 노이즈 범위, 개선 아님.
   ⇒ 실로봇에서는 calib 값이 맞다(확정). SLAM 하드코딩 오프셋은 sim 에서만 유효(driver/flip 관례 차이). 두 _ext 지도는 비교용으로 포털에 남김.
+
+## 트랙 2 첫 빌드 — sim 20260915 (2026-09-15)
+- 데이터: /data2/20260915/railab_raibo_20260915_065435 (mcap 3개, sim 시각 97 s) + /data2/20260915/260915_test/{.pcd(15,742 pts, 0.1 m), .txt(20 kf), _gt.*}. 점검 표: docs/RECORDING_CHECKLIST.md.
+- 파이프라인 추가: options.robot_map {pcd, traj} → P = geometry/robot_graph.py --traj(키프레임 자세, stamp 가 /Odometry/base 와 일치) · S = tools/preprocess/export_registered_scans.py(/cloud_registered → Δ(t) 로 최종 PGO 프레임)
+  · C = tools/preprocess/label_map_points.py(지도 점에 SegFormer 투영, depth z-buffer·경계 제외; session_voxsem 직접 + compiled/robot_map_semantic.pcd) · D/E/F/G/H/V 는 그대로. 매니페스트 geometry_source: robot_map:<pcd>.
+- extract_rgb_session 이 log_time 대신 헤더 stamp 사용 (sim 은 log_time=벽시계 ≠ 헤더=sim 시각). classdicts/indoor_v1.json 추가(floor/stairs/wall/railing/column/door/furniture/person).
+- 결과 output/t2_sim_0915: 지도 점 15,742 중 84% 라벨(wall 8.3k, floor 3.9k, railing 633, stairs 296, column 32 — 기둥은 wall 로 잡힘). SegFormer 오버레이(compiled/segformer_samples.png) 는 floor/wall/railing/stairs 정확.
+  ★로봇 저장 지도는 sparse: /cloud_registered 누적 0.1 m 셀 92,925 대비 15,742(17%), 스캔 셀의 56%만 15 cm 안에 지도 점 있음 (키프레임 클라우드가 PGO 입력 복셀로 강하게 다운샘플된 탓). 비교용 dense 변형: compiled/registered_scans_0p1.pcd → registered_scans_semantic.pcd (92k pts, 80% 라벨). BEV 비교 compiled/semantic_bev_robotmap_vs_dense.png.
