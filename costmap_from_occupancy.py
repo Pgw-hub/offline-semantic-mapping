@@ -38,8 +38,9 @@ def pack(K):   # 축당 19비트(±26km@0.2m) → 57비트, ×8(라벨) 해도 i
 kp = pack(K); order = np.argsort(kp); kp, L = kp[order], L[order]
 uk, st = np.unique(kp, return_index=True); en = np.r_[st[1:], len(kp)]
 # 다수결(벡터화): 각 (셀,라벨) 쌍 카운트
-pair = kp * 8 + L.astype(np.int64); up, cnt = np.unique(pair, return_counts=True)
-cell_of = np.searchsorted(uk, up >> 3); labs = (up & 7).astype(np.int16)
+assert n_cls + 2 <= 16, "라벨 16개 초과 (4비트 패킹)"                    # 클래스 + other + unknown ≤ 16 (57비트 키 ×16 = 61비트, int64 안전)
+pair = kp * 16 + L.astype(np.int64); up, cnt = np.unique(pair, return_counts=True)
+cell_of = np.searchsorted(uk, up >> 4); labs = (up & 15).astype(np.int16)
 best = np.zeros(len(uk), np.int64); bestlab = np.full(len(uk), n_cls + 1, np.int16)
 o2 = np.lexsort((cnt, cell_of))                            # 셀별 마지막 = 최대 카운트
 cell_of, labs, cnt = cell_of[o2], labs[o2], cnt[o2]
