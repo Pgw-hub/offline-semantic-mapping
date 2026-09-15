@@ -10,8 +10,9 @@ for F in mcaps:
     lts=[]; rgbs=[]
     with open(F,"rb") as f:
         for sch,ch,msg in make_reader(f).iter_messages(topics=["/livox/lidar","d455_front/rgb"]):
-            if ch.topic=="/livox/lidar": lts.append(msg.log_time)
-            else: rgbs.append((msg.log_time,msg.data))
+            sec,nsec=struct.unpack_from("<iI",msg.data,0); hs=sec*10**9+nsec        # 헤더 stamp (log_time 은 수신 벽시계 → sim 에선 헤더와 다른 시계)
+            if ch.topic=="/livox/lidar": lts.append(hs)
+            else: rgbs.append((hs,msg.data))
     rt=np.array([t for t,_ in rgbs],dtype=np.int64)
     sel=sorted(set(int(np.argmin(np.abs(rt-lt))) for lt in lts))
     local2g={}

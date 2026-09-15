@@ -1,0 +1,14 @@
+{
+ "name": "indoor_v1",
+ "description": "실내/구조물 테스트베드(sim dungok 2F): floor(선호 지면) · stairs · wall · railing · column · door · furniture · person",
+ "classes": [
+  {"name": "floor",     "ade": ["floor", "rug", "path", "sidewalk", "road", "earth"], "color": "#c8a578", "role": "ground_preferred", "cost": 10},
+  {"name": "stairs",    "ade": ["stairs", "stairway", "step", "escalator"],           "color": "#e0a030", "role": "ground_soft",      "cost": 90},
+  {"name": "wall",      "ade": ["wall", "building", "windowpane", "curtain"],         "color": "#a8adb5", "role": "context",          "cost": 150},
+  {"name": "railing",   "ade": ["railing", "fence", "bannister"],                     "color": "#c77d3a", "role": "obstacle",         "cost": 254},
+  {"name": "column",    "ade": ["column", "pole", "base"],                            "color": "#5c6b8a", "role": "obstacle",         "cost": 254},
+  {"name": "door",      "ade": ["door", "screen door"],                               "color": "#7a4fb0", "role": "context",          "cost": 150},
+  {"name": "furniture", "ade": ["table", "chair", "bench", "box", "cabinet", "shelf", "sofa", "desk"], "color": "#5c99c7", "role": "obstacle", "cost": 254},
+  {"name": "person",    "ade": ["person"],                                            "color": "#dc3c3c", "role": "dynamic",          "cost": 254}
+ ]
+}

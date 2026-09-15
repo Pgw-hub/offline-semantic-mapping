@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+"""트랙 2 S 단계 — lidar_slam 의 /cloud_registered (deskew+정합된 world 점, PointCloud2) 를 스캔별 npz 로 (build_occupancy 입력 형식).
+/cloud_registered 는 발행 시점의 실시간 오도메트리 프레임이므로, --pose-graph(로봇 최종 PGO graph/) 가 있으면 Δ(t)=T_corr·T_odom⁻¹ 로 최종 프레임에 맞춘다.
+사용: python export_registered_scans.py <log.mcap> <calib_dir> <out_dir> [--pose-graph graph/] [--max-range 40]
+출력: <out>/%06d.npz  xyz(float32, world) · origin(float32, 그 시각 LiDAR 위치) · stamp_ns
+"""
+import argparse, os, struct, sys
+import numpy as np
+from mcap.reader import make_reader
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "geometry"))
+from pc2_reader import parse_pc2, xyz_of
+from extrinsics import lidar_t_bl
+from deskew import Odom
+
+ap = argparse.ArgumentParser(); ap.add_argument("mcap"); ap.add_argument("calib"); ap.add_argument("out"); ap.add_argument("--pose-graph"); ap.add_argument("--max-range", type=float, default=40.0)
+a = ap.parse_args(); os.makedirs(a.out, exist_ok=True); t_bl = lidar_t_bl(a.calib)
+ns, pos, q, scans = [], [], [], []
+with open(a.mcap, "rb") as f:
+    for sch, ch, msg in make_reader(f).iter_messages(topics=["/Odometry/base", "/cloud_registered"]):
+        if ch.topic == "/cloud_registered":
+            h, P = parse_pc2(msg.data); scans.append((h["ns"], xyz_of(P).astype(np.float32)))
+        else:
+            v = struct.unpack_from("<7d", msg.data, 8); sec, nsec = struct.unpack_from("<iI", msg.data, 0)
+            ns.append(sec * 10**9 + nsec); pos.append(v[:3]); q.append([v[6], v[3], v[4], v[5]])
+odom = Odom(np.array(ns, np.int64), np.array(pos), np.array(q)); pp = None
+if a.pose_graph:
+    from pose_provider import PoseProvider; pp = PoseProvider(a.pose_graph); print("pose graph:", a.pose_graph, pp.meta)
+n_ok = 0
+for i, (ts, P) in enumerate(scans):
+    if pp is not None:
+        T = pp.at(ts)
+        if T is None: continue
+        D = pp.delta(np.array([ts], np.int64))[0]; P = P @ D[:3, :3].T.astype(np.float32) + D[:3, 3].astype(np.float32)
+    else:
+        R, p, ok = odom.at(np.array([ts], np.int64))
+        if not ok[0]: continue
+        T = np.eye(4); T[:3, :3] = R[0]; T[:3, 3] = p[0]
+    origin = (T[:3, :3] @ t_bl + T[:3, 3]).astype(np.float32)
+    r = np.linalg.norm(P - origin, axis=1); P = P[(r > 0.3) & (r < a.max_range)]
+    np.savez(os.path.join(a.out, "%06d.npz" % i), xyz=P, origin=origin, stamp_ns=np.int64(ts)); n_ok += 1
+print(f"스캔 {n_ok}/{len(scans)} 저장 → {a.out}")
