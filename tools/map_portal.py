@@ -32,8 +32,15 @@ def find_robot_map(dp):
     for sub in [dp] + [os.path.join(dp, d) for d in sorted(os.listdir(dp)) if os.path.isdir(os.path.join(dp, d)) and d not in ("raisin_config",)]:
         for f in os.listdir(sub):
             if f.endswith(".pcd") and not f.endswith("_gt.pcd") and os.path.exists(os.path.join(sub, f[:-4] + ".txt")): cands.append(os.path.join(sub, f))
+    if not cands:                                             # 지도 폴더가 데이터셋 옆(형제 폴더)에 있는 경우 (예: /data2/20260915/260915_test)
+        par = os.path.dirname(dp)
+        for d in sorted(os.listdir(par)) if os.path.isdir(par) else []:
+            sub = os.path.join(par, d)
+            if sub == dp or not os.path.isdir(sub) or any(re.fullmatch(r"log_\d{3}\.mcap", f) for f in os.listdir(sub)): continue
+            for f in os.listdir(sub):
+                if f.endswith(".pcd") and not f.endswith("_gt.pcd") and os.path.exists(os.path.join(sub, f[:-4] + ".txt")): cands.append(os.path.join(sub, f))
     if not cands: return None
-    p = sorted(cands, key=os.path.getmtime)[-1]; return {"pcd": p, "traj": p[:-4] + ".txt", "name": os.path.basename(p)[:-4]}
+    p = sorted(cands, key=os.path.getmtime)[-1]; return {"pcd": p, "traj": p[:-4] + ".txt", "name": os.path.basename(p)[:-4], "sibling": os.path.dirname(p).startswith(dp) is False}
 HTML = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "map_portal.html"), encoding="utf-8").read()
 sys.path.insert(0, ROOT); import classdict as CD
 ADE_LABELS = json.load(open(os.path.join(ROOT, "classdicts", "ade20k_labels.json"))) if os.path.exists(os.path.join(ROOT, "classdicts", "ade20k_labels.json")) else []
