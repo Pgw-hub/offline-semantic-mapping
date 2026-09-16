@@ -71,7 +71,10 @@ if __name__ == "__main__":
         D = np.loadtxt(a.traj, comments="#"); kf_ns = (D[:, 0] * 1e9).round().astype(np.int64); Tp = np.array([T_of(r[1:4], r[4:8]) for r in D]); src = f"robot lidar_slam saveMap traj ({os.path.basename(a.traj)})"
         k = np.clip(np.searchsorted(ns, kf_ns), 1, len(ns) - 1); k = np.where(np.abs(ns[k - 1] - kf_ns) < np.abs(ns[k] - kf_ns), k - 1, k)   # 가장 가까운 오도메트리 샘플
         near = np.abs(ns[k] - kf_ns) / 1e6; print(f"TUM 궤적 {len(D)} 키프레임 · 오도메트리 stamp 와 차이 중앙 {np.median(near):.1f}ms 최대 {near.max():.1f}ms (>50ms {int((near>50).sum())}개)")
-        j = k; err = np.zeros(len(D))
+        keep = near <= 100                                            # 녹화 시작 전/후의 키프레임(오도메트리 없음) 제외 — 매핑을 녹화보다 먼저 시작한 경우
+        if (~keep).any(): print(f"  오도메트리 범위 밖 키프레임 {int((~keep).sum())}개 제외: stamp 오프셋 {np.round((kf_ns[~keep] - ns[0]) / 1e9, 1).tolist()[:6]} s")
+        kf_ns, Tp, k = kf_ns[keep], Tp[keep], k[keep]
+        j = k; err = np.zeros(len(kf_ns))
     else:
         assert P is not None, "/path/pgo 없음"
         Tp, j, err = match_times(ns, C, P, T); kf_ns = ns[j]; src = "robot lidar_slam /path/pgo (last msg; stamps recovered by odometry matching)"

@@ -40,8 +40,8 @@ odom = Odom(np.array(ns, np.int64), np.array(pos), np.array(q))
 rk = np.array(sorted(raw)); stamps = []
 for t in sorted(reg):                                          # registered stamp ↔ 가장 가까운 raw stamp (1 ms 안)
     j = int(np.argmin(np.abs(rk - t)))
-    if abs(int(rk[j]) - t) <= 1_000_000: stamps.append((t, int(rk[j])))
-print(f"오도메트리 {len(ns)} · raw {len(raw)} · registered {len(reg)} · 짝(≤1ms) {len(stamps)} [{time.time()-t_all:.0f}s]")
+    if abs(int(rk[j]) - t) <= 60_000_000: stamps.append((t, int(rk[j])))          # 실로봇: registered stamp(=odom) 와 raw stamp(스캔 시작) 가 ~44 ms 다름
+print(f"오도메트리 {len(ns)} · raw {len(raw)} · registered {len(reg)} · 짝(≤60ms) {len(stamps)} [{time.time()-t_all:.0f}s]")
 
 def T_at(t):
     R, p, ok = odom.at(np.array([t])); return (R[0], p[0]) if ok[0] else (None, None)
