@@ -339,3 +339,12 @@
 - 변형 t2_sim_0915_kf (2026-09-16): robot_map.geometry: keyframe_scans — 키프레임 시각의 /cloud_registered 19개(첫 kf 13.10 s 는 그 시각 스캔이 SLAM 초기화로 없음)를 0.1 m 로 → 62,900 점, 87% 라벨(wall 38k, floor 14k, railing 1.4k, stairs 1.1k).
   저장 지도 15.7k 대비 4배, 전체 스캔 대비 70% 커버. occupancy 는 전체 스캔 그대로. 코스트맵 free_path 2,401→4,635 셀(바닥 라벨이 촘촘해진 효과). 비교 PNG compiled/semantic_bev_A_B_C.png, rrd compiled/track2_variants.rrd.
   옵션: robot_map.geometry = pcd(저장 지도) | keyframe_scans | all_scans | every_N. tools/preprocess/scans_to_pcd.py.
+
+## 트랙 2 실로봇 첫 빌드 — 20260916 yeoksam (2026-09-16)
+- 데이터 /data2/20260916/{260916_yeoksam_office_b1f_2, 260916_yeoksam_office_nearblock_2} (+ 미사용 b1f_1, nearblock_1). raisin_config 없음 → 20260827 캘리브(URDF 값, raisin_calibration_plugin 산출) 복사.
+  매핑이 녹화보다 21~31 s 먼저 시작 → robot_graph 가 오도메트리 범위 밖 키프레임 제외. /livox/lidar 가 PointCloud2(x,y,z,intensity,tag,line,t) 로 바뀜 → geometry/pc2_reader.decode_livox 공용 디코더(LIVOX_FLIP, 실로봇 1 / sim 0).
+- 6 빌드(sessions/run_t2_0916.sh, 각 ~15 min): 변형 pcd / keyframe_scans / all_scans. 결과(라벨 비율 = 지도 점 중 SegFormer 라벨 받은 비율):
+    b1f_2 (indoor_v1, 31 kf, 112 s):  A 3.8k pts 45% · B 66.8k 49% · C 140k 43% · 코스트맵 free 120 / 458 / 1,295 셀
+    nearblock_2 (outdoor_v2, 268 kf, 292 s): A 112k 11% · B 1.08M 19% · C 3.04M 14% · free 2,712 / 9,619 / 20,256. 최종 PGO−실시간 odom 차 중앙 20 cm 최대 151 cm(루프클로저 2회) → Δ(t) 보정이 실제로 작동.
+  ★라벨 비율이 sim(84%)보다 훨씬 낮은 원인: D455 depth 유효 35%(실내)/51%(실외) + require_depth=1 → 카메라 depth 없는 점(8 m 밖, 검은 표면)은 라벨 불가. LiDAR depth 융합(lidar_fusion, 이제 PC2 디코더로 가능) 또는 require_depth 완화가 다음 단계.
+  비교: output/t2_<ds>_pcd/compiled/{semantic_bev_A_B_C.png, track2_variants.rrd} (tools/t2_compare_variants.py). all_scans 에는 로봇 다리/정지 구간 누적 잔상 있음(rmin 0.3) → keyframe_scans 권장 유지.
