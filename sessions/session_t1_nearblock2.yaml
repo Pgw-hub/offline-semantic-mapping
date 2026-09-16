@@ -1,0 +1,29 @@
+# 2026-09-16 트랙 1(기존 방식) 비교용 — raw /livox/lidar(PointCloud2, flip) 를 /Odometry/base 에 deskew 누적, PGO 없음, LiDAR depth 융합 켬. sem 은 t2_*_pcd 심볼릭링크 재사용.
+root: t1_nearblock2
+mcap_dir: /data2/20260916/260916_yeoksam_office_nearblock_2
+logs:
+- 0
+- 1
+- 2
+- 3
+- 4
+options:
+  map_id: "260916_yeoksam_office_nearblock_2 · track 1 (raw scans + /Odometry/base, deskew, no PGO) · outdoor_v2"
+  lidar_extrinsic: calib
+  livox_flip: true
+  lidar_fusion: true
+  mask_bottom_px: 60
+  drop_classes: person
+  vlm_edges: false
+  occupancy_res: 0.2
+  prob_hit: 0.85
+  prob_miss: 0.45
+  costmap: {h_ground: 2, h_obs: 3, clearance: 1.4, band_min: 0.3}
+  view_cubes: false
+  view_coarse: 0.3
+  video_speed: 0
+  video_pipeline: false
+  classdict: outdoor_v2
+  label_edge_px: 4
+  require_depth: true
+  pose_graph: false

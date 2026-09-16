@@ -4,8 +4,8 @@
 """
 import argparse, json, os
 import numpy as np, open3d as o3d, cv2, rerun as rr, rerun.blueprint as rrb
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ap = argparse.ArgumentParser(); ap.add_argument("prefix"); ap.add_argument("--out"); ap.add_argument("--zmin", type=float, default=-0.3); ap.add_argument("--zmax", type=float, default=2.2)
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__))); import sys; sys.path.insert(0, REPO)
+ap = argparse.ArgumentParser(); ap.add_argument("prefix"); ap.add_argument("--out"); ap.add_argument("--extra", action="append", default=[], help="'라벨=root' — 트랙1 등 session_voxsem.npz 기반 지도를 변형으로 추가"); ap.add_argument("--zmin", type=float, default=-0.3); ap.add_argument("--zmax", type=float, default=2.2)
 a = ap.parse_args(); out = a.out or f"{REPO}/output/{a.prefix}_pcd/compiled"
 variants = [("A: robot saved map", "pcd"), ("B: keyframe-time scans", "keyframe_scans"), ("C: all scans", "all_scans")]
 def load(p): pc = o3d.io.read_point_cloud(p); return np.asarray(pc.points).astype(np.float32), (np.asarray(pc.colors) * 255).astype(np.uint8)
@@ -15,6 +15,13 @@ for n, g in variants:
     if not os.path.exists(p): print("없음:", p); continue
     P, C = load(p); s = json.load(open(f"{REPO}/output/{a.prefix}_{g}/compiled/summary.json")); lab = sum(v for k, v in s["voxel_labels"].items() if not k.startswith(("unknown", "other")))
     data.append((f"{n} ({len(P)/1000:.1f}k pts, labeled {100*lab/max(s['voxels'],1):.0f}%)", g, P, C)); print(data[-1][0], "| occupied", s["occupancy"]["occupied"], "| costmap free", s["costmap"]["free_path"], "| objects", s["objects"])
+sys_cd = json.load(open(f"{REPO}/output/{a.prefix}_pcd/sem/classes.json"))
+import classdict as CD
+for e in a.extra:                                                 # voxsem → 복셀 중심 + 클래스 색 (트랙 1 비교용)
+    n, root = e.split("=", 1); v = np.load(f"{REPO}/output/{root}/voxel/session_voxsem.npz"); P = ((v["ijk"] + 0.5) * float(v["vox"])).astype(np.float32)
+    sem = v["sem_mean"].astype(np.float32); has = v["n_sem"] > 0; ncls = sem.shape[1]; pal = np.array([CD.hex2rgb(c["color"]) for c in sys_cd["classes"]] + [CD.hex2rgb(CD.OTHER_COLOR), CD.hex2rgb(CD.UNKNOWN_COLOR)], np.uint8)
+    lab = np.where(has, sem.argmax(1), ncls + 1); lab[has & (sem.max(1) < 0.3)] = ncls; C = pal[lab]; s_ = json.load(open(f"{REPO}/output/{root}/compiled/summary.json"))
+    data.append((f"{n} ({len(P)/1000:.1f}k pts, labeled {100*has.mean():.0f}%)", root, P, C)); print(data[-1][0], "| occupied", s_["occupancy"]["occupied"], "| costmap free", s_["costmap"]["free_path"], "| objects", s_["objects"])
 allp = np.concatenate([d[2] for d in data]); x0, y0 = np.percentile(allp[:, 0], 0.5) - 1, np.percentile(allp[:, 1], 0.5) - 1; x1, y1 = np.percentile(allp[:, 0], 99.5) + 1, np.percentile(allp[:, 1], 99.5) + 1
 zl = np.percentile(allp[:, 2], 3)
 def bev(P, C, res=0.05):
@@ -35,5 +42,5 @@ for n, g, P, C in data: rr.log(g, rr.Points3D(P, colors=C, radii=0.05))
 T = np.loadtxt(json.load(open(f"{REPO}/sessions/session_{a.prefix}_pcd.yaml".replace(".yaml", ".yaml")))["options"]["robot_map"]["traj"], comments="#") if False else None
 rr.log("bev", rr.Image(img[:, :, ::-1]))
 rr.send_blueprint(rrb.Blueprint(rrb.Tabs(
-    rrb.Horizontal(*[rrb.Spatial3DView(origin="/", name=n, contents=[f"+ /{g}"]) for n, g, _, _ in data], name="A | B | C"),
-    rrb.Spatial2DView(origin="/bev", name="BEV A | B | C")), collapse_panels=True)); print("rrd", f"{out}/track2_variants.rrd")
+    rrb.Horizontal(*[rrb.Spatial3DView(origin="/", name=n, contents=[f"+ /{g}"]) for n, g, _, _ in data], name="A | B | C | D"),
+    rrb.Spatial2DView(origin="/bev", name="BEV A | B | C | D")), collapse_panels=True)); print("rrd", f"{out}/track2_variants.rrd")
