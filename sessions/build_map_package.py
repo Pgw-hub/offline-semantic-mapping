@@ -47,7 +47,7 @@ class Build:
         self.opt = {"lidar_fusion": True, "mask_bottom_px": 60, "drop_classes": "person", "scene_cloud": 0, "vlm_edges": True, "vlm_max_pairs": 30,
                     "vlm_model": "Qwen/Qwen2.5-VL-32B-Instruct", "occupancy_res": 0.2, "prob_hit": 0.85, "prob_miss": 0.45,
                     "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "view_cubes": False, "view_sub": 1, "video_speed": 15, "video_width": 960, "video_pipeline": True, "quality_img_stride": 15, "classdict": "default", "label_edge_px": 4, "require_depth": True, "map_id": os.path.basename(self.root),
-                    "frame": "SLAM world (/Odometry/base)", "pose_graph": False, "lidar_extrinsic": "calib", "livox_flip": True}
+                    "frame": "SLAM world (/Odometry/base)", "pose_graph": False, "lidar_extrinsic": "calib", "livox_flip": True, "depth_fill_range": 5.0, "depth_fill_gap": 0.15}
         self.opt.update(cfg.get("options", {}))
         self.graph = os.path.join(self.root, "graph")
         if self.opt["pose_graph"] and "frame" not in cfg.get("options", {}): self.opt["frame"] = "SLAM world, PGO-corrected (geometry/build_graph.py)"
@@ -133,7 +133,7 @@ class Build:
                 self.run([PY, f"{TOOLS}/scans_to_pcd.py", pcd, "--scans", *[os.path.join(self.ds(l), "lidar_scans") for l in self.logs]] + sel, logname="C_geometry.log")
             self.run([PY, f"{TOOLS}/label_map_points.py", pcd, self.calib, self.D["sem"], sess, "--datasets", *[self.ds(l) for l in self.logs],
                       "--mask-bottom", str(self.opt["mask_bottom_px"]), "--edge-px", str(self.opt["label_edge_px"]), "--require-depth", "1" if self.opt["require_depth"] else "0",
-                      "--pcd-out", os.path.join(self.D["compiled"], "robot_map_semantic.pcd")], logname="C_robot_map.log"); return
+                      "--pcd-out", os.path.join(self.D["compiled"], "robot_map_semantic.pcd"), "--depth-fill-range", str(self.opt.get("depth_fill_range", 5.0)), "--depth-gap", str(self.opt.get("depth_fill_gap", 0.15))], logname="C_robot_map.log"); return
         outs = []
         for log in self.logs:
             out = os.path.join(self.D["voxel"], f"{log}_voxsem.npz"); outs.append(out)

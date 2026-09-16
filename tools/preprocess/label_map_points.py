@@ -13,6 +13,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 ap = argparse.ArgumentParser(); ap.add_argument("pcd"); ap.add_argument("calib"); ap.add_argument("sem_dir"); ap.add_argument("out"); ap.add_argument("--datasets", nargs="+", required=True)
 ap.add_argument("--vox", type=float, default=0.1); ap.add_argument("--mask-bottom", type=int, default=60); ap.add_argument("--edge-px", type=int, default=4)
 ap.add_argument("--require-depth", type=int, default=1); ap.add_argument("--max-range", type=float, default=40.0); ap.add_argument("--pcd-out")
+ap.add_argument("--depth-fill-range", type=float, default=0.0, help="depth 카메라 점으로 LiDAR 빈 곳 채우기 (카메라 거리 상한 m, 0=끔)")
+ap.add_argument("--depth-gap", type=float, default=0.15, help="LiDAR 지도 점이 이 거리 안에 있으면 depth 점 추가 안 함 (표면 이중화 방지)")
+ap.add_argument("--depth-px-stride", type=int, default=3); ap.add_argument("--depth-frame-stride", type=int, default=2); ap.add_argument("--depth-edge", type=float, default=0.12, help="이웃 픽셀과 depth 차 (m) 이상이면 경계(flying pixel) 로 버림")
 a = ap.parse_args()
 
 import open3d as o3d
@@ -26,6 +29,8 @@ idx = np.load(os.path.join(a.sem_dir, "rgb_index.npz")); rgb_ns = idx["rgb_stamp
 print(f"지도 점 {N:,} · bbox {M.min(0).round(1)}..{M.max(0).round(1)} · 카메라 {Wc}x{Hc} fx {fx:.1f}")
 
 sem_sum = None; n_sem = np.zeros(N, np.float32); rgb_sum = np.zeros((N, 3), np.float32); first = np.full(N, 10**9, np.int64); n_vis_tot = 0; n_frames = 0
+DF = {"key": [], "sem": [], "rgb": [], "fr": []}; n_df_cand = n_df_kept = 0                       # depth 채움 후보 (0.1 m 격자 키로 집계)
+vv_g, uu_g = np.mgrid[0:Hc:a.depth_px_stride, 0:Wc:a.depth_px_stride]
 for ds in a.datasets:
     st = np.load(os.path.join(ds, "stamps.npz"))["stamps"]; traj = np.loadtxt(os.path.join(ds, "traj.txt")).reshape(-1, 4, 4); assert len(st) == len(traj)
     li = int(os.path.basename(ds.rstrip("/"))[-3:]) if os.path.basename(ds.rstrip("/"))[-3:].isdigit() else 0
@@ -56,6 +61,19 @@ for ds in a.datasets:
         pi = cand[vis]; uu, vv = u[vis], v[vis]
         sem_sum[pi] += sem[vv, uu].astype(np.float32) / 255.0; n_sem[pi] += 1; rgb_sum[pi] += rgb[vv, uu]
         np.minimum.at(first, pi, fi + li * 600); n_vis_tot += int(vis.sum()); n_frames += 1
+        if a.depth_fill_range > 0 and fi % a.depth_frame_stride == 0:                    # ---- depth 카메라 점으로 LiDAR 빈 곳 채우기
+            zc = dep[vv_g, uu_g]; okd = (zc > 0.3) & (zc < a.depth_fill_range)
+            # 경계(flying pixel): 4-이웃 중 depth 차가 depth_edge 이상인 픽셀 제외
+            dz = np.zeros_like(dep); dz[:, 1:] = np.maximum(dz[:, 1:], np.abs(dep[:, 1:] - dep[:, :-1])); dz[1:, :] = np.maximum(dz[1:, :], np.abs(dep[1:, :] - dep[:-1, :]))
+            okd &= dz[vv_g, uu_g] < a.depth_edge; okd &= ~edge[vv_g, uu_g]; okd &= vv_g < Hc - a.mask_bottom
+            zc, uc, vc = zc[okd], uu_g[okd], vv_g[okd]
+            if len(zc):
+                pcam = np.stack([(uc - cx) / fx * zc, (vc - cy) / fy * zc, zc], -1); pw = pcam @ T_wc[:3, :3].T + T_wc[:3, 3]
+                far = tree.query(pw, distance_upper_bound=a.depth_gap)[0] > a.depth_gap              # LiDAR 점이 gap 안에 없는 곳만
+                n_df_cand += len(pw); n_df_kept += int(far.sum())
+                if far.any():
+                    K_ = np.floor(pw[far] / a.vox).astype(np.int64); o_ = 1 << 20; DF["key"].append(((K_[:, 0] + o_) << 42) | ((K_[:, 1] + o_) << 21) | (K_[:, 2] + o_))
+                    DF["sem"].append(sem[vc[far], uc[far]].astype(np.float32) / 255.0); DF["rgb"].append(rgb[vc[far], uc[far]].astype(np.float32)); DF["fr"].append(np.full(int(far.sum()), fi + li * 600, np.int64))
         if fi % 200 == 0: print(f"  frame {fi}/{len(sel)} 보이는 지도 점 {int(vis.sum()):,}")
 if sem_sum is None: sys.exit("semantic 프레임 없음")
 NCH = sem_sum.shape[1]; CLASSES = CLASSES or [str(i) for i in range(NCH)]
@@ -69,10 +87,23 @@ n_pts = np.bincount(inv, minlength=n); ns_ = np.bincount(inv, weights=n_sem, min
 sem_v = np.stack([np.bincount(inv, weights=sem_sum[:, c], minlength=n) for c in range(NCH)], -1) / np.maximum(ns_, 1)[:, None]
 rgb_v = np.stack([np.bincount(inv, weights=rgb_sum[:, c], minlength=n) for c in range(3)], -1) / np.maximum(ns_, 1)[:, None]
 rgb_v = np.where(ns_[:, None] > 0, rgb_v, 128).astype(np.uint8); ff = np.full(n, 10**9, np.int64); np.minimum.at(ff, inv, first)
+source_v = np.ones(n, np.uint8)                                                                  # 1 = LiDAR(로봇 지도/registered), 2 = depth 채움
+if DF["key"]:
+    dk = np.concatenate(DF["key"]); dsem = np.concatenate(DF["sem"]); drgb = np.concatenate(DF["rgb"]); dfr = np.concatenate(DF["fr"])
+    duk, dinv = np.unique(dk, return_inverse=True); new_mask = ~np.isin(duk, uk); duk = duk[new_mask]                   # LiDAR 복셀과 같은 셀은 제외
+    remap = {k: i for i, k in enumerate(duk)}; keep = np.array([k in remap for k in dk]) if len(duk) else np.zeros(len(dk), bool)
+    if keep.any():
+        idx2 = np.array([remap[k] for k in dk[keep]]); nd = len(duk); cnt = np.bincount(idx2, minlength=nd)
+        sem_d = np.stack([np.bincount(idx2, weights=dsem[keep][:, c], minlength=nd) for c in range(NCH)], -1) / cnt[:, None]
+        rgb_d = (np.stack([np.bincount(idx2, weights=drgb[keep][:, c], minlength=nd) for c in range(3)], -1) / cnt[:, None]).astype(np.uint8)
+        ff_d = np.full(nd, 10**9, np.int64); np.minimum.at(ff_d, idx2, dfr[keep])
+        uk = np.concatenate([uk, duk]); n_pts = np.concatenate([n_pts, cnt]); ns_ = np.concatenate([ns_, cnt.astype(np.float64)]); sem_v = np.concatenate([sem_v, sem_d]); rgb_v = np.concatenate([rgb_v, rgb_d]); ff = np.concatenate([ff, ff_d])
+        source_v = np.concatenate([source_v, np.full(nd, 2, np.uint8)]); n = len(uk)
+        print(f"depth 채움: 후보 {n_df_cand:,} 점 중 LiDAR {a.depth_gap} m 밖 {n_df_kept:,} → 새 복셀 {nd:,} (LiDAR 복셀 {int((source_v==1).sum()):,} 의 {100*nd/max((source_v==1).sum(),1):.0f}%)")
 m = (1 << 21) - 1; ijk = (np.stack([(uk >> 42) & m, (uk >> 21) & m, uk & m], -1) - o).astype(np.int32)
-np.savez_compressed(a.out, ijk=ijk, n_pts=n_pts.astype(np.int32), rgb=rgb_v, sem_mean=sem_v.astype(np.float16), n_sem=ns_.astype(np.int32), first_frame=ff.astype(np.int32),
+np.savez_compressed(a.out, ijk=ijk, n_pts=n_pts.astype(np.int32), rgb=rgb_v, sem_mean=sem_v.astype(np.float16), n_sem=ns_.astype(np.int32), first_frame=ff.astype(np.int32), source=source_v,
                     vox=a.vox, classes=np.array(CLASSES), n_frames=n_frames, map_xyz=M.astype(np.float32), map_sem=sem_mean_pt.astype(np.float16), map_n_sem=n_sem.astype(np.int32),
-                    source=np.array(f"robot map {os.path.basename(a.pcd)}"), **({"classdict": np.array(json.dumps(classdict, ensure_ascii=False))} if classdict else {}))
+                    geometry_source=np.array(f"robot map {os.path.basename(a.pcd)}"), **({"classdict": np.array(json.dumps(classdict, ensure_ascii=False))} if classdict else {}))
 lab = int(has.sum()); am = sem_mean_pt[has].argmax(1)
 print(f"지도 점 {N:,} 중 라벨 받음 {lab:,} ({100*lab/N:.0f}%) · 프레임 {n_frames} · 프레임당 보이는 점 평균 {n_vis_tot/max(n_frames,1):,.0f}")
 print("라벨 분포:", {c: int((am == i).sum()) for i, c in enumerate(CLASSES)}); print("복셀", n, "저장:", a.out)
@@ -80,4 +111,9 @@ if a.pcd_out:
     pal = np.array([CD.hex2rgb(c["color"]) for c in classdict["classes"]] + [CD.hex2rgb(CD.OTHER_COLOR), CD.hex2rgb(CD.UNKNOWN_COLOR)], np.float64) / 255.0 if classdict else None
     lab_all = np.where(has, sem_mean_pt.argmax(1), NCH + 1); lab_all[has & (sem_mean_pt.max(1) < 0.3)] = NCH
     col = pal[lab_all] if pal is not None else np.tile([0.5, 0.5, 0.5], (N, 1))
-    pc = o3d.geometry.PointCloud(); pc.points = o3d.utility.Vector3dVector(M); pc.colors = o3d.utility.Vector3dVector(col); o3d.io.write_point_cloud(a.pcd_out, pc); print("semantic pcd:", a.pcd_out)
+    pc = o3d.geometry.PointCloud(); pc.points = o3d.utility.Vector3dVector(M); pc.colors = o3d.utility.Vector3dVector(col)
+    if (source_v == 2).any():                                                                   # LiDAR-only pcd 는 따로, 기본 pcd 는 depth 채움 포함(복셀 중심)
+        o3d.io.write_point_cloud(a.pcd_out.replace(".pcd", "_lidar_only.pcd"), pc)
+        sv = sem_v.astype(np.float32); hv = ns_ > 0; lv = np.where(hv, sv.argmax(1), NCH + 1); lv[hv & (sv.max(1) < 0.3)] = NCH
+        pc = o3d.geometry.PointCloud(); pc.points = o3d.utility.Vector3dVector(((ijk + 0.5) * a.vox).astype(np.float64)); pc.colors = o3d.utility.Vector3dVector(pal[lv] if pal is not None else np.tile([0.5, 0.5, 0.5], (n, 1)))
+    o3d.io.write_point_cloud(a.pcd_out, pc); print("semantic pcd:", a.pcd_out)
