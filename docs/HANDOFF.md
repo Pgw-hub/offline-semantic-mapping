@@ -336,3 +336,6 @@
 - extract_rgb_session 이 log_time 대신 헤더 stamp 사용 (sim 은 log_time=벽시계 ≠ 헤더=sim 시각). classdicts/indoor_v1.json 추가(floor/stairs/wall/railing/column/door/furniture/person).
 - 결과 output/t2_sim_0915: 지도 점 15,742 중 84% 라벨(wall 8.3k, floor 3.9k, railing 633, stairs 296, column 32 — 기둥은 wall 로 잡힘). SegFormer 오버레이(compiled/segformer_samples.png) 는 floor/wall/railing/stairs 정확.
   ★로봇 저장 지도는 sparse: /cloud_registered 누적 0.1 m 셀 92,925 대비 15,742(17%), 스캔 셀의 56%만 15 cm 안에 지도 점 있음 (키프레임 클라우드가 PGO 입력 복셀로 강하게 다운샘플된 탓). 비교용 dense 변형: compiled/registered_scans_0p1.pcd → registered_scans_semantic.pcd (92k pts, 80% 라벨). BEV 비교 compiled/semantic_bev_robotmap_vs_dense.png.
+- 변형 t2_sim_0915_kf (2026-09-16): robot_map.geometry: keyframe_scans — 키프레임 시각의 /cloud_registered 19개(첫 kf 13.10 s 는 그 시각 스캔이 SLAM 초기화로 없음)를 0.1 m 로 → 62,900 점, 87% 라벨(wall 38k, floor 14k, railing 1.4k, stairs 1.1k).
+  저장 지도 15.7k 대비 4배, 전체 스캔 대비 70% 커버. occupancy 는 전체 스캔 그대로. 코스트맵 free_path 2,401→4,635 셀(바닥 라벨이 촘촘해진 효과). 비교 PNG compiled/semantic_bev_A_B_C.png, rrd compiled/track2_variants.rrd.
+  옵션: robot_map.geometry = pcd(저장 지도) | keyframe_scans | all_scans | every_N. tools/preprocess/scans_to_pcd.py.
