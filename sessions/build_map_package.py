@@ -123,7 +123,11 @@ class Build:
         if self.robot_map:                                                  # 로봇 지도 점에 라벨 투영 → session_voxsem 직접
             sess = os.path.join(self.D["voxel"], "session_voxsem.npz")
             if self.done("C", sess): return
-            self.run([PY, f"{TOOLS}/label_map_points.py", self.robot_map["pcd"], self.calib, self.D["sem"], sess, "--datasets", *[self.ds(l) for l in self.logs],
+            geom = self.robot_map.get("geometry", "pcd"); pcd = self.robot_map["pcd"] if geom == "pcd" else os.path.join(self.D["compiled"], f"geometry_{geom}.pcd")
+            if geom != "pcd":                                               # keyframe_scans | all_scans | every_N : S 단계 /cloud_registered 에서 기하 pcd 생성
+                sel = ["--keyframes", self.robot_map["traj"]] if geom == "keyframe_scans" else (["--every", geom.split("_")[1]] if geom.startswith("every_") else [])
+                self.run([PY, f"{TOOLS}/scans_to_pcd.py", pcd, "--scans", *[os.path.join(self.ds(l), "lidar_scans") for l in self.logs]] + sel, logname="C_geometry.log")
+            self.run([PY, f"{TOOLS}/label_map_points.py", pcd, self.calib, self.D["sem"], sess, "--datasets", *[self.ds(l) for l in self.logs],
                       "--mask-bottom", str(self.opt["mask_bottom_px"]), "--edge-px", str(self.opt["label_edge_px"]), "--require-depth", "1" if self.opt["require_depth"] else "0",
                       "--pcd-out", os.path.join(self.D["compiled"], "robot_map_semantic.pcd")], logname="C_robot_map.log"); return
         outs = []
@@ -185,7 +189,7 @@ class Build:
                  "edges_object_terrain": ("compiled/voxel_session_relations.json", "객체-지형 관계 (bbox 발자국 아래 지배 지형)"),
                  "edges_vlm": ("compiled/session_edges_vlm.json", "VLM 판정 엣지 (Qwen2.5-VL)")}
         cdj = os.path.join(self.D["sem"], "classes.json"); cdict = json.load(open(cdj)) if os.path.exists(cdj) else None
-        m = {"map_id": self.opt["map_id"], "frame": self.opt["frame"], "pose_graph": ("graph/graph.json" if self.opt["pose_graph"] else None), "geometry_source": ("robot_map:" + os.path.basename(self.robot_map["pcd"]) if self.robot_map else "raw scans"), "voxel_m": 0.1, "grid_axes": "row=x, col=y", "occupancy_res_m": self.opt["occupancy_res"], "classdict": cdict,
+        m = {"map_id": self.opt["map_id"], "frame": self.opt["frame"], "pose_graph": ("graph/graph.json" if self.opt["pose_graph"] else None), "geometry_source": ((f"robot_map:{self.robot_map.get('geometry','pcd')}:" + os.path.basename(self.robot_map["pcd"])) if self.robot_map else "raw scans"), "voxel_m": 0.1, "grid_axes": "row=x, col=y", "occupancy_res_m": self.opt["occupancy_res"], "classdict": cdict,
              "built": time.strftime("%Y-%m-%d %H:%M"), "source": {"mcap_dir": self.mcap_dir, "logs": self.logs, "calib": self.calib}, "options": self.opt, "files": {}}
         for k, (p, desc) in files.items():
             full = os.path.join(self.root, p)

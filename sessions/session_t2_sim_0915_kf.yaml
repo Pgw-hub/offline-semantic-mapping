@@ -1,0 +1,30 @@
+# 2026-09-16 t2_sim_0915 변형 — 기하 = 키프레임 시각의 /cloud_registered 20개(자세 = .txt 그대로, Δ 보간 없음) 를 0.1 m 로, occupancy = 전체 스캔. dataset/sem 심볼릭링크 재사용(A/S/R/B/D 결과 공유).
+root: t2_sim_0915_kf
+mcap_dir: /data2/20260915/railab_raibo_20260915_065435
+logs:
+- 0
+- 1
+- 2
+options:
+  map_id: "sim dungok 2F 20260915 · track 2 variant: geometry = keyframe-time /cloud_registered (20 scans), occupancy = all scans"
+  robot_map:
+    pcd: /data2/20260915/260915_test/260915_test.pcd
+    traj: /data2/20260915/260915_test/260915_test.txt
+    geometry: keyframe_scans
+  lidar_extrinsic: slam
+  lidar_fusion: false
+  mask_bottom_px: 60
+  drop_classes: person
+  vlm_edges: false
+  occupancy_res: 0.2
+  prob_hit: 0.85
+  prob_miss: 0.45
+  costmap: {h_ground: 2, h_obs: 3, clearance: 1.4, band_min: 0.3}
+  view_cubes: false
+  view_coarse: 0.3
+  video_speed: 15
+  video_pipeline: true
+  classdict: indoor_v1
+  label_edge_px: 4
+  require_depth: true
+  pose_graph: true
