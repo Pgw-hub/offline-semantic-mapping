@@ -70,3 +70,7 @@
 | 저장 지도 `log/map/<name>/` (.pcd/.txt/_gt) | ✘ 없음. raisin_config/map 은 GIS 타일(korea.mbtiles) |
 | raisin_config/calibration | ✔ (실로봇 시리얼의 d455 설정 그대로) |
 | 길이 | sim 시각 기준 45 s (log_000 33.6 s + log_001 11.4 s; wall 80 s), 이동 범위 6×3 m |
+
+## ★ 기본 파이프라인 = 트랙 2 keyframe_scans (2026-09-16 채택)
+녹화 폴더에 반드시 함께 넣을 것: (1) mcap (토픽: /Odometry/base, /cloud_registered[pointcloud2], /path/pgo, d455_front/rgb·depth raw, /livox/lidar) (2) 로봇 저장 지도 폴더 `map_*/<name>.pcd + <name>.txt`
+(save_point_cloud_map) (3) `raisin_config/` (calibration — GUI Calibration 창 Save). 포털은 데이터셋 폴더에서 .pcd+.txt 짝을 자동으로 찾아 robot_map 으로 넣는다. 지도 폴더가 없으면 geometry=raw_scans(기존 방식) 만 가능.

@@ -355,3 +355,10 @@
     D 거리대별 ref→cand 중앙: 0-10 m 6.5 → 80 m+ 11.7 (드리프트 누적), B/C 는 전 구간 4.5~6.2 로 평탄.
   ⇒ 트랙 2(B/C) 는 GT 프레임과 일치(오프셋 <2 cm, 두께 GT 와 동일), 기존 방식 D 는 실외 300 m 에서 55 cm 강체 오프셋 + 거리에 따라 커지는 오차 + 두께 2배. B 두께 3.4~4.2 cm 가 실로봇 하한.
   D 라벨 비율이 높은 것(59%/35%)은 카메라 depth 점을 복셀로 추가하는 C 단계 방식 때문(표현 차이). output/t2_<ds>_pcd/compiled/{semantic_bev_A_B_C.png, track2_variants.rrd, map_vs_ref.json}.
+
+## 기본 파이프라인 전환 → 트랙 2 keyframe_scans (2026-09-16)
+- 근거: 0916 실로봇 2개 데이터셋에서 B(keyframe-time /cloud_registered) 가 GT(로봇 저장 지도) 와 오프셋 <2 cm, 두께 동일, 드리프트 없음. 기존 방식은 실외 55 cm 오프셋·두께 2배.
+- 포털 빌드 폼: 옵션 geometry(keyframe_scans 기본 | all_scans | pcd | raw_scans), lidar_extrinsic(calib|slam), livox_flip. 데이터셋 표에 Robot map 열(폴더 안 .pcd+.txt 자동 탐지 find_robot_map). 상세 Stats 에 Geometry source.
+  geometry≠raw_scans 이면 make_yaml 이 options.robot_map{pcd,traj,geometry} 를 넣고 pose_graph=true. 지도 폴더 없으면 빌드 거부(메시지).
+- 오케스트레이터 기본 geometry keyframe_scans(robot_map 있을 때). occupancy 는 전체 /cloud_registered(S 단계) 그대로. 라벨: label_map_points(require_depth, edge 제외). lidar_fusion 은 A 단계(ConceptGraphs depth)에만 영향.
+- sim 데이터셋은 세션에 lidar_extrinsic: slam, livox_flip: false 필요(포털 폼에서 선택).

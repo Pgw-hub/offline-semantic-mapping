@@ -8,12 +8,16 @@
   python build_map_package.py <session.yaml> --force D    # 해당 단계 산출물 지우고 다시
   python build_map_package.py <session.yaml> --dry-run    # 명령만 출력
 단계:
-  P  posegraph  (options.pose_graph: true) mcap → graph/ : deskew 키프레임 + 루프클로저 + GTSAM PGO (geometry/build_graph.py). 이후 A,S,C 가 보정 자세 사용
+  ★ 기본 파이프라인 = 트랙 2 (options.robot_map: {pcd, traj, geometry: keyframe_scans}) — 2026-09-16 실로봇 검증 후 채택.
+     기하 = 로봇 lidar_slam 이 저장한 지도 프레임(최종 PGO). 자세 = <name>.txt 키프레임 + /Odometry/base 보간(Δ(t)). 점 = 키프레임 시각의 /cloud_registered.
+     options.robot_map 이 없으면 옛 트랙 1(raw /livox/lidar + /Odometry/base [+ build_graph PGO]) 로 동작.
+  P  posegraph  robot_map: geometry/robot_graph.py --traj (로봇 키프레임 자세 → graph/) | 트랙1: deskew 키프레임 + 루프클로저 + GTSAM PGO (geometry/build_graph.py)
   A  dataset    mcap → dataset/<log>/ (results/, traj.txt, stamps.npz, lidar_world/)   [로그별]
-  S  scans      mcap → dataset/<log>/lidar_scans/ (스캔별 world 점+원점)                [로그별]
+  S  scans      robot_map: /cloud_registered → Δ(t) 최종 프레임 (export_registered_scans.py) | 트랙1: raw deskew (export_lidar_scans.py) → dataset/<log>/lidar_scans/
   R  rgb        mcap → sem/rgb/ (LiDAR 시각 10Hz RGB) + rgb_index.npz                  [세션]
   B  semantic   sem/rgb → sem/sem/ (SegFormer-B4, grass/path/tree/person)              [세션, GPU]
-  C  voxels     dataset+sem → voxel/<log>_voxsem.npz → voxel/session_voxsem.npz        [로그별+병합]
+  C  voxels     robot_map: 기하 pcd(keyframe_scans|all_scans: scans_to_pcd.py / pcd: 저장 지도) 점에 SegFormer 투영 (label_map_points.py) → voxel/session_voxsem.npz + compiled/robot_map_semantic.pcd
+                트랙1: dataset+sem → voxel/<log>_voxsem.npz → voxel/session_voxsem.npz        [로그별+병합]
   D  objects    ConceptGraphs → dataset/<log>/exps/r_mapping_stride10/                 [로그별, GPU]
   E  graph      객체 병합 → compiled/session_objects.json(+clip), 휴리스틱 엣지, 객체-지형 엣지, (옵션) VLM 엣지
   F  occupancy  lidar_scans + session_voxsem → compiled/session_occupancy.npz
@@ -123,7 +127,7 @@ class Build:
         if self.robot_map:                                                  # 로봇 지도 점에 라벨 투영 → session_voxsem 직접
             sess = os.path.join(self.D["voxel"], "session_voxsem.npz")
             if self.done("C", sess): return
-            geom = self.robot_map.get("geometry", "pcd"); pcd = self.robot_map["pcd"] if geom == "pcd" else os.path.join(self.D["compiled"], f"geometry_{geom}.pcd")
+            geom = self.robot_map.get("geometry", "keyframe_scans"); pcd = self.robot_map["pcd"] if geom == "pcd" else os.path.join(self.D["compiled"], f"geometry_{geom}.pcd")
             if geom != "pcd":                                               # keyframe_scans | all_scans | every_N : S 단계 /cloud_registered 에서 기하 pcd 생성
                 sel = ["--keyframes", self.robot_map["traj"]] if geom == "keyframe_scans" else (["--every", geom.split("_")[1]] if geom.startswith("every_") else [])
                 self.run([PY, f"{TOOLS}/scans_to_pcd.py", pcd, "--scans", *[os.path.join(self.ds(l), "lidar_scans") for l in self.logs]] + sel, logname="C_geometry.log")
@@ -189,7 +193,7 @@ class Build:
                  "edges_object_terrain": ("compiled/voxel_session_relations.json", "객체-지형 관계 (bbox 발자국 아래 지배 지형)"),
                  "edges_vlm": ("compiled/session_edges_vlm.json", "VLM 판정 엣지 (Qwen2.5-VL)")}
         cdj = os.path.join(self.D["sem"], "classes.json"); cdict = json.load(open(cdj)) if os.path.exists(cdj) else None
-        m = {"map_id": self.opt["map_id"], "frame": self.opt["frame"], "pose_graph": ("graph/graph.json" if self.opt["pose_graph"] else None), "geometry_source": ((f"robot_map:{self.robot_map.get('geometry','pcd')}:" + os.path.basename(self.robot_map["pcd"])) if self.robot_map else "raw scans"), "voxel_m": 0.1, "grid_axes": "row=x, col=y", "occupancy_res_m": self.opt["occupancy_res"], "classdict": cdict,
+        m = {"map_id": self.opt["map_id"], "frame": self.opt["frame"], "pose_graph": ("graph/graph.json" if self.opt["pose_graph"] else None), "geometry_source": ((f"robot_map:{self.robot_map.get('geometry','keyframe_scans')}:" + os.path.basename(self.robot_map["pcd"])) if self.robot_map else "raw scans"), "voxel_m": 0.1, "grid_axes": "row=x, col=y", "occupancy_res_m": self.opt["occupancy_res"], "classdict": cdict,
              "built": time.strftime("%Y-%m-%d %H:%M"), "source": {"mcap_dir": self.mcap_dir, "logs": self.logs, "calib": self.calib}, "options": self.opt, "files": {}}
         for k, (p, desc) in files.items():
             full = os.path.join(self.root, p)

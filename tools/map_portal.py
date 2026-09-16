@@ -23,7 +23,17 @@ OPTION_SPEC = {   # 웹 폼에서 받는 옵션: (타입, 기본값, 범위)
     "h_ground": ("int", 2, (1, 10)), "h_obs": ("int", 3, (1, 10)), "clearance": ("float", 1.4, (0.5, 3.0)), "band_min": ("float", 0.3, (0.1, 1.0)),
     "view_cubes": ("bool", False, None), "view_coarse": ("float", 0.3, (0.1, 1.0)), "video_speed": ("int", 15, (0, 60)), "video_pipeline": ("bool", True, None),
     "classdict": ("str", "default", None), "label_edge_px": ("int", 4, (0, 12)), "require_depth": ("bool", True, None),
-    "pose_graph": ("bool", False, None)}
+    "geometry": ("str", "keyframe_scans", None),   # keyframe_scans(기본, 트랙 2) | all_scans | pcd(로봇 저장 지도 그대로) | raw_scans(기존 트랙 1)
+    "pose_graph": ("bool", False, None), "lidar_extrinsic": ("str", "calib", None), "livox_flip": ("bool", True, None)}
+GEOMETRIES = ("keyframe_scans", "all_scans", "pcd", "raw_scans")
+def find_robot_map(dp):
+    """데이터셋 폴더 안 로봇 저장 지도 (map_*/ 또는 하위 폴더의 <name>.pcd + <name>.txt 짝) → {"pcd","traj","name"} 또는 None"""
+    cands = []
+    for sub in [dp] + [os.path.join(dp, d) for d in sorted(os.listdir(dp)) if os.path.isdir(os.path.join(dp, d)) and d not in ("raisin_config",)]:
+        for f in os.listdir(sub):
+            if f.endswith(".pcd") and not f.endswith("_gt.pcd") and os.path.exists(os.path.join(sub, f[:-4] + ".txt")): cands.append(os.path.join(sub, f))
+    if not cands: return None
+    p = sorted(cands, key=os.path.getmtime)[-1]; return {"pcd": p, "traj": p[:-4] + ".txt", "name": os.path.basename(p)[:-4]}
 HTML = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "map_portal.html"), encoding="utf-8").read()
 sys.path.insert(0, ROOT); import classdict as CD
 ADE_LABELS = json.load(open(os.path.join(ROOT, "classdicts", "ade20k_labels.json"))) if os.path.exists(os.path.join(ROOT, "classdicts", "ade20k_labels.json")) else []
@@ -45,7 +55,7 @@ def scan_datasets():
             mt = max(os.path.getmtime(os.path.join(dp, f)) for f in logs)
             out.append({"path": dp, "name": os.path.basename(dp), "parent": os.path.basename(os.path.dirname(dp)), "n_logs": len(logs), "log_min": nums[0], "log_max": nums[-1],
                         "contiguous": nums == list(range(nums[0], nums[-1] + 1)), "size_gb": round(sum(sizes) / 1e9, 2), "recorded": time.strftime("%Y-%m-%d %H:%M", time.localtime(mt)),
-                        "has_calib": os.path.isdir(os.path.join(dp, "raisin_config", "calibration"))})
+                        "has_calib": os.path.isdir(os.path.join(dp, "raisin_config", "calibration")), "robot_map": find_robot_map(dp)})
             dn[:] = []
     out.sort(key=lambda d: d["recorded"], reverse=True); _ds_cache.update(t=time.time(), v=out); return out
 
@@ -131,6 +141,13 @@ def make_yaml(spec):
                      "view_cubes": opts["view_cubes"], "view_coarse": opts["view_coarse"], "video_speed": opts["video_speed"], "video_pipeline": opts["video_pipeline"],
                      "classdict": opts["classdict"], "label_edge_px": opts["label_edge_px"], "require_depth": opts["require_depth"], "pose_graph": opts["pose_graph"]}}
     if opts["classdict"] != "default" and not os.path.exists(os.path.join(CD.DIR, f"{opts['classdict']}.json")): raise ValueError(f"클래스 사전 '{opts['classdict']}' 없음")
+    if opts["geometry"] not in GEOMETRIES: raise ValueError(f"geometry 는 {GEOMETRIES} 중 하나")
+    if opts["lidar_extrinsic"] not in ("calib", "slam"): raise ValueError("lidar_extrinsic 은 calib | slam")
+    y["options"].update({"lidar_extrinsic": opts["lidar_extrinsic"], "livox_flip": opts["livox_flip"]})
+    if opts["geometry"] != "raw_scans":                          # 트랙 2: 로봇 저장 지도(.pcd/.txt) 필요
+        rm = ds.get("robot_map")
+        if not rm: raise ValueError("이 데이터셋에 로봇 저장 지도(<name>.pcd + <name>.txt, 보통 map_*/ 폴더)가 없음 — geometry=raw_scans(기존 방식) 로 빌드하거나 지도 폴더를 넣어 주세요")
+        y["options"]["robot_map"] = {"pcd": rm["pcd"], "traj": rm["traj"], "geometry": opts["geometry"]}; y["options"]["pose_graph"] = True
     import yaml as _y
     path = os.path.join(SESS, f"session_{name}.yaml"); os.makedirs(SESS, exist_ok=True)
     open(path, "w", encoding="utf-8").write(f"# 웹 콘솔에서 생성 {time.strftime('%Y-%m-%d %H:%M')} · 데이터셋 {ds['name']}\n" + _y.safe_dump(y, allow_unicode=True, sort_keys=False))
@@ -193,7 +210,7 @@ def scan_maps():
             except Exception as ex: graph = {"error": str(ex)}
         maps.append({"name": name, "quality": qual, "graph": graph, "quality_rrd": rel("data_quality.rrd"), "bev": rel("bev.png"), "tags": dict(sorted(tags.items(), key=lambda kv: -kv[1])), "edges_sample": edges_sample, "map_id": man.get("map_id", name), "built": man.get("built", ""), "frame": man.get("frame", ""),
                      "mcap_dir": man.get("source", {}).get("mcap_dir", ""), "logs": logs, "n_logs": len(logs), "calib": man.get("source", {}).get("calib", ""),
-                     "options": man.get("options", {}), "files": man.get("files", {}), "package_mb": round(size / 1e6, 1),
+                     "options": man.get("options", {}), "files": man.get("files", {}), "package_mb": round(size / 1e6, 1), "geometry_source": man.get("geometry_source", "raw scans"),
                      "summary": summ, "rrd": rel("map_package.rrd"), "manifest": f"output/{name}/compiled/map_manifest.json",
                      "videos": [f"output/{name}/compiled/{v}" for v in vids], "video_pipeline": rel(next((v for v in vids if "pipeline" in v), "")),
                      "video_rgb": rel(next((v for v in vids if "rgb" in v), "")),
