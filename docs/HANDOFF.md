@@ -348,3 +348,10 @@
     nearblock_2 (outdoor_v2, 268 kf, 292 s): A 112k 11% · B 1.08M 19% · C 3.04M 14% · free 2,712 / 9,619 / 20,256. 최종 PGO−실시간 odom 차 중앙 20 cm 최대 151 cm(루프클로저 2회) → Δ(t) 보정이 실제로 작동.
   ★라벨 비율이 sim(84%)보다 훨씬 낮은 원인: D455 depth 유효 35%(실내)/51%(실외) + require_depth=1 → 카메라 depth 없는 점(8 m 밖, 검은 표면)은 라벨 불가. LiDAR depth 융합(lidar_fusion, 이제 PC2 디코더로 가능) 또는 require_depth 완화가 다음 단계.
   비교: output/t2_<ds>_pcd/compiled/{semantic_bev_A_B_C.png, track2_variants.rrd} (tools/t2_compare_variants.py). all_scans 에는 로봇 다리/정지 구간 누적 잔상 있음(rmin 0.3) → keyframe_scans 권장 유지.
+- 트랙 1(기존 방식: raw+/Odometry/base, deskew, PGO 없음, LiDAR depth 융합) 비교 빌드 t1_b1f2 / t1_nearblock2 (sessions/run_t1_0916.sh). 4방향 비교 tools/t2_compare_variants.py --extra, GT 지표 tools/map_vs_ref.py (기준 = 로봇 저장 .pcd).
+  GT 대비 (ref→cand 중앙/p90 · 강체 오프셋 · 표면 두께 r0.3/r0.8, cm):
+    b1f_2:      B 4.7/9.1 · 1.8 · 4.2/14.0 | C 4.4/6.7 · 1.4 · 5.3/15.6 | D 4.8/6.7 · 9.6(z 8.8) · 11.9/25.1 | GT 자체 두께 r0.8 13.5
+    nearblock_2: B 5.9/13.3 · 0.1 · 3.4/9.0 | C 4.6/8.7 · 0.3 · 4.0/10.4 | D 8.7/36.8 · 55.0(20.8,-22.2,45.8) · 8.9/17.3 | GT 자체 r0.8 10.1
+    D 거리대별 ref→cand 중앙: 0-10 m 6.5 → 80 m+ 11.7 (드리프트 누적), B/C 는 전 구간 4.5~6.2 로 평탄.
+  ⇒ 트랙 2(B/C) 는 GT 프레임과 일치(오프셋 <2 cm, 두께 GT 와 동일), 기존 방식 D 는 실외 300 m 에서 55 cm 강체 오프셋 + 거리에 따라 커지는 오차 + 두께 2배. B 두께 3.4~4.2 cm 가 실로봇 하한.
+  D 라벨 비율이 높은 것(59%/35%)은 카메라 depth 점을 복셀로 추가하는 C 단계 방식 때문(표현 차이). output/t2_<ds>_pcd/compiled/{semantic_bev_A_B_C.png, track2_variants.rrd, map_vs_ref.json}.
