@@ -52,9 +52,8 @@ def read_mcap(path):
     with open(path, "rb") as f:
         for sch, ch, msg in make_reader(f).iter_messages(topics=["/Odometry/base", "/livox/lidar"]):
             if ch.topic == "/livox/lidar":
-                sec, nsec = struct.unpack_from("<iI", msg.data, 0); N, = struct.unpack_from("<I", msg.data, 24)
-                p = np.frombuffer(msg.data, dtype=LIDAR_DT, count=N, offset=28)
-                scans.append((sec * 10**9 + nsec, np.stack([-p["x"], -p["y"], p["z"]], -1).astype(np.float64), p["ot"].astype(np.int64)))
+                from pc2_reader import decode_livox                      # CustomMsg / PointCloud2 자동, LIVOX_FLIP 환경변수
+                ns_, xyz_, ot_, _ = decode_livox(msg.data); scans.append((ns_, xyz_.astype(np.float64), ot_))
             else:
                 v = struct.unpack_from("<7d", msg.data, 8); sec, nsec = struct.unpack_from("<iI", msg.data, 0)
                 gt_ns.append(sec * 10**9 + nsec); gt_pos.append(v[0:3]); gt_q.append([v[6], v[3], v[4], v[5]])

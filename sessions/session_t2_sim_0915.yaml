@@ -12,6 +12,7 @@ options:
     pcd: /data2/20260915/260915_test/260915_test.pcd
     traj: /data2/20260915/260915_test/260915_test.txt
   lidar_extrinsic: slam
+  livox_flip: false
   lidar_fusion: false
   mask_bottom_px: 60
   drop_classes: person

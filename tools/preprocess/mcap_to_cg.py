@@ -56,12 +56,9 @@ LIDAR_DT = np.dtype([("ot", "<u4"), ("x", "<f4"), ("y", "<f4"), ("z", "<f4"),
 
 
 def decode_lidar(data):
-    """raisin_pod CustomMsg -> (stamp_ns, Nx3 float32, refl). 좌표 180° 보정(-x,-y) 포함."""
-    sec, nsec = struct.unpack_from("<iI", data, 0)
-    N, = struct.unpack_from("<I", data, 24)
-    pts = np.frombuffer(data, dtype=LIDAR_DT, count=N, offset=28)
-    xyz = np.stack([-pts["x"], -pts["y"], pts["z"]], -1).astype(np.float32)
-    return sec * 10**9 + nsec, xyz, pts["refl"].copy()
+    """/livox/lidar (CustomMsg 또는 PointCloud2 자동) -> (stamp_ns, Nx3 float32, refl). 좌표 180° 보정(-x,-y) 은 LIVOX_FLIP 환경변수(기본 켬)."""
+    from pc2_reader import decode_livox
+    ns, xyz, _, refl = decode_livox(data); return ns, xyz, refl
 
 
 def main():

@@ -23,3 +23,31 @@ def parse_pc2(d):
 
 def xyz_of(P):
     return np.stack([P['x'], P['y'], P['z']], 1).astype(np.float64)
+
+
+# ---- /livox/lidar 공용 디코더: raisin CustomMsg(구 레코더 `pointcloud`) 또는 PointCloud2(`pointcloud2`, 2026-09-14 이후) 자동 판별
+import os as _os
+LIVOX_DT = np.dtype([("ot", "<u4"), ("x", "<f4"), ("y", "<f4"), ("z", "<f4"), ("refl", "u1"), ("tag", "u1"), ("line", "u1")])
+
+def livox_flip():
+    """점 좌표 180° yaw 보정(-x,-y) 여부. 실로봇 Livox 드라이버 프레임은 base 와 180° 어긋나 있어 기본 켬; sim(raisim livox) 은 항등 → LIVOX_FLIP=0."""
+    return _os.environ.get("LIVOX_FLIP", "1") not in ("0", "false", "False")
+
+def is_pc2(data):
+    flen, = struct.unpack_from("<I", data, 8)
+    return 0 < flen < 128 and all(32 <= b < 127 for b in data[12:12 + flen])
+
+def decode_livox(data, flip=None):
+    """→ (stamp_ns, xyz float32 (N,3) [flip 적용], ot_ns int64 (N,) 점별 시각 오프셋, refl uint8 (N,))"""
+    flip = livox_flip() if flip is None else flip
+    sec, nsec = struct.unpack_from("<iI", data, 0); ns = sec * 10**9 + nsec
+    if is_pc2(data):
+        h, P = parse_pc2(data); x, y, z = P["x"].astype(np.float32), P["y"].astype(np.float32), P["z"].astype(np.float32)
+        ot = P["t"].astype(np.int64) if "t" in P.dtype.names else np.zeros(len(P), np.int64)
+        if "t" in P.dtype.names and ot.max() > 10**9: ot = ot - ot.min()             # 절대 ns 로 온 경우 → 오프셋
+        refl = P["intensity"].astype(np.uint8) if "intensity" in P.dtype.names else np.zeros(len(P), np.uint8)
+    else:
+        N, = struct.unpack_from("<I", data, 24); p = np.frombuffer(data, dtype=LIVOX_DT, count=N, offset=28)
+        x, y, z, ot, refl = p["x"], p["y"], p["z"], p["ot"].astype(np.int64), p["refl"].copy()
+    xyz = np.stack([-x, -y, z], -1) if flip else np.stack([x, y, z], -1)
+    return ns, xyz.astype(np.float32), ot, refl

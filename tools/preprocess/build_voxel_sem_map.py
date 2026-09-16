@@ -54,11 +54,8 @@ def load_T(calib, name):
 
 
 def decode_lidar(data):
-    sec, nsec = struct.unpack_from("<iI", data, 0)
-    N, = struct.unpack_from("<I", data, 24)
-    pts = np.frombuffer(data, dtype=LIDAR_DT, count=N, offset=28)
-    xyz = np.stack([-pts["x"], -pts["y"], pts["z"]], -1).astype(np.float32)
-    return sec*10**9 + nsec, xyz
+    from pc2_reader import decode_livox                                  # CustomMsg / PointCloud2 자동, LIVOX_FLIP 환경변수
+    ns, xyz, _, _ = decode_livox(data); return ns, xyz
 
 
 def pack(ijk):
