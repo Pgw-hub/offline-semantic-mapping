@@ -362,3 +362,6 @@
   geometry≠raw_scans 이면 make_yaml 이 options.robot_map{pcd,traj,geometry} 를 넣고 pose_graph=true. 지도 폴더 없으면 빌드 거부(메시지).
 - 오케스트레이터 기본 geometry keyframe_scans(robot_map 있을 때). occupancy 는 전체 /cloud_registered(S 단계) 그대로. 라벨: label_map_points(require_depth, edge 제외). lidar_fusion 은 A 단계(ConceptGraphs depth)에만 영향.
 - sim 데이터셋은 세션에 lidar_extrinsic: slam, livox_flip: false 필요(포털 폼에서 선택).
+- depth 카메라 빈 곳 채움 (2026-09-16, label_map_points --depth-fill-range/--depth-gap/--depth-shadow; 세션 depth_fill_range 기본 4 m, gap 0.15): depth 점 중 (a) 4 m 안 (b) 경계(depth 불연속 12 cm) 아님
+  (c) 같은 픽셀 방향 LiDAR 표면보다 0.5 m 이상 앞이거나 LiDAR 없음 (d) LiDAR 복셀 15 cm 밖 → 0.1 m 복셀로 추가, source=2 (LiDAR=1). pcd 는 robot_map_semantic.pcd(전체) + _lidar_only.pcd.
+  b1f_2 kf 지도: LiDAR 54k → +depth 36k(68% 가 바닥 15 cm 이하: 키프레임 LiDAR 가 못 본 로봇 앞 지면) · 라벨 복셀 24.8k→60.2k · 코스트맵 free 458→1,351. z-buffer 필터 전에는 74k 가 붙었고 그중 절반이 벽 뒤 0.2~0.45 m 복제층이었음.

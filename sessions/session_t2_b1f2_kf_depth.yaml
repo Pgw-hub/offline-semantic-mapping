@@ -27,5 +27,5 @@ options:
   label_edge_px: 4
   require_depth: true
   pose_graph: true
-  depth_fill_range: 5.0
+  depth_fill_range: 4.0
   depth_fill_gap: 0.15

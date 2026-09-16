@@ -16,6 +16,7 @@ ap.add_argument("--require-depth", type=int, default=1); ap.add_argument("--max-
 ap.add_argument("--depth-fill-range", type=float, default=0.0, help="depth 카메라 점으로 LiDAR 빈 곳 채우기 (카메라 거리 상한 m, 0=끔)")
 ap.add_argument("--depth-gap", type=float, default=0.15, help="LiDAR 지도 점이 이 거리 안에 있으면 depth 점 추가 안 함 (표면 이중화 방지)")
 ap.add_argument("--depth-px-stride", type=int, default=3); ap.add_argument("--depth-frame-stride", type=int, default=2); ap.add_argument("--depth-edge", type=float, default=0.12, help="이웃 픽셀과 depth 차 (m) 이상이면 경계(flying pixel) 로 버림")
+ap.add_argument("--depth-shadow", type=float, default=0.5, help="같은 픽셀 방향에 LiDAR 표면이 이 거리(m) 안에 있으면 '같은 표면의 어긋난 복제' 로 보고 버림. LiDAR 표면보다 이만큼 앞에 있는 점(LiDAR 가 놓친 물체)만 통과")
 a = ap.parse_args()
 
 import open3d as o3d
@@ -67,6 +68,15 @@ for ds in a.datasets:
             dz = np.zeros_like(dep); dz[:, 1:] = np.maximum(dz[:, 1:], np.abs(dep[:, 1:] - dep[:, :-1])); dz[1:, :] = np.maximum(dz[1:, :], np.abs(dep[1:, :] - dep[:-1, :]))
             okd &= dz[vv_g, uu_g] < a.depth_edge; okd &= ~edge[vv_g, uu_g]; okd &= vv_g < Hc - a.mask_bottom
             zc, uc, vc = zc[okd], uu_g[okd], vv_g[okd]
+            if len(zc):
+                # LiDAR z-buffer (시야 안 LiDAR 지도 점 전부, 픽셀 stride 격자, 3×3 이웃 최소): 같은 방향에 LiDAR 표면이 있으면 depth 점은 그 표면의 복제(정렬 오차) 일 확률이 높음
+                zb = np.full((Hc // a.depth_px_stride + 1, Wc // a.depth_px_stride + 1), np.inf, np.float32)
+                infz = infov & (zl < a.depth_fill_range + a.depth_shadow + 1.0)
+                np.minimum.at(zb, (v[infz] // a.depth_px_stride, u[infz] // a.depth_px_stride), zl[infz].astype(np.float32))
+                zb = cv2.erode(zb, np.ones((3, 3), np.uint8))                                          # 3×3 최소 (이웃 픽셀의 LiDAR 도 같은 표면으로 간주)
+                zbp = zb[vc // a.depth_px_stride, uc // a.depth_px_stride]
+                okz = ~np.isfinite(zbp) | (zc < zbp - a.depth_shadow)                                  # LiDAR 없음 또는 LiDAR 표면보다 shadow 만큼 앞(LiDAR 가 놓친 물체)
+                zc, uc, vc = zc[okz], uc[okz], vc[okz]
             if len(zc):
                 pcam = np.stack([(uc - cx) / fx * zc, (vc - cy) / fy * zc, zc], -1); pw = pcam @ T_wc[:3, :3].T + T_wc[:3, 3]
                 far = tree.query(pw, distance_upper_bound=a.depth_gap)[0] > a.depth_gap              # LiDAR 점이 gap 안에 없는 곳만
