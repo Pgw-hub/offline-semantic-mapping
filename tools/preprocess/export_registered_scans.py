@@ -18,15 +18,20 @@ ns, pos, q, scans = [], [], [], []
 with open(a.mcap, "rb") as f:
     for sch, ch, msg in make_reader(f).iter_messages(topics=["/Odometry/base", "/cloud_registered"]):
         if ch.topic == "/cloud_registered":
-            h, P = parse_pc2(msg.data); scans.append((h["ns"], xyz_of(P).astype(np.float32)))
+            h, P = parse_pc2(msg.data); scans.append((h["ns"], xyz_of(P).astype(np.float32), h["frame"]))
         else:
             v = struct.unpack_from("<7d", msg.data, 8); sec, nsec = struct.unpack_from("<iI", msg.data, 0)
             ns.append(sec * 10**9 + nsec); pos.append(v[:3]); q.append([v[6], v[3], v[4], v[5]])
 odom = Odom(np.array(ns, np.int64), np.array(pos), np.array(q)); pp = None
 if a.pose_graph:
     from pose_provider import PoseProvider; pp = PoseProvider(a.pose_graph); print("pose graph:", a.pose_graph, pp.meta)
+# frame_id 검사: lidar_slam 은 world 프레임(id_) 로 발행하지만, 드물게 센서 프레임(livox_lidar_0:imu) 클라우드가 같은 토픽에 섞여 나옴(오도메트리 공백 시각) → 제외
+import collections; fc = collections.Counter(f for _, _, f in scans); world_frame = fc.most_common(1)[0][0]
+skipped = [(ts / 1e9, f) for ts, _, f in scans if f != world_frame]
+if skipped: print(f"frame_id 불일치 스캔 {len(skipped)}개 제외 (world='{world_frame}'): " + ", ".join(f"{t:.2f}s:{f}" for t, f in skipped[:8]))
 n_ok = 0
-for i, (ts, P) in enumerate(scans):
+for i, (ts, P, fr) in enumerate(scans):
+    if fr != world_frame: continue
     if pp is not None:
         T = pp.at(ts)
         if T is None: continue
