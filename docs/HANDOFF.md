@@ -365,3 +365,14 @@
 - depth 카메라 빈 곳 채움 (2026-09-16, label_map_points --depth-fill-range/--depth-gap/--depth-shadow; 세션 depth_fill_range 기본 4 m, gap 0.15): depth 점 중 (a) 4 m 안 (b) 경계(depth 불연속 12 cm) 아님
   (c) 같은 픽셀 방향 LiDAR 표면보다 0.5 m 이상 앞이거나 LiDAR 없음 (d) LiDAR 복셀 15 cm 밖 → 0.1 m 복셀로 추가, source=2 (LiDAR=1). pcd 는 robot_map_semantic.pcd(전체) + _lidar_only.pcd.
   b1f_2 kf 지도: LiDAR 54k → +depth 36k(68% 가 바닥 15 cm 이하: 키프레임 LiDAR 가 못 본 로봇 앞 지면) · 라벨 복셀 24.8k→60.2k · 코스트맵 free 458→1,351. z-buffer 필터 전에는 74k 가 붙었고 그중 절반이 벽 뒤 0.2~0.45 m 복제층이었음.
+
+## LiDAR 없는 옛 데이터셋 — 20260908 nambu (2026-09-17)
+- /data2/20260908/20260908_nambu/ 6세션. **/livox/lidar·/livox/imu 수신 0**, /Odometry/base 도 사실상 없음(112322 세션만 83개). 남은 것: robot_state(10 Hz base_pos/quat), base_imu, joint_states,
+  d455_front/{rgb,depth}_compressed, d430_{front,rear}/depth_compressed (전부 AV1). raisin_config 포함(ouster 설정 로봇, LiDAR 미기록).
+- tools/map_from_depth_cams.py 신규: depth 카메라 + robot_state 로 지도·재생 rrd 생성.
+  · AV1 디코딩: 패킷 단위 PyAV decode 는 실패(sequence header 없음) → **OBU 시퀀스 헤더가 든 첫 패킷부터 payload 를 이어 붙여 `av.open(..., format="obu")`** 로 한 번에 디코딩. 헤더는 21패킷마다 반복.
+  · depth 복원: 플러그인이 `depth8u = depth_m*255/(far-near) - near*255/(far-near)` 로 8-bit 인코딩(d455 near0.1 far6.0 / d430 near0.1 far3.0) → `depth_m = g*(far-near)/255 + near`. 양자화 2.3 cm + AV1 손실.
+  · 색: d455 rgb 스트림을 같은 3D 점에 color K 로 재투영(rgb24 로 디코딩할 것 — gray 로 받으면 흑백이 됨).
+  · ★robot_state 자세는 다리 상태추정기라 SLAM 보정이 없다. 115341 세션: 174 m 주행에 z 가 -42.7 m(수평 1 m당 0.25 m) 로 **일정한 pitch 편향** → `--level` 로 궤적 최적합 평면 법선을 +z 로 보내는 전역 회전(14.7°) 적용.
+    yaw 드리프트는 보정 불가(BEV 의 완만한 곡선이 실제 곡선인지 드리프트인지 판별 불가). 나머지 5세션은 정지 상태(경로 0 m).
+- 결과: output/depth_map_0908_115341 (복셀 725만@0.05m, map.pcd 116MB, map_from_depth.rrd 79MB, bev.png), output/depth_map_0908_012604(정지, 복셀 1.9만).
