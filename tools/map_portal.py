@@ -174,7 +174,7 @@ def scan_maps():
         if os.path.exists(sp):
             try: summ = json.load(open(sp))
             except Exception: pass
-        rel = lambda f: f"output/{name}/compiled/{f}" if os.path.exists(os.path.join(comp, f)) else None
+        rel = lambda f: (f"output/{name}/compiled/{f}" if f and os.path.isfile(os.path.join(comp, f)) else None)   # f="" 면 compiled 디렉터리가 잡혀 빈 <video> 가 뜨던 버그
         vids = sorted(f for f in os.listdir(comp) if f.endswith(".mp4"))
         logs = man.get("source", {}).get("logs", [])
         size = sum(v.get("bytes", 0) for v in man.get("files", {}).values())
