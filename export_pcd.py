@@ -10,8 +10,15 @@ from load_map import MapPackage
 import classdict as CD
 
 
-def write_pcd(path, xyz, rgb=None, label=None):
+def write_pcd(path, xyz, rgb=None, label=None, fmt="rgb"):
+    """fmt='rgb': x y z rgb(packed float) label(u4) — 시각화·분석용.
+       fmt='robot': x y z intensity — lidar_slam::Point(x,y,z,intensity,t) 과 맞는 필드. intensity 에 클래스 id 를 실어 의미를 보존한다
+                    (로봇 정합은 xyz 만 쓰므로 무해; 로봇 저장 지도와 동일한 헤더라 map load 가 통과)."""
     n = len(xyz); fields = ["x", "y", "z"]; types = ["F"] * 3; arrs = [xyz[:, 0].astype("<f4"), xyz[:, 1].astype("<f4"), xyz[:, 2].astype("<f4")]
+    if fmt == "robot":
+        fields.append("intensity"); types.append("F")
+        arrs.append((label.astype(np.float32) if label is not None else np.zeros(n, np.float32)))
+        rgb = label = None
     if rgb is not None:
         packed = (rgb[:, 0].astype(np.uint32) << 16) | (rgb[:, 1].astype(np.uint32) << 8) | rgb[:, 2].astype(np.uint32)
         fields.append("rgb"); types.append("F"); arrs.append(packed.astype("<u4").view("<f4"))          # PCL 관례: uint32 를 float 비트로
@@ -25,7 +32,7 @@ def write_pcd(path, xyz, rgb=None, label=None):
     return n
 
 
-def export(manifest, out, source="voxels", exclude=(), min_nsem=0, occ_filter=None):
+def export(manifest, out, source="voxels", exclude=(), min_nsem=0, occ_filter=None, fmt="rgb"):
     """exclude: 클래스 이름 + 'other' + 'unknown' 중 뺄 것. occ_filter: None(소스 기본) / True / False — occupancy free·동적 복셀 제거 여부"""
     mp = MapPackage(manifest); names = mp.classes; lab = mp.labels(); n_cls = len(names)
     exclude = tuple(exclude)
@@ -41,16 +48,16 @@ def export(manifest, out, source="voxels", exclude=(), min_nsem=0, occ_filter=No
         O = mp.occ; occm = O["state"] == 1; xyz = ((O["ijk"] + 0.5) * O["res"])[occm]; rgb = None; label = None
     else:
         raise ValueError(source)
-    n = write_pcd(out, xyz, rgb, label)
+    n = write_pcd(out, xyz, rgb, label, fmt)
     legend = {"source": source, "points": int(n), "frame": mp.man.get("frame"), "label_ids": {**{i: c for i, c in enumerate(names)}, n_cls: "other", n_cls + 1: "unknown"},
               "classdict": mp.classdict.get("name"), "excluded": list(exclude), "min_nsem": min_nsem, "occupancy_filter": (source == "voxels_occ") if occ_filter is None else bool(occ_filter),
-              "rgb": "packed uint32 (r<<16|g<<8|b) stored as float bits (PCL convention)"}
+              "format": fmt, "rgb": "packed uint32 (r<<16|g<<8|b) stored as float bits (PCL convention)" if fmt == "rgb" else "없음 (robot 포맷: intensity = label id)"}
     json.dump(legend, open(os.path.splitext(out)[0] + "_legend.json", "w"), ensure_ascii=False, indent=1)
     return n
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(); ap.add_argument("manifest"); ap.add_argument("out"); ap.add_argument("--source", default="voxels", choices=["voxels", "voxels_occ", "occupancy"])
-    ap.add_argument("--exclude", default="", help="뺄 클래스 (쉼표; other, unknown 포함 가능)"); ap.add_argument("--min-nsem", type=int, default=0); ap.add_argument("--occ-filter", type=int, default=-1, help="1/0 강제, -1 = 소스 기본")
-    a = ap.parse_args(); t = time.time(); n = export(a.manifest, a.out, a.source, tuple(x for x in a.exclude.split(",") if x), a.min_nsem, None if a.occ_filter < 0 else bool(a.occ_filter))
+    ap.add_argument("--format", default="rgb", choices=["rgb", "robot"], help="robot = x y z intensity(=label id), lidar_slam 이 읽는 필드"); ap.add_argument("--exclude", default="", help="뺄 클래스 (쉼표; other, unknown 포함 가능)"); ap.add_argument("--min-nsem", type=int, default=0); ap.add_argument("--occ-filter", type=int, default=-1, help="1/0 강제, -1 = 소스 기본")
+    a = ap.parse_args(); t = time.time(); n = export(a.manifest, a.out, a.source, tuple(x for x in a.exclude.split(",") if x), a.min_nsem, None if a.occ_filter < 0 else bool(a.occ_filter), a.format)
     print(f"{n:,} points → {a.out} ({os.path.getsize(a.out)/1e6:.1f} MB, {time.time()-t:.1f}s)")

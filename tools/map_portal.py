@@ -268,12 +268,14 @@ class H(http.server.SimpleHTTPRequestHandler):
             man = os.path.join(OUT, name, "compiled", "map_manifest.json")
             if not os.path.exists(man): return self.send_json({"error": "no map"}, 404)
             exclude = tuple(x for x in q.get("exclude", [""])[0].split(",") if x); min_nsem = int(q.get("min_nsem", ["0"])[0]); occf = q.get("occ", [""])[0]; occ_filter = None if occf == "" else occf == "1"
-            import hashlib; tag = hashlib.md5(f"{src}|{','.join(sorted(exclude))}|{min_nsem}|{occ_filter}".encode()).hexdigest()[:8]
-            fname = f"{name}_{src}" + (f"_no-{'-'.join(sorted(exclude))}" if exclude else "") + (f"_n{min_nsem}" if min_nsem else "") + ("" if occ_filter is None else ("_occ" if occ_filter else "_noocc")) + f"_{tag}.pcd"
+            fmt = q.get("format", ["rgb"])[0]
+            if fmt not in ("rgb", "robot"): return self.send_json({"error": "format"}, 400)
+            import hashlib; tag = hashlib.md5(f"{src}|{','.join(sorted(exclude))}|{min_nsem}|{occ_filter}|{fmt}".encode()).hexdigest()[:8]
+            fname = f"{name}.pcd" if q.get("robot_name", ["0"])[0] == "1" else (f"{name}_{src}" + (f"_no-{'-'.join(sorted(exclude))}" if exclude else "") + (f"_n{min_nsem}" if min_nsem else "") + ("" if occ_filter is None else ("_occ" if occ_filter else "_noocc")) + (f"_{fmt}" if fmt != "rgb" else "") + f"_{tag}.pcd")
             exp = os.path.join(OUT, name, "compiled", "export"); os.makedirs(exp, exist_ok=True); out = os.path.join(exp, fname)
             if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(man):
                 try:
-                    import export_pcd; export_pcd.export(man, out, src, exclude, min_nsem, occ_filter)
+                    import export_pcd; export_pcd.export(man, out, src, exclude, min_nsem, occ_filter, fmt)
                 except Exception as e: return self.send_json({"error": f"PCD 생성 실패: {e}"}, 500)
             rel = f"output/{name}/compiled/export/{fname}"
             return self.send_json({"ok": True, "path": rel, "legend": rel[:-4] + "_legend.json", "bytes": os.path.getsize(out)})
