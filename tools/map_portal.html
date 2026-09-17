@@ -111,7 +111,7 @@ table.cdt input[type=text]{width:120px}table.cdt input[type=number]{width:70px}t
     <div class="right"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4.3-4.3"/></svg><span id="who">gw.park@raionrobotics.com</span></div></div>
   <div class="sn"><div class="title">Semantic Map Console</div>
     <div class="tabs"><span class="on" id="tabLibrary" data-screen="library">Map library</span><span data-screen="datasets">Datasets</span><span data-screen="classdicts">Class dictionary</span><span data-screen="queue" id="tabQueue">Processing queue <em id="queueBadge" hidden></em></span><span data-screen="localize">Localization</span></div>
-    <div class="actions"><button class="btn-link" id="btnIngest">Ingest data</button><button class="btn-pill" id="btnBuild">Build new map</button></div></div>
+    <div class="actions"><a class="btn-link" id="pubLink" href="#" target="_blank" rel="noopener" hidden title="외부 접속 주소 (클릭: 열기 / Shift+클릭: 복사)">Public link</a><button class="btn-link" id="btnIngest">Ingest data</button><button class="btn-pill" id="btnBuild">Build new map</button></div></div>
 
   <section class="screen on" id="library">
     <div class="hero"><div class="in"><div class="eyebrow" id="heroEyebrow">Quadruped mapping program · Offline 3D Semantic Map</div><h2>Map library</h2>
@@ -215,7 +215,7 @@ const rerunURL=p=>`${viewerBase()}?url=${encodeURIComponent(fileURL(p))}`;
 const fmt=n=>n==null?"—":Number(n).toLocaleString("ko-KR"), fmtM=n=>n==null?"—":(n>=1e6?(n/1e6).toFixed(2)+"M":n>=1e3?(n/1e3).toFixed(1)+"k":String(n));
 const CLASSES=[["grass","Grass","#79916f"],["path","Path","#8d939b"],["tree","Tree","#4f7a5c"],["person","Person","#d1852f"],["other","Other","#5c99c7"],["unknown(LiDAR only)","Unlabeled (LiDAR only)","#7a7a7a"]];
 const TAGCOL=["#5c99c7","#79916f","#a8adb5","#d1852f","#4f7a5c","#b8562f","#8d939b","#6f7680"];
-let MAPS=[], DATASETS=[], JOBS=[], OPTION_SPEC={}, TOKEN_REQUIRED=false, state={q:"",site:"all",st:"all",view:"grid",cur:null,mode:"pipeline",panel:"layers",screen:"library",dsq:""};
+let MAPS=[], DATASETS=[], JOBS=[], OPTION_SPEC={}, PUBLIC_URL="", TOKEN_REQUIRED=false, state={q:"",site:"all",st:"all",view:"grid",cur:null,mode:"pipeline",panel:"layers",screen:"library",dsq:""};
 let CDS=[], ADE=[], ROLES=[], ROLE_COST={}, cdCur=null;
 const ROLE_LABEL={ground_preferred:"선호 지면",ground_soft:"통행 가능 지면(비쌈)",obstacle:"장애물",dynamic:"동적",context:"문맥"};
 async function loadClassdicts(){const r=await fetch("/api/classdicts"); const d=await r.json(); CDS=d.classdicts; ADE=d.ade_labels; ROLES=d.roles; ROLE_COST=d.role_cost; if(!cdCur||!CDS.find(c=>c.name===cdCur.name)) cdCur=JSON.parse(JSON.stringify(CDS[0])); renderClassdicts(); fillClassdictSelect();}
@@ -290,6 +290,9 @@ async function locRun(){if(!LOC.init||!LOC.scan) return; const btn=document.getE
   document.getElementById("locGT").addEventListener("click",()=>{if(!LOC.scan) return; const g=LOC.scan.gt; const r=1.5, a=Math.random()*Math.PI*2; LOC.init={x:g.x+r*Math.cos(a),y:g.y+r*Math.sin(a),yaw_deg:g.yaw_deg+(Math.random()*60-30)}; LOC.result=null; document.getElementById("locRun").disabled=false; locDraw();});
 })();
 const OPT_LABEL={geometry:"기하 출처",depth_fill_range:"depth 카메라로 빈 곳 채우기 — 거리 상한 (m, 0=끔)",depth_fill_gap:"depth 채움 — LiDAR 점과 최소 간격 (m)",lidar_extrinsic:"LiDAR 외부파라미터",livox_flip:"Livox 좌표 180° 보정(실로봇 켬 / sim 끔)",lidar_fusion:"LiDAR → depth 융합",mask_bottom_px:"하단 마스킹 (px)",drop_classes:"제외 동적 클래스",vlm_edges:"VLM 관계 엣지",vlm_max_pairs:"VLM 쌍 상한 / 로그",occupancy_res:"Occupancy 해상도 (m)",prob_hit:"prob hit",prob_miss:"prob miss",h_ground:"지면 hits ≥",h_obs:"장애물 hits ≥",clearance:"clearance (m)",band_min:"장애물 밴드 시작 (m)",view_cubes:"rerun 큐브 표현",view_coarse:"큐브 크기 (m)",video_speed:"영상 배속 (0=생략)",video_pipeline:"3분할 영상",label_edge_px:"라벨 경계 보류 (px)",require_depth:"depth 없는 픽셀 라벨 보류",pose_graph:"PGO 기하 재구성 (deskew + 루프클로저)"};
+function renderPublicLink(){const a=document.getElementById("pubLink"); if(!a) return; a.hidden=!PUBLIC_URL; if(!PUBLIC_URL) return;
+  a.href=PUBLIC_URL; a.textContent="Public link · "+PUBLIC_URL.replace(/^https:\/\//,"").split(".")[0];
+  a.onclick=e=>{if(e.shiftKey){e.preventDefault(); navigator.clipboard.writeText(PUBLIC_URL).then(()=>{const t=a.textContent; a.textContent="복사됨"; setTimeout(()=>a.textContent=t,1200);});}};}
 function showScreen(name){state.screen=name; document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("on",s.id===name)); document.querySelectorAll("[data-screen]").forEach(el=>el.classList.toggle("on",el.dataset.screen===name)); if(name!=="detail"){state.cur=null; document.querySelectorAll("#stage video").forEach(v=>v.pause());} if(name==="datasets") loadDatasets(); if(name==="queue") loadJobs(); if(name==="classdicts") loadClassdicts(); if(name==="localize"){ locLoad().then(()=>{locFit(); locDraw();}); } window.scrollTo(0,0);}
 const fmtGB=g=>g>=1?g.toFixed(1)+" GB":Math.round(g*1000)+" MB";
 async function loadDatasets(){const r=await fetch("/api/datasets"); const d=await r.json(); DATASETS=d.datasets; renderDatasets();}
@@ -419,6 +422,6 @@ document.getElementById("dsq").addEventListener("input",e=>{state.dsq=e.target.v
 document.getElementById("bDataset").addEventListener("change",()=>{document.getElementById("bName").value=""; syncBuildForm();});
 document.getElementById("buildForm").addEventListener("submit",submitBuild);
 document.getElementById("pcdForm").addEventListener("submit",submitPcd);
-async function load(){const r=await fetch("/api/maps"); const d=await r.json(); MAPS=d.maps; RERUN_BASE=d.rerun_base||""; OPTION_SPEC=d.option_spec||{}; TOKEN_REQUIRED=!!d.token_required; loadJobs(); if(state.screen==="datasets") loadDatasets(); renderLibrary(); if(state.cur){const m=MAPS.find(x=>x.name===state.cur.name); if(m){state.cur=m;}}}
+async function load(){const r=await fetch("/api/maps"); const d=await r.json(); MAPS=d.maps; RERUN_BASE=d.rerun_base||""; PUBLIC_URL=d.public_url||""; renderPublicLink(); OPTION_SPEC=d.option_spec||{}; TOKEN_REQUIRED=!!d.token_required; loadJobs(); if(state.screen==="datasets") loadDatasets(); renderLibrary(); if(state.cur){const m=MAPS.find(x=>x.name===state.cur.name); if(m){state.cur=m;}}}
 load(); setInterval(load,60000); setInterval(()=>{ if(JOBS.some(j=>j.status==="running"||j.status==="queued")) loadJobs(); },5000);
 </script></body></html>

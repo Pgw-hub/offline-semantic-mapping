@@ -43,6 +43,20 @@ def find_robot_map(dp):
     if not cands: return None
     p = sorted(cands, key=os.path.getmtime)[-1]; return {"pcd": p, "traj": p[:-4] + ".txt", "name": os.path.basename(p)[:-4], "sibling": os.path.dirname(p).startswith(dp) is False}
 HTML = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "map_portal.html"), encoding="utf-8").read()
+_pub = {"t": 0.0, "v": ""}
+def public_url():
+    """외부 접속 주소: PORTAL_PUBLIC_URL 환경변수, 없으면 cloudflared quick tunnel 로그에서 최신 주소 (프로세스가 살아 있을 때만)."""
+    if os.environ.get("PORTAL_PUBLIC_URL"): return os.environ["PORTAL_PUBLIC_URL"]
+    if time.time() - _pub["t"] < 30: return _pub["v"]
+    url = ""
+    try:
+        alive = subprocess.run(["pgrep", "-f", f"cloudflared tunnel .*{PORT}"], capture_output=True).returncode == 0
+        log = os.environ.get("PORTAL_TUNNEL_LOG", f"/tmp/cf_quick_{PORT}.log")
+        if alive and os.path.exists(log):
+            m = re.findall(r"https://[a-z0-9-]+\.trycloudflare\.com", open(log, errors="replace").read())
+            if m: url = m[-1]
+    except Exception: pass
+    _pub.update(t=time.time(), v=url); return url
 sys.path.insert(0, ROOT); import classdict as CD
 ADE_LABELS = json.load(open(os.path.join(ROOT, "classdicts", "ade20k_labels.json"))) if os.path.exists(os.path.join(ROOT, "classdicts", "ade20k_labels.json")) else []
 
@@ -238,7 +252,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             b = HTML.encode(); self.send_response(200); self.send_header("Content-Type", "text/html; charset=utf-8"); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b); return
         if p == "/api/maps":
             return self.send_json({"maps": scan_maps(), "root": ROOT, "time": time.strftime("%Y-%m-%d %H:%M:%S"),
-                                   "rerun_base": os.environ.get("RERUN_BASE", ""), "build_enabled": True, "token_required": bool(TOKEN),
+                                   "rerun_base": os.environ.get("RERUN_BASE", ""), "public_url": public_url(), "build_enabled": True, "token_required": bool(TOKEN),
                                    "option_spec": {k: {"type": t, "default": d, "range": r} for k, (t, d, r) in OPTION_SPEC.items()}})
         if p == "/api/datasets":
             maps = scan_maps(); ds = scan_datasets()
