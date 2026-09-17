@@ -9,6 +9,7 @@ import argparse, collections, glob, json, os, struct, time, zlib
 import numpy as np, cv2
 import rerun as rr, rerun.blueprint as rrb
 from mcap.reader import make_reader
+import sys as _s, os as _o; _s.path.insert(0, _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), "..", "geometry")); from pc2_reader import decode_livox
 
 LIDAR_DT = np.dtype([("ot", "<u4"), ("x", "<f4"), ("y", "<f4"), ("z", "<f4"), ("refl", "u1"), ("tag", "u1"), ("line", "u1")])
 ap = argparse.ArgumentParser()
@@ -98,7 +99,7 @@ for topic, d in sorted(per.items()):
 try:
     import yaml
     tr = yaml.safe_load(open(os.path.join(a.mcap_dir, "raisin_config", "calibration", "livox_lidar_0_lidar.yaml")))["transform"]
-    t_bl = [float(tr["translation"][k]) for k in "xyz"]
+    t_bl = [float(tr["translation"][k]) for k in "xyz"]                                    # (표시용 오프셋; 정밀 값은 geometry/extrinsics.py)
 except Exception:
     t_bl = [-0.0579, 0.0, 0.20932]
 rr.log("playback/robot/lidar", rr.Transform3D(translation=t_bl), timeless=True)          # base → lidar 오프셋 (회전은 디코더에서 -x,-y 로 처리)
@@ -124,8 +125,7 @@ for li, f in zip(a.logs, files):
             elif ch.topic == "/livox/lidar":
                 si += 1
                 if si % a.lidar_stride: continue
-                N, = struct.unpack_from("<I", d, 24); p = np.frombuffer(d, dtype=LIDAR_DT, count=N, offset=28)[::4]
-                xyz = np.stack([-p["x"], -p["y"], p["z"]], -1).astype(np.float32)
+                xyz = decode_livox(d)[1][::4]                             # CustomMsg / PointCloud2 자동 (LIVOX_FLIP)
                 z = xyz[:, 2]; c = np.clip((z - z.min()) / (np.ptp(z) + 1e-6), 0, 1)
                 col = np.stack([(255 * c), (120 * np.ones_like(c)), (255 * (1 - c))], -1).astype(np.uint8)
                 rr.log("playback/robot/lidar/points", rr.Points3D(xyz, colors=col, radii=0.03))
