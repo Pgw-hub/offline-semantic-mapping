@@ -80,6 +80,21 @@ def has_seq_header(p):
     return False
 
 
+def decode_raw_depth(d):
+    """레코더 depth_image 레이아웃: stamp; u32 w,h; u32 rawlen; u32 zlen; zlib(uint16 mm) → (ns, depth_m float32)"""
+    import zlib
+    sec, nsec = struct.unpack_from("<iI", d, 0); w, h, rawlen, zlen = struct.unpack_from("<4I", d, 8)
+    z = np.frombuffer(zlib.decompress(d[24:24 + zlen]), np.uint16).reshape(h, w)
+    return sec * 10**9 + nsec, z.astype(np.float32) / 1000.0
+
+
+def decode_raw_rgb(d):
+    """레코더 rgb_image 레이아웃: stamp; u32 w,h,ch; u32 rawlen; u32 zlen; zlib(uint8)"""
+    import zlib
+    sec, nsec = struct.unpack_from("<iI", d, 0); w, h, c, rawlen, zlen = struct.unpack_from("<5I", d, 8)
+    return sec * 10**9 + nsec, np.frombuffer(zlib.decompress(d[28:28 + zlen]), np.uint8).reshape(h, w, c)
+
+
 def decode_av1(pkts, tmpdir, tag, pix="gray"):
     """[(ns,w,h,payload)] → [(ns, gray HxW uint8)]. OBU 스트림으로 이어 붙여 한 번에 디코딩(패킷 단위 디코딩은 PyAV 에서 안 됨)."""
     import av
@@ -135,14 +150,16 @@ def main():
     if a.logs:
         lo, hi = (a.logs.split(",") + [None])[:2]; rng = range(int(lo), int(hi or lo) + 1)
         files = [f for f in files if int(os.path.basename(f)[4:7]) in rng]
-    topics = ["robot_state", "d455_front/rgb_compressed"] + [f"{c}/depth_compressed" for c in cams]
+    # raw(무압축 zlib) 가 녹화돼 있으면 그쪽을 쓴다 — AV1 압축본은 depth 국소 두께가 3.6 배(0.9→3.4 cm) 두꺼워짐
+    topics = ["robot_state", "d455_front/rgb", "d455_front/rgb_compressed"] + [f"{c}/depth" for c in cams] + [f"{c}/depth_compressed" for c in cams]
     ns_p, pos_p, q_p = [], [], []; raw = {t: [] for t in topics if t != "robot_state"}
     for f in files:
         for sch, ch, m in make_reader(open(f, "rb")).iter_messages(topics=topics):
             if ch.topic == "robot_state":
                 d = m.data; sec, nsec = struct.unpack_from("<iI", d, 0); v = struct.unpack_from("<7d", d, 12)
                 ns_p.append(sec * 10**9 + nsec); pos_p.append(v[:3]); q_p.append(v[3:7])
-            else: raw[ch.topic].append(parse_pkt(m.data))
+            elif ch.topic.endswith("_compressed"): raw[ch.topic].append(parse_pkt(m.data))
+            else: raw[ch.topic].append(m.data)                         # raw Image 는 나중에 zlib 해제
     if not ns_p: sys.exit("robot_state 가 없습니다 — 자세를 만들 수 없음")
     pose = Pose(ns_p, pos_p, q_p)
     if a.level and len(pose.pos) > 50:                                # 궤적 평면의 법선 → +z 로 보내는 전역 회전
@@ -160,27 +177,37 @@ def main():
     print(f"로그 {len(files)} · robot_state {len(ns_p)} ({span:.0f}s, 이동범위 {np.ptp(pose.pos, 0).round(1)} m) [{time.time()-t0:.0f}s]")
 
     tmp = tempfile.mkdtemp()
-    rgb_frames = decode_av1(raw.get("d455_front/rgb_compressed", []), tmp, "rgb", pix="rgb24")
+    if raw.get("d455_front/rgb"):
+        rgb_frames = [decode_raw_rgb(d) for d in raw["d455_front/rgb"]]; rgb_src = "raw"
+    else:
+        rgb_frames = decode_av1(raw.get("d455_front/rgb_compressed", []), tmp, "rgb", pix="rgb24"); rgb_src = "AV1"
     rgb_ns = np.array([x[0] for x in rgb_frames], np.int64) if rgb_frames else np.zeros(0, np.int64)
     Kc = load_K(calib, "d455_front_color_caminfo.yaml") if os.path.exists(os.path.join(calib, "d455_front_color_caminfo.yaml")) else None
     Tbc_color = load_T(calib, "d455_front_color.yaml") if os.path.exists(os.path.join(calib, "d455_front_color.yaml")) else None
-    print(f"RGB 프레임 {len(rgb_frames)}")
+    print(f"RGB 프레임 {len(rgb_frames)} ({rgb_src})")
 
     acc = {}                                                         # voxel key → [sum_rgb(3), count]
     per_cam, play = {}, []
     for cam in cams:
-        pk = raw.get(f"{cam}/depth_compressed", [])
-        if not pk: print(f"{cam}: 패킷 없음"); continue
-        fr = decode_av1(pk, tmp, cam); near, far = NEAR_FAR[cam]
+        near, far = NEAR_FAR[cam]
+        if raw.get(f"{cam}/depth"):                                    # raw: 이미 미터 단위(스케일 복원 불필요)
+            fr = [decode_raw_depth(d) for d in raw[f"{cam}/depth"]]; src = "raw"
+        elif raw.get(f"{cam}/depth_compressed"):
+            fr = [(t, g.astype(np.float32) * (far - near) / 255.0 + near) for t, g in decode_av1(raw[f"{cam}/depth_compressed"], tmp, cam)]
+            fr = [(t, np.where(z <= near + 1e-6, 0.0, z).astype(np.float32)) for t, z in fr]; src = "AV1"
+        else: print(f"{cam}: depth 없음"); continue
         ci, ex = CALIB_DEPTH[cam]; fx, fy, cx, cy, W, H = load_K(calib, ci); T_bc = load_T(calib, ex)
+        Hf, Wf = fr[0][1].shape[:2]
+        if (Wf, Hf) != (W, H):                                         # 실제 프레임 크기에 맞춰 K 스케일 (raw/압축 해상도가 다를 수 있음)
+            sx, sy = Wf / W, Hf / H; fx, fy, cx, cy = fx * sx, fy * sy, cx * sx, cy * sy; W, H = Wf, Hf
+            print(f"  {cam}: caminfo {int(W/sx)}x{int(H/sy)} → 프레임 {Wf}x{Hf}, K 스케일 적용")
         vv, uu = np.mgrid[0:H:a.px_stride, 0:W:a.px_stride]
         n_pts = 0; n_use = 0
-        for i, (ns, g) in enumerate(fr):
+        for i, (ns, zimg) in enumerate(fr):
             if i % a.frame_stride: continue
             T_wb = pose.at(ns)
             if T_wb is None: continue
-            gg = g[vv, uu].astype(np.float32); ok = gg > 0
-            z = gg * (far - near) / 255.0 + near; ok &= z < a.max_range
+            z = zimg[vv, uu]; ok = (z > 0.05) & (z < a.max_range)
             if not ok.any(): continue
             zc = z[ok]; uc = uu[ok]; vc = vv[ok]
             pc = np.stack([(uc - cx) / fx * zc, (vc - cy) / fy * zc, zc], -1)
@@ -208,8 +235,8 @@ def main():
                 else: e[0] += sv; e[1] += cv
             n_pts += len(pw); n_use += 1
             if cam == "d455_front" and (n_use % a.play_stride == 0): play.append((ns, pw.astype(np.float32), col.copy(), T_wb.copy()))
-        per_cam[cam] = (len(fr), n_use, n_pts)
-        print(f"{cam}: 디코딩 {len(fr)} · 사용 {n_use} 프레임 · 점 {n_pts:,} [{time.time()-t0:.0f}s]")
+        per_cam[cam] = (len(fr), n_use, n_pts, src)
+        print(f"{cam}: {src} {len(fr)} 프레임 디코딩 · 사용 {n_use} · 점 {n_pts:,} [{time.time()-t0:.0f}s]")
 
     if not acc: sys.exit("누적된 점이 없습니다")
     keys = np.fromiter(acc.keys(), np.int64, len(acc)); m = (1 << 21) - 1; o_ = 1 << 20
@@ -231,7 +258,7 @@ def main():
 
     summary = {"mcap_dir": a.mcap_dir, "logs": [os.path.basename(f) for f in files], "pose_source": "robot_state (leg state estimator)",
                "duration_s": round(span, 1), "voxels": int(len(P)), "vox_m": a.vox, "max_range_m": a.max_range,
-               "cameras": {c: {"frames_decoded": v[0], "frames_used": v[1], "points": v[2]} for c, v in per_cam.items()},
+               "cameras": {c: {"frames_decoded": v[0], "frames_used": v[1], "points": v[2], "depth_source": v[3]} for c, v in per_cam.items()},
                "rgb_frames": len(rgb_frames), "depth_scale": {c: NEAR_FAR[c] for c in per_cam}}
     json.dump(summary, open(os.path.join(a.out, "summary.json"), "w"), indent=1, ensure_ascii=False)
 

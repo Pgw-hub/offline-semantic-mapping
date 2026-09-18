@@ -376,3 +376,6 @@
   · ★robot_state 자세는 다리 상태추정기라 SLAM 보정이 없다. 115341 세션: 174 m 주행에 z 가 -42.7 m(수평 1 m당 0.25 m) 로 **일정한 pitch 편향** → `--level` 로 궤적 최적합 평면 법선을 +z 로 보내는 전역 회전(14.7°) 적용.
     yaw 드리프트는 보정 불가(BEV 의 완만한 곡선이 실제 곡선인지 드리프트인지 판별 불가). 나머지 5세션은 정지 상태(경로 0 m).
 - 결과: output/depth_map_0908_115341 (복셀 725만@0.05m, map.pcd 116MB, map_from_depth.rrd 79MB, bev.png), output/depth_map_0908_012604(정지, 복셀 1.9만).
+- ★점군이 두꺼운 원인 측정 (0916 은 같은 시각 raw/AV1 이 둘 다 있어 직접 비교 가능): 단일 프레임 국소 두께(25 cm 이웃 PCA 최소축) raw 0.9 cm vs AV1 3.4 cm = **3.6 배**. 거리대별 raw 0.3/1.5/2.6 cm vs AV1 1.4/3.7/5.2 cm (0.3-1.5 / 1.5-3 / 3-5 m).
+  0908 은 압축본만 있어 단일 프레임 5.5 cm. 양자화 2.3 cm/level(σ 0.7 cm) 과 자세 오차(20프레임 누적 +0.9 cm, robot_state 각속도 중앙 5.9°/s) 는 부차적. 자세 회전 보간은 slerp 로 수정함.
+  ⇒ map_from_depth_cams.py 는 이제 raw(<cam>/depth, <cam>/rgb) 가 녹화돼 있으면 자동으로 그쪽을 쓰고 없을 때만 AV1 로 폴백(summary.json 의 depth_source). 0908 은 raw 토픽이 레코더 기본 `off` 라 0개였음.
