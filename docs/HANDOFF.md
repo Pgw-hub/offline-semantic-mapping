@@ -385,3 +385,9 @@
   카메라 외부파라미터 보정량 탐색(40프레임, depth→LiDAR 최소화): pitch -2.5°·z -5 cm·x -5 cm 로 10.4→9.7 cm 뿐 → 복사해 쓴 캘리브는 큰 오차 없음.
   ★단, 20260916 원본 폴더에는 raisin_config 가 없어 20260911(=20260827 로봇) 캘리브를 복사해 쓰는 중이다. 로봇이 다르면 카메라 장착이 달라지므로(0908 d455 x=0.42/d430 40° vs 0827 x=0.27/d430 50°)
   0916 로봇의 calibration 을 받아 교체해야 한다 — 트랙 2 의 semantic 라벨 투영도 이 값을 쓴다.
+- raw vs AV1 같은 조건 비교 (0916 b1f_2, d455 only, 자세=로봇 PGO graph, map_from_depth_cams --force-compressed 추가): output/depthcmp_b1f2_{raw,av1}
+  | | 프레임 | 점 | 복셀(0.05m) | 누적 두께 | LiDAR까지 중앙/p90 | 10/20cm 안 |
+  | raw | 1683 | 5,495만 | 958,676 | 8.1 cm | 18.0 / 60.9 cm | 28.3 / 54.4 % |
+  | AV1 | 1114 | 4,244만 | 1,967,992 | 9.9 cm | 25.4 / 71.2 cm | 17.8 / 39.9 % |
+  ★점은 오히려 0.77배인데 복셀은 2.05배 — 압축본은 같은 표면을 더 넓게 흩뿌린다. LiDAR 기준 10 cm 안에 드는 비율이 28%→18% 로 떨어짐.
+  비교물: depthcmp_b1f2_raw/{bev_raw_vs_av1.png, raw_vs_av1.rrd(16MB), compare_raw_vs_av1.json}

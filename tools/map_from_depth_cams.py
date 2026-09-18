@@ -144,6 +144,7 @@ def main():
     ap.add_argument("--rrd-vox", type=float, default=0.15, help="rrd 에 넣을 지도 복셀 크기 (파일 크기용; 0 이면 원본)")
     ap.add_argument("--pose", default="robot_state", choices=["robot_state", "odom"], help="자세 출처: robot_state(다리 상태추정기) | odom(/Odometry/base, lidar_slam)")
     ap.add_argument("--pose-graph", help="graph/ 디렉터리 — 로봇/오프라인 PGO 보정 자세 사용 (가장 정확)")
+    ap.add_argument("--force-compressed", action="store_true", help="raw 가 있어도 AV1 압축본을 사용 (raw 대비 비교용)")
     a = ap.parse_args(); t0 = time.time(); os.makedirs(a.out, exist_ok=True)
     from mcap.reader import make_reader
     calib = os.path.join(a.mcap_dir, "raisin_config", "calibration")
@@ -192,7 +193,7 @@ def main():
     print(f"로그 {len(files)} · 자세[{pose_src}] {len(pose.ns)} ({span:.0f}s, 이동범위 {np.ptp(pose.pos, 0).round(1)} m) [{time.time()-t0:.0f}s]")
 
     tmp = tempfile.mkdtemp()
-    if raw.get("d455_front/rgb"):
+    if raw.get("d455_front/rgb") and not a.force_compressed:
         rgb_frames = [decode_raw_rgb(d) for d in raw["d455_front/rgb"]]; rgb_src = "raw"
     else:
         rgb_frames = decode_av1(raw.get("d455_front/rgb_compressed", []), tmp, "rgb", pix="rgb24"); rgb_src = "AV1"
@@ -205,7 +206,7 @@ def main():
     per_cam, play = {}, []
     for cam in cams:
         near, far = NEAR_FAR[cam]
-        if raw.get(f"{cam}/depth"):                                    # raw: 이미 미터 단위(스케일 복원 불필요)
+        if raw.get(f"{cam}/depth") and not a.force_compressed:         # raw: 이미 미터 단위(스케일 복원 불필요)
             fr = [decode_raw_depth(d) for d in raw[f"{cam}/depth"]]; src = "raw"
         elif raw.get(f"{cam}/depth_compressed"):
             fr = [(t, g.astype(np.float32) * (far - near) / 255.0 + near) for t, g in decode_av1(raw[f"{cam}/depth_compressed"], tmp, cam)]
