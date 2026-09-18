@@ -379,3 +379,9 @@
 - ★점군이 두꺼운 원인 측정 (0916 은 같은 시각 raw/AV1 이 둘 다 있어 직접 비교 가능): 단일 프레임 국소 두께(25 cm 이웃 PCA 최소축) raw 0.9 cm vs AV1 3.4 cm = **3.6 배**. 거리대별 raw 0.3/1.5/2.6 cm vs AV1 1.4/3.7/5.2 cm (0.3-1.5 / 1.5-3 / 3-5 m).
   0908 은 압축본만 있어 단일 프레임 5.5 cm. 양자화 2.3 cm/level(σ 0.7 cm) 과 자세 오차(20프레임 누적 +0.9 cm, robot_state 각속도 중앙 5.9°/s) 는 부차적. 자세 회전 보간은 slerp 로 수정함.
   ⇒ map_from_depth_cams.py 는 이제 raw(<cam>/depth, <cam>/rgb) 가 녹화돼 있으면 자동으로 그쪽을 쓰고 없을 때만 AV1 로 폴백(summary.json 의 depth_source). 0908 은 raw 토픽이 레코더 기본 `off` 라 0개였음.
+- raw depth 로 다시 (0916 b1f_2, d455 raw 3368프레임): output/depth_map_0916_b1f2_{rs,pg} (자세 robot_state / 로봇 PGO graph — 새 옵션 --pose, --pose-graph).
+  누적 지도 국소 두께: 0908 AV1+robot_state 9.6 cm → 0916 raw+robot_state 8.1 → raw+PGO 8.1 cm. **누적에서는 압축보다 거리 의존 오차가 지배**:
+  max-range 2 m 3.5 cm / 3 m 5.6 cm / 5 m 8.1 cm (D455 절대 정확도 ~2%·거리 와 일치). 단일 프레임에서는 압축이 지배(raw 0.9 vs AV1 3.4 cm).
+  카메라 외부파라미터 보정량 탐색(40프레임, depth→LiDAR 최소화): pitch -2.5°·z -5 cm·x -5 cm 로 10.4→9.7 cm 뿐 → 복사해 쓴 캘리브는 큰 오차 없음.
+  ★단, 20260916 원본 폴더에는 raisin_config 가 없어 20260911(=20260827 로봇) 캘리브를 복사해 쓰는 중이다. 로봇이 다르면 카메라 장착이 달라지므로(0908 d455 x=0.42/d430 40° vs 0827 x=0.27/d430 50°)
+  0916 로봇의 calibration 을 받아 교체해야 한다 — 트랙 2 의 semantic 라벨 투영도 이 값을 쓴다.

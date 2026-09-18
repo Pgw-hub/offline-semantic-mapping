@@ -142,6 +142,8 @@ def main():
     ap.add_argument("--level", action="store_true", help="궤적 최적합 평면의 법선을 +z 로 맞추는 전역 회전 (다리 로봇 상태추정기의 일정한 pitch 편향 보정; 평지 주행 가정)")
     ap.add_argument("--bev", action="store_true", help="위에서 본 PNG 도 저장")
     ap.add_argument("--rrd-vox", type=float, default=0.15, help="rrd 에 넣을 지도 복셀 크기 (파일 크기용; 0 이면 원본)")
+    ap.add_argument("--pose", default="robot_state", choices=["robot_state", "odom"], help="자세 출처: robot_state(다리 상태추정기) | odom(/Odometry/base, lidar_slam)")
+    ap.add_argument("--pose-graph", help="graph/ 디렉터리 — 로봇/오프라인 PGO 보정 자세 사용 (가장 정확)")
     a = ap.parse_args(); t0 = time.time(); os.makedirs(a.out, exist_ok=True)
     from mcap.reader import make_reader
     calib = os.path.join(a.mcap_dir, "raisin_config", "calibration")
@@ -151,18 +153,31 @@ def main():
         lo, hi = (a.logs.split(",") + [None])[:2]; rng = range(int(lo), int(hi or lo) + 1)
         files = [f for f in files if int(os.path.basename(f)[4:7]) in rng]
     # raw(무압축 zlib) 가 녹화돼 있으면 그쪽을 쓴다 — AV1 압축본은 depth 국소 두께가 3.6 배(0.9→3.4 cm) 두꺼워짐
-    topics = ["robot_state", "d455_front/rgb", "d455_front/rgb_compressed"] + [f"{c}/depth" for c in cams] + [f"{c}/depth_compressed" for c in cams]
+    topics = ["robot_state", "/Odometry/base", "d455_front/rgb", "d455_front/rgb_compressed"] + [f"{c}/depth" for c in cams] + [f"{c}/depth_compressed" for c in cams]
     ns_p, pos_p, q_p = [], [], []; raw = {t: [] for t in topics if t != "robot_state"}
     for f in files:
         for sch, ch, m in make_reader(open(f, "rb")).iter_messages(topics=topics):
-            if ch.topic == "robot_state":
-                d = m.data; sec, nsec = struct.unpack_from("<iI", d, 0); v = struct.unpack_from("<7d", d, 12)
-                ns_p.append(sec * 10**9 + nsec); pos_p.append(v[:3]); q_p.append(v[3:7])
+            if ch.topic in ("robot_state", "/Odometry/base"):
+                want = "robot_state" if a.pose == "robot_state" else "/Odometry/base"
+                if ch.topic != want: continue
+                d = m.data; sec, nsec = struct.unpack_from("<iI", d, 0)
+                if want == "robot_state": v = struct.unpack_from("<7d", d, 12); pq = v[3:7]          # base_pos xyz + quat wxyz
+                else: v = struct.unpack_from("<7d", d, 8); pq = (v[6], v[3], v[4], v[5])             # Odometry: pos xyz + quat xyzw
+                ns_p.append(sec * 10**9 + nsec); pos_p.append(v[:3]); q_p.append(pq)
             elif ch.topic.endswith("_compressed"): raw[ch.topic].append(parse_pkt(m.data))
             else: raw[ch.topic].append(m.data)                         # raw Image 는 나중에 zlib 해제
-    if not ns_p: sys.exit("robot_state 가 없습니다 — 자세를 만들 수 없음")
-    pose = Pose(ns_p, pos_p, q_p)
-    if a.level and len(pose.pos) > 50:                                # 궤적 평면의 법선 → +z 로 보내는 전역 회전
+    if a.pose_graph:                                                   # PoseProvider (로봇 PGO 그래프) — Δ(t) 보정 포함
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "geometry"))
+        from pose_provider import PoseProvider
+        _pp = PoseProvider(a.pose_graph); print("pose graph:", a.pose_graph, _pp.meta)
+        class _PG:
+            ns = _pp.ns; pos = np.array([T[:3, 3] for T in _pp.at_many(_pp.ns)[0]])
+            def at(self, t, **k): return _pp.at(int(t))
+        pose = _PG(); pose_src = f"pose_graph:{os.path.basename(a.pose_graph.rstrip('/'))}"
+    else:
+        if not ns_p: sys.exit(f"{a.pose} 가 없습니다 — 자세를 만들 수 없음")
+        pose = Pose(ns_p, pos_p, q_p); pose_src = a.pose
+    if a.level and not a.pose_graph and len(pose.pos) > 50:                                # 궤적 평면의 법선 → +z 로 보내는 전역 회전
         Q = pose.pos - pose.pos.mean(0); n_ = np.linalg.svd(Q, full_matrices=False)[2][-1]
         if n_[2] < 0: n_ = -n_
         v = np.cross(n_, [0, 0, 1.0]); sn = np.linalg.norm(v); cs = float(np.dot(n_, [0, 0, 1.0]))
@@ -174,7 +189,7 @@ def main():
         LEVEL = (R_lv, p0); print(f"레벨링: 궤적 평면 기울기 {tilt:.1f}° 를 수평으로 보정")
     else: LEVEL = None
     span = (pose.ns[-1] - pose.ns[0]) / 1e9
-    print(f"로그 {len(files)} · robot_state {len(ns_p)} ({span:.0f}s, 이동범위 {np.ptp(pose.pos, 0).round(1)} m) [{time.time()-t0:.0f}s]")
+    print(f"로그 {len(files)} · 자세[{pose_src}] {len(pose.ns)} ({span:.0f}s, 이동범위 {np.ptp(pose.pos, 0).round(1)} m) [{time.time()-t0:.0f}s]")
 
     tmp = tempfile.mkdtemp()
     if raw.get("d455_front/rgb"):
@@ -256,7 +271,7 @@ def main():
         for i in range(1, len(tu)): cv2.line(img, (tu[i-1], tv[i-1]), (tu[i], tv[i]), (0, 140, 255), 2)
         cv2.imwrite(os.path.join(a.out, "bev.png"), img); print("bev:", os.path.join(a.out, "bev.png"), img.shape)
 
-    summary = {"mcap_dir": a.mcap_dir, "logs": [os.path.basename(f) for f in files], "pose_source": "robot_state (leg state estimator)",
+    summary = {"mcap_dir": a.mcap_dir, "logs": [os.path.basename(f) for f in files], "pose_source": pose_src,
                "duration_s": round(span, 1), "voxels": int(len(P)), "vox_m": a.vox, "max_range_m": a.max_range,
                "cameras": {c: {"frames_decoded": v[0], "frames_used": v[1], "points": v[2], "depth_source": v[3]} for c, v in per_cam.items()},
                "rgb_frames": len(rgb_frames), "depth_scale": {c: NEAR_FAR[c] for c in per_cam}}
