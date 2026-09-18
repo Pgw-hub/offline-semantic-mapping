@@ -5,6 +5,8 @@
   점   : d455_front/depth_compressed, d430_{front,rear}/depth_compressed (AV1 8-bit gray = 선형 스케일된 depth)
          depth_m = gray * (far-near)/255 + near   (d455 near 0.1 far 6.0 / d430 near 0.1 far 3.0 — 플러그인 소스 값)
   색   : d455_front/rgb_compressed 를 같은 3D 점에 재투영
+★ 점군이 두꺼운 주원인은 AV1 압축이다 (0916 데이터로 같은 시각 raw vs AV1 측정: 단일 프레임 국소 두께 0.9 cm → 3.4 cm, 3.6배. 3~5 m 구간은 2.6 → 5.2 cm).
+  양자화 2.3 cm/level 과 자세 보간 오차(20프레임 누적 시 +0.9 cm)는 그보다 작다. raw depth(d455_front/depth) 가 녹화된 데이터셋이면 그쪽을 쓸 것.
 사용: python tools/map_from_depth_cams.py <mcap_dir> <out_dir> [--logs 0,4] [--cameras d455_front,d430_front,d430_rear]
       [--vox 0.05] [--max-range 5] [--frame-stride 2] [--px-stride 2] [--rrd] [--pcd]
 """
@@ -96,7 +98,7 @@ def decode_av1(pkts, tmpdir, tag, pix="gray"):
 
 
 class Pose:
-    """robot_state 의 base_pos/base_quat 를 시각 보간 (위치 선형, 회전 최근접)."""
+    """robot_state 의 base_pos/base_quat 를 시각 보간 (위치 선형, 회전 slerp)."""
     def __init__(self, ns, pos, quat):
         o = np.argsort(ns); self.ns = np.asarray(ns)[o]; self.pos = np.asarray(pos)[o]; self.q = np.asarray(quat)[o]
 
@@ -104,7 +106,15 @@ class Pose:
         i = int(np.searchsorted(self.ns, t))
         if i == 0 or i >= len(self.ns) or self.ns[i] - self.ns[i - 1] > max_gap_ns: return None
         u = (t - self.ns[i - 1]) / (self.ns[i] - self.ns[i - 1])
-        T = np.eye(4); T[:3, :3] = q2R(*self.q[i if u > 0.5 else i - 1]); T[:3, 3] = self.pos[i - 1] * (1 - u) + self.pos[i] * u
+        q0, q1 = self.q[i - 1], self.q[i]                              # slerp (최근접 대체는 10 Hz·보행 진동에서 수 cm 오차)
+        q0 = q0 / np.linalg.norm(q0); q1 = q1 / np.linalg.norm(q1)
+        d = float(np.dot(q0, q1))
+        if d < 0: q1 = -q1; d = -d
+        if d > 0.9995: qi = q0 + u * (q1 - q0)
+        else:
+            th = np.arccos(np.clip(d, -1, 1)); st = np.sin(th)
+            qi = (np.sin((1 - u) * th) * q0 + np.sin(u * th) * q1) / st
+        T = np.eye(4); T[:3, :3] = q2R(*(qi / np.linalg.norm(qi))); T[:3, 3] = self.pos[i - 1] * (1 - u) + self.pos[i] * u
         return T
 
 
