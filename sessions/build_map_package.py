@@ -15,8 +15,8 @@
   A  dataset    mcap → dataset/<log>/ (results/, traj.txt, stamps.npz, lidar_world/)   [로그별]
   S  scans      robot_map: /cloud_registered → Δ(t) 최종 프레임 (export_registered_scans.py) | 트랙1: raw deskew (export_lidar_scans.py) → dataset/<log>/lidar_scans/
   R  rgb        mcap → sem/rgb/ (LiDAR 시각 10Hz RGB) + rgb_index.npz                  [세션]
-  B  semantic   sem/rgb → sem/sem/ (SegFormer-B4, grass/path/tree/person)              [세션, GPU]
-  C  voxels     robot_map: 기하 pcd(keyframe_scans|all_scans: scans_to_pcd.py / pcd: 저장 지도) 점에 SegFormer 투영 (label_map_points.py) → voxel/session_voxsem.npz + compiled/robot_map_semantic.pcd
+  B  semantic   sem/rgb → sem/sem/ (사전의 세그 모델: SegFormer ADE / Mask2Former Mapillary / EoMT, N채널) [세션, GPU]
+  C  voxels     robot_map: 기하 pcd(keyframe_scans|all_scans: scans_to_pcd.py / pcd: 저장 지도) 점에 세그 확률 투영 (label_map_points.py) → voxel/session_voxsem.npz + compiled/robot_map_semantic.pcd
                 트랙1: dataset+sem → voxel/<log>_voxsem.npz → voxel/session_voxsem.npz        [로그별+병합]
   D  objects    ConceptGraphs → dataset/<log>/exps/r_mapping_stride10/                 [로그별, GPU]
   E  graph      객체 병합 → compiled/session_objects.json(+clip), 휴리스틱 엣지, 객체-지형 엣지, (옵션) VLM 엣지
@@ -45,7 +45,7 @@ PY = sys.executable
 #         ├─ P 자세 그래프 graph/ ──────────────┬───────────────┐
 #         ├─ A 카메라 데이터셋 dataset/<log>/ ◄─┘(자세 보간)     │
 #         ├─ S LiDAR 스캔 lidar_scans/ ◄────────────────────────┘(최종 프레임 보정)
-#         └─ R 세션 RGB sem/rgb/ ─► B SegFormer sem/sem/ (GPU)
+#         └─ R 세션 RGB sem/rgb/ ─► B 세그 모델 sem/sem/ (GPU)
 #
 #   A + B (+S 기하) ─► C 0.1 m semantic 복셀 voxel/session_voxsem.npz          ← 지형(stuff) 레이어
 #   A ───────────────► D ConceptGraphs 객체 (GPU) ─► E 세션 scene graph (노드·엣지) ← 객체(things) 레이어
@@ -154,7 +154,7 @@ class Build:
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # R (rgb) — semantic 추론에 넣을 RGB 를 세션 단위로 뽑는다 (LiDAR 스캔 시각 기준 10 Hz).
     #   스크립트: tools/preprocess/extract_rgb_session.py  (연속 로그 범위 a-b 만 지원)
-    #   왜 세션 단위인가: SegFormer(B) 는 GPU 가 비싼 단계라 로그 간 중복 없이 한 번만 돌리기 위해.
+    #   왜 세션 단위인가: 세그 추론(B) 은 GPU 가 비싼 단계라 로그 간 중복 없이 한 번만 돌리기 위해.
     #   산출: sem/rgb/%06d.png + sem/rgb_index.npz (각 이미지가 어느 로그·어느 시각인지)
     # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_R(self):
@@ -167,7 +167,7 @@ class Build:
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # B (semantic) — RGB 마다 픽셀 단위 클래스 확률을 만든다. 지형(stuff) 의미의 유일한 원천. [GPU]
     #   스크립트: tools/preprocess/precompute_semantic.py --classdict <이름>
-    #   모델: SegFormer-B4 (ADE20K 150 라벨) → classdicts/<이름>.json 규칙으로 우리 클래스(N채널)로 묶는다.
+    #   모델: 사전(classdicts/<이름>.json)의 model 키가 정함 (기본 SegFormer-B4 ADE20K) → 사전 규칙으로 우리 클래스(N채널)로 묶는다.
     #   sem/classes.json 에 어떤 사전으로 만들었는지 기록. 다른 사전으로 만든 sem/ 이 있으면 중단(섞이면 라벨 의미가 어긋남).
     #   산출: sem/sem/%06d.npz (프레임별 N채널 확률) + sem/classes.json
     # ───────────────────────────────────────────────────────────────────────────────────────────

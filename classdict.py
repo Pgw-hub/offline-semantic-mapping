@@ -52,6 +52,11 @@ def validate(cd):
         if not c.get("ade"): raise ValueError(f"{n}: ADE 라벨이 하나도 없음")
         if not re.fullmatch(r"#[0-9a-fA-F]{6}", str(c.get("color", ""))): raise ValueError(f"{n}: color 는 #rrggbb")
         c["cost"] = int(c.get("cost", ROLE_GROUND_COST[c["role"]]))
+        if c.get("overrides") is not None and not isinstance(c["overrides"], list): raise ValueError(f"{n}: overrides 는 클래스 이름 목록")
+        if c.get("overrides"): c["override_min"] = float(c.get("override_min", 0.3))   # 이 확률 이상이면 덮음
+    for c in cd["classes"]:                                              # overrides: 이 클래스 확률 ≥0.3 인 픽셀에서 지정 클래스 확률을 0 으로 (예: crosswalk 가 road 를 덮음 — 노면 표시는 바탕면 위에 있다)
+        for o in c.get("overrides") or []:
+            if o not in names or o == c["name"]: raise ValueError(f"{c['name']}: overrides 에 모르는 클래스 {o}")
     if len(cd["classes"]) > 14: raise ValueError("클래스는 14개 이하 (코스트맵 4비트 라벨 패킹: 클래스 + other + unknown ≤ 16)")
     return cd
 

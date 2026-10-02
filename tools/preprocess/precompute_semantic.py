@@ -50,6 +50,8 @@ else:
 id2l = {int(k): v for k, v in model.config.id2label.items()}
 groups = list(zip(CD.names(cd), CD.ade_ids(cd, id2l)))
 for n, g in groups: print(n, "ids:", g, [id2l[i] for i in g])
+names_ = CD.names(cd); overrides = [(names_.index(c["name"]), [names_.index(o) for o in c["overrides"]], float(c.get("override_min", 0.3))) for c in cd["classes"] if c.get("overrides")]
+for i, os_, th in overrides: print(f"override: {names_[i]} ≥{th} → {[names_[o] for o in os_]} = 0")
 if any(not g for _, g in groups): print("경고: 라벨이 하나도 매칭되지 않은 클래스가 있음 (채널은 0 으로 채움)")
 json.dump(cd, open(D + "/classes.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)     # 복셀 빌더가 읽음
 files = sorted(glob.glob(D + "/rgb/*.png"))
@@ -62,6 +64,9 @@ with torch.no_grad():
         ims = [Image.open(p).convert("RGB") for p in batch]
         probs = scores(ims)
         chans = [probs[:, g].sum(1) if g else torch.zeros_like(probs[:, 0]) for _, g in groups]
+        for i, os_, th in overrides:                                   # 노면 표시 우선: 예) crosswalk ≥override_min 인 픽셀은 road 표를 받지 않음
+            m = chans[i] >= th
+            for o in os_: chans[o] = torch.where(m, torch.zeros_like(chans[o]), chans[o])
         arr = (torch.stack(chans, dim=-1).clamp(0, 1) * 255).byte().cpu().numpy()      # (B,H,W,N)
         for j, p in enumerate(batch):
             np.savez_compressed(D + "/sem/%s.npz" % os.path.basename(p)[:-4], sem=arr[j])

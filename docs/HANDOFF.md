@@ -259,6 +259,11 @@
 - sim 렌더(검은 하늘·평면 회색 인도·흰 줄무늬 횡단보도·구형 나무)에도 Mapillary 가 횡단보도/차도/인도/연석을 분리(compiled/sem_overlay_samples.jpg). 검은 하늘은 building(49.9% 픽셀, depth 없어 복셀 미반영), 넓은 밝은 회색 광장 일부는 road/building 으로 혼동.
 - 결과 output/t3_sim_1002_road (280 s): 지도 점 211,706 중 66% 라벨(road 44k · sidewalk 29k · crosswalk 4.1k · curb 876 · pole 7.8k · building 51k), occupancy 676k 셀, 코스트맵 290×278@0.2 m(sidewalk10 6,832 · crosswalk20 933 · 차도 10,822 · lethal 564). compiled/robot_map_semantic.pcd = 요청한 semantic PCD. BEV compiled/bev.png, 코스트맵 compiled/costmap_preview.png.
 - ★사전 road cost 200 은 코스트맵 'uncertain(낮은 미라벨 장애물)=200' 코드와 겹쳐 요약이 차도를 uncertain 으로 집계 → mapillary_road_v1 road=230 으로 변경, --force B,C,F,G,H 재빌드. 요약(load_map.py:100)은 고정 코드(10/90/200/254) 기준이라 사전 코스트가 다르면 분류가 어긋남 — 사전 기준 집계로 바꾸는 것이 과제.
+- ★서쪽 횡단보도(−12.1, 5.1) 누락 원인: 76프레임 관측·crosswalk 확률 0.50 이지만 road 0.76 → argmax 패배. 로봇이 밟고 지나며 근거리·비스듬히 본 줄무늬를 Mapillary 가 'Lane Marking - General' 로 판정하고 사전이 그 라벨을 road 에 넣어 road 표가 커짐(다른 두 횡단보도도 road 0.57~0.61).
+  진단: compiled/diag_crosswalk.png(crosswalk 확률·road 확률·관측 수 BEV + 궤적). 세 변형 비교(왼쪽 횡단보도 argmax crosswalk 비율 / cost20 셀 / 차도 230 셀 전체):
+  lane marking 을 road 에서 제거 95% / 642 / 8,719(차선·화살표가 other150·미라벨60 으로 → 차도 안 싼 구멍) · overrides 0.3: 73% / 480 / 10,046 · **overrides 0.15: 80% / 530 / 9,872 (채택)**.
+  → classdict 클래스 필드 `overrides: [클래스…]` + `override_min`(기본 0.3): precompute_semantic 에서 그 클래스 확률 ≥ override_min 인 픽셀의 지정 채널을 0 으로(노면 표시가 바탕면을 덮는 규칙). 포털 편집기 UI 에는 아직 없음(JSON 직접 편집).
+  최종 코스트맵: sidewalk10 6,906 · crosswalk20 1,616 · 차도230 9,872 · lethal 564. 포털 영상 자막의 고정 'SegFormer' 문구는 사전 모델 이름으로 교체.
 - 예시 사전 outdoor_v2 (car=obstacle, building/wall/fence=context) → 웹 빌드 web_172218_cdv2 로 검증 중.
 - 라벨 오염 수정 (2026-09-10): build_voxel_sem_map --edge-px 4 (클래스 경계 4px 안 라벨 보류) + --require-depth 1 (depth 없는 픽셀엔 LiDAR 라벨 안 줌). 옵션 label_edge_px/require_depth (기본 4/true).
   172935 log0-5 outdoor_v2 비교: 차량 위 0~1.2m 오라벨 19,973→10,344 (-48%), 라벨 복셀 -9%(경계·원거리 배경이 unknown 으로), car -13%.
