@@ -18,10 +18,13 @@ _cj = os.path.join(SEM, "classes.json")
 if os.path.exists(_cj):
     import json; _cd = json.load(open(_cj, encoding="utf-8"))
     NAMES = [c["name"] for c in _cd["classes"]]
+    import sys as _s; _s.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))); import classdict as _CD
+    SEG_TITLE = "Segmentation: " + _CD.MODELS.get(_cd.get("model") or _CD.DEFAULT_MODEL, {}).get("title", "SegFormer-B4 · ADE20K").split(" (")[0] + f"  [{_cd.get('name')}]"
     COL = np.array([[int(c["color"][1:3], 16), int(c["color"][3:5], 16), int(c["color"][5:7], 16)] for c in _cd["classes"]], np.float32)[:, ::-1]   # BGR
 else:
     COL = np.array([(95, 200, 95), (210, 170, 110), (40, 120, 60), (230, 60, 60)], np.float32)[:, ::-1]
     NAMES = ["grass", "path", "tree", "person"]
+    SEG_TITLE = "Segmentation: SegFormer-B4 (ADE20K)"
 W, H, BAR = 640, 480, 40
 
 def panel_title(img, text):
@@ -66,7 +69,7 @@ for lg in logs:
         t = t_sess + i / a.src_fps; mm, ss = divmod(int(t), 60)
         frame = np.hstack([panel_title(cv2.resize(rgb, (W, H)), f"RGB   {lg}  frame {i:04d}  {mm:02d}:{ss:02d}  x{a.speed}"),
                            panel_title(det, "Detection: YOLO-World + SAM (stride 10)"),
-                           panel_title(seg, "Segmentation: SegFormer-B4 (ADE20K)")])
+                           panel_title(seg, SEG_TITLE)])
         cv2.imwrite(os.path.join(tmp, f"{k:05d}.jpg"), frame, [cv2.IMWRITE_JPEG_QUALITY, 88]); k += 1
     t_sess += n / a.src_fps; print(f"  {lg}: {n} frames → 누적 {k}", flush=True)
 os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)

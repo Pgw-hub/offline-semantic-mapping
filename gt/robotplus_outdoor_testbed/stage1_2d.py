@@ -29,6 +29,7 @@ BANDS = [(0, 5), (5, 10), (10, 20), (20, 60)]; NB = len(BANDS)
 conf = np.zeros((2, NB, 4, 5), np.int64)
 chan = np.zeros((NB, NCH + 1), np.int64)                                                 # GT 인도 픽셀의 예측 채널 분포 (마지막 = 확률<0.3 none)                                                 # [로봇 위치(0 인도,1 차도/기타), 거리대, GT, pred(0..3 + other)]
 per_frame = []; MASK_BOTTOM = 60
+prev = None                                                                         # (지도점 id, 예측 클래스) 직전 프레임 — 깜빡임 측정
 sem_files = sorted(glob.glob(root + "/sem/sem/*.npz"))[::a.stride]
 if a.video:
     import tempfile, subprocess; vdir = tempfile.mkdtemp(prefix="stage1_video_", dir=root + "/compiled")
@@ -59,6 +60,17 @@ for f in sem_files:
     # 로봇 위치의 GT
     ri_, rj_ = int((cam[0] - gx0) / R), int((cam[1] - gy0) / R); robot_on = 0 if (0 <= ri_ < gt.shape[0] and 0 <= rj_ < gt.shape[1] and gt[ri_, rj_] == gid["sidewalk"]) else 1
     fr = {"frame": si, "robot_on_sidewalk": robot_on == 0, "iou": {}}
+    # 프레임 특징: 근거리 비율, 보이는 차도/연석 맥락, 검은 하늘 비율, 예측 분포(인도 GT 픽셀)
+    gsw = valid & (gimg == 0); fr["gt_sidewalk_px"] = int(gsw.sum()); fr["near5_share"] = round(float((gsw & (dimg < 5)).sum() / max(gsw.sum(), 1)), 3)
+    fr["gt_road_px"] = int((valid & (gimg == 1)).sum()); fr["gt_crosswalk_px"] = int((valid & (gimg == 2)).sum())
+    rgb_ = np.asarray(Image.open(root + f"/sem/rgb/{si:06d}.png").convert("RGB")); fr["black_sky_share"] = round(float((rgb_[:Hc // 2].max(-1) < 25).mean()), 3)
+    fr["sidewalk_pred"] = {("other" if p == 4 else EVAL[p]): round(float((gsw & (pred == p)).sum() / max(gsw.sum(), 1)), 3) for p in range(5)} if gsw.sum() > 200 else None
+    # 깜빡임: 직전 프레임과 공유하는 지면 점 중 예측 클래스가 바뀐 비율 (GT 인도 점만)
+    ids = cand[sel]; lab_now = pred[v[sel], u[sel]]; gt_now = pt_cls[cand[sel]]
+    if prev is not None:
+        common, ia, ib = np.intersect1d(ids, prev[0], return_indices=True); m_ = (gt_now[ia] == 0) & (lab_now[ia] != 4) & (prev[1][ib] != 4)
+        fr["flicker_sidewalk"] = round(float((lab_now[ia][m_] != prev[1][ib][m_]).mean()), 3) if m_.sum() > 100 else None; fr["shared_pts"] = int(len(common))
+    prev = (ids, lab_now)
     for b, (d0, d1) in enumerate(BANDS):
         m = valid & (dimg >= d0) & (dimg < d1)
         if m.any(): np.add.at(conf[robot_on, b], (gimg[m], pred[m]), 1)

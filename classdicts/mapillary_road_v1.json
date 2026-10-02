@@ -1,6 +1,6 @@
 {
  "name": "mapillary_road_v1",
- "description": "도로 포함 환경(TIPS 1 km): Mask2Former Mapillary 로 인도·횡단보도 선호, 차도 고비용(230), 연석·차량·기둥 장애물. 차선 표시(Lane Marking - General)는 road 이되 crosswalk ≥0.3 픽셀에서는 crosswalk 가 road 를 덮음(overrides) — 근거리 횡단보도가 lane marking 으로 나오는 문제 대응",
+ "description": "도로 포함 환경(TIPS 1 km): Mask2Former Mapillary 로 인도·횡단보도 선호, 차도 고비용(230), 연석·차량·기둥 장애물. 차선 표시(Lane Marking - General)는 road 이되 crosswalk ≥0.3 픽셀에서는 crosswalk 가 road 를 덮음(overrides) — 근거리 횡단보도가 lane marking 으로 나오는 문제 대응 · 색: 인도 시안 #00e5ff vs 차도 진보라 #6a0dad (강한 대비), 횡단보도 노랑, 연석 주황",
  "model": "m2f_swinl_mapillary",
  "classes": [
   {
@@ -10,7 +10,7 @@
     "pedestrian area",
     "curb cut"
    ],
-   "color": "#c8a578",
+   "color": "#00e5ff",
    "role": "ground_preferred",
    "cost": 10
   },
@@ -19,7 +19,7 @@
    "ade": [
     "crosswalk"
    ],
-   "color": "#f0d24a",
+   "color": "#ffe600",
    "role": "ground_preferred",
    "cost": 20,
    "overrides": [
@@ -32,7 +32,7 @@
    "ade": [
     "bike lane"
    ],
-   "color": "#2e8b57",
+   "color": "#8b4513",
    "role": "ground_soft",
    "cost": 60
   },
@@ -43,7 +43,7 @@
     "sand",
     "snow"
    ],
-   "color": "#5faa5f",
+   "color": "#3cb043",
    "role": "ground_soft",
    "cost": 90
   },
@@ -56,7 +56,7 @@
     "lane marking - general",
     "rail track"
    ],
-   "color": "#804080",
+   "color": "#6a0dad",
    "role": "ground_soft",
    "cost": 230
   },
@@ -65,7 +65,7 @@
    "ade": [
     "=curb"
    ],
-   "color": "#00c8ff",
+   "color": "#ff6f00",
    "role": "obstacle",
    "cost": 254
   },
@@ -74,7 +74,7 @@
    "ade": [
     "vegetation"
    ],
-   "color": "#286e3c",
+   "color": "#1b5e20",
    "role": "obstacle",
    "cost": 254
   },
@@ -88,7 +88,7 @@
     "animal",
     "bird"
    ],
-   "color": "#dc3c3c",
+   "color": "#ff1744",
    "role": "dynamic",
    "cost": 254
   },
@@ -107,7 +107,7 @@
     "on rails",
     "boat"
    ],
-   "color": "#5c99c7",
+   "color": "#2962ff",
    "role": "obstacle",
    "cost": 254
   },
@@ -131,7 +131,7 @@
     "catch basin",
     "pothole"
    ],
-   "color": "#8a7f70",
+   "color": "#9e9e9e",
    "role": "obstacle",
    "cost": 254
   },
@@ -146,7 +146,7 @@
     "bridge",
     "tunnel"
    ],
-   "color": "#a8adb5",
+   "color": "#607d8b",
    "role": "context",
    "cost": 150
   },
@@ -155,7 +155,7 @@
    "ade": [
     "water"
    ],
-   "color": "#2060c0",
+   "color": "#0d47a1",
    "role": "obstacle",
    "cost": 254
   }
