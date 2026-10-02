@@ -152,7 +152,8 @@ def cmd_eval(roots):
     gt_m = rasterize(sh, xm, ym, transform=inv)                                   # 맵 격자 위 GT
     # 정합 품질: GT 도로 ∩ 낮은 셀 / GT 도로 ∩ 관측 셀
     gtroad = (gt_m == ri) | (gt_m == ci); print(f"정합 검증: GT 도로 셀 중 지면 관측 {int((gtroad & ok).sum())}, 그중 낮은(차도 높이) 비율 {(gtroad & low).sum() / max((gtroad & ok).sum(),1):.0%} · GT 인도 셀 중 높은 비율 {((gt_m==si) & high).sum() / max(((gt_m==si) & ok).sum(),1):.0%}")
-    np.savez_compressed(os.path.join(HERE, "gt_map_frame.npz"), label=gt_m, classes=np.array(CLASSES), x0=x0, y0=y0, res=RES, mirror=mirror, yaw=yaw, tx=tx, ty=ty, root=roots[0])
+    for dst in [os.path.join(HERE, "gt_map_frame.npz"), os.path.join(roots[0], "compiled", "gt_map_frame.npz")]:   # root 별 사본 (데이터셋마다 정합이 다름)
+        np.savez_compressed(dst, label=gt_m, classes=np.array(CLASSES), x0=x0, y0=y0, res=RES, mirror=mirror, yaw=yaw, tx=tx, ty=ty, root=roots[0])
     preview(gt_m, os.path.join(roots[0], "compiled", "gt_map_frame.png"))
     from PIL import Image
     for root in roots:
