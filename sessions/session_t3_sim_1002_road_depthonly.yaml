@@ -1,0 +1,37 @@
+# 2026-10-02 시뮬레이션 도로 환경 — 인도/횡단보도/차도 구분 (Mask2Former Mapillary, classdicts/mapillary_road_v1).
+# 레코더 v2 레이아웃(0923 과 동일 설정). calibration 은 데이터셋 자체 스냅샷(config_snapshot/raisin_root/calibration, 로봇 ~/.raisin) 사용.
+# sim: livox_flip false, lidar_extrinsic slam, rgb/depth 비동기 → pair_ms 250. 저장 지도 없음, 이 녹화는 /path/pgo 가 항상 pose 2개라 키프레임 복원 불가
+# → /Odometry/base(루프클로저 점프 0) 를 geometry/odom_traj.py 로 TUM 화해 robot_map.traj 로 사용(PGO 보정 Δ=0). 기하는 /cloud_registered 전체 스캔.
+root: t3_sim_1002_road_depthonly
+mcap_dir: /data2/20261002/railab_raibo_20261002_054154
+calib: /data2/20261002/railab_raibo_20261002_054154/config_snapshot/raisin_root/calibration
+logs:
+- 0
+- 1
+- 2
+options:
+  map_id: "sim road 20261002 · require_depth=true (변형 A, GT 비교용) · Mask2Former Mapillary (sidewalk/crosswalk/road) · track 2 all_scans (odom traj)"
+  robot_map:
+    geometry: all_scans
+    traj: /data2/20261002/railab_raibo_20261002_054154/odom_traj.txt    # geometry/odom_traj.py 산출 (every 4 ≈ 0.4 s)
+  lidar_extrinsic: slam
+  livox_flip: false
+  lidar_fusion: false
+  mask_bottom_px: 60
+  drop_classes: person
+  vlm_edges: false
+  occupancy_res: 0.2
+  prob_hit: 0.85
+  prob_miss: 0.45
+  costmap: {h_ground: 2, h_obs: 3, clearance: 1.4, band_min: 0.3}
+  view_cubes: false
+  view_coarse: 0.3
+  video_speed: 15
+  video_pipeline: true
+  classdict: mapillary_road_v1
+  label_edge_px: 4
+  require_depth: true
+  pose_graph: true
+  depth_fill_range: 4.0
+  depth_fill_gap: 0.15
+  pair_ms: 250
