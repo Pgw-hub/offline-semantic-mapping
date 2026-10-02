@@ -23,7 +23,7 @@ def wrap(a): return np.angle(np.exp(1j * a))
 def read(mcap_dir, logs):
     files = sorted(glob.glob(os.path.join(mcap_dir, "log_*.mcap")))
     if logs is not None: files = [f for f in files if int(os.path.basename(f)[4:7]) in logs]
-    per_log, last_path = {}, None
+    per_log, last_path, acc = {}, None, {}                    # acc: v2 증분 발행 /path/pgo 누적 (stamp → pose, 같은 stamp 는 최신 메시지)
     for f in files:
         name = os.path.basename(f)[:-5]; ns, pos, qx = [], [], []
         for sch, ch, m in make_reader(open(f, "rb")).iter_messages(topics=["/Odometry/base", "/path/pgo"]):
@@ -31,12 +31,14 @@ def read(mcap_dir, logs):
             if ch.topic == "/Odometry/base":
                 ns_, v = RM.odom13(d, sch); ns.append(ns_); pos.append(v[:3]); qx.append(v[3:7])
             else:
-                P, _ = RM.path_poses(d, sch)
+                P, pns = RM.path_poses(d, sch)
                 if last_path is None or len(P) >= len(last_path): last_path = P.copy()
+                if pns is not None:
+                    for t_, p_ in zip(pns, P): acc[int(t_)] = p_.copy()
         per_log[name] = (np.array(ns, np.int64), np.array(pos), np.array(qx))
     ns = np.concatenate([v[0] for v in per_log.values()]); pos = np.concatenate([v[1] for v in per_log.values()]); qx = np.concatenate([v[2] for v in per_log.values()])
     o = np.argsort(ns); T = np.array([T_of(p, q) for p, q in zip(pos[o], qx[o])])
-    return per_log, ns[o], T, last_path
+    return per_log, ns[o], T, last_path, acc
 
 def dejump(T, ns, jump_mps=4.0, jump_degps=200.0):
     """루프클로저 점프(속도 >4m/s 또는 yaw 속도 >200°/s 로 나타나는 불연속)를 직전 샘플의 상대 이동으로 대체한 연속 오도메트리. 점프 시각 목록도 반환."""
@@ -66,10 +68,15 @@ if __name__ == "__main__":
     ap.add_argument("--tmax", type=float, help="시작 후 이 초 이후의 키프레임은 버림 (시각 복원이 불확실한 구간 제외)"); ap.add_argument("--max-err", type=float, default=0.15, help="상대이동 매칭 오차가 이보다 큰 노드는 버림 (m)")
     a = ap.parse_args(); logs = None
     if a.logs: lo, hi = (a.logs.split(",") + [None])[:2]; logs = set(range(int(lo), int(hi or lo) + 1))
-    t0 = time.time(); per_log, ns, T, P = read(a.mcap_dir, logs); C, jumps = dejump(T, ns)
-    print(f"오도메트리 {len(ns)} 샘플 {(ns[-1]-ns[0])/1e9:.0f}s · 루프클로저 점프 샘플 {len(jumps)} · /path/pgo 마지막 poses {0 if P is None else len(P)} [{time.time()-t0:.0f}s]")
+    t0 = time.time(); per_log, ns, T, P, acc = read(a.mcap_dir, logs); C, jumps = dejump(T, ns)
+    print(f"오도메트리 {len(ns)} 샘플 {(ns[-1]-ns[0])/1e9:.0f}s · 루프클로저 점프 샘플 {len(jumps)} · /path/pgo 마지막 poses {0 if P is None else len(P)} · 누적(stamp 있음) {len(acc)} [{time.time()-t0:.0f}s]")
+    have_stamps = bool(a.traj) or (len(acc) >= 5 and len(acc) > (0 if P is None else len(P)))   # 키프레임 stamp 를 직접 아는 경우 (TUM 또는 v2 누적 path)
     if a.traj:
         D = np.loadtxt(a.traj, comments="#"); kf_ns = (D[:, 0] * 1e9).round().astype(np.int64); Tp = np.array([T_of(r[1:4], r[4:8]) for r in D]); src = f"robot lidar_slam saveMap traj ({os.path.basename(a.traj)})"
+    elif have_stamps:                                            # v2 증분 발행 /path/pgo: 메시지마다 새 키프레임 1~3개 → 전부 누적하면 전체 키프레임 경로 (pose 별 header stamp)
+        ks = np.array(sorted(acc), np.int64); kf_ns = ks; Tp = np.array([T_of(acc[int(t)][:3], acc[int(t)][3:7]) for t in ks]); D = np.zeros((len(ks), 8))
+        src = f"robot lidar_slam /path/pgo (accumulated {len(ks)} keyframes, per-pose stamps)"; print(f"/path/pgo 누적 키프레임 {len(ks)} (마지막 메시지엔 {0 if P is None else len(P)}개뿐 → 증분 발행)")
+    if have_stamps:
         k = np.clip(np.searchsorted(ns, kf_ns), 1, len(ns) - 1); k = np.where(np.abs(ns[k - 1] - kf_ns) < np.abs(ns[k] - kf_ns), k - 1, k)   # 가장 가까운 오도메트리 샘플
         near = np.abs(ns[k] - kf_ns) / 1e6; print(f"TUM 궤적 {len(D)} 키프레임 · 오도메트리 stamp 와 차이 중앙 {np.median(near):.1f}ms 최대 {near.max():.1f}ms (>50ms {int((near>50).sum())}개)")
         keep = near <= 100                                            # 녹화 시작 전/후의 키프레임(오도메트리 없음) 제외 — 매핑을 녹화보다 먼저 시작한 경우
@@ -81,7 +88,7 @@ if __name__ == "__main__":
         Tp, j, err = match_times(ns, C, P, T); kf_ns = ns[j]; src = "robot lidar_slam /path/pgo (last msg; stamps recovered by odometry matching)"
         gaps = np.diff(kf_ns) / 1e9; bad = err > 0.15
         print(f"키프레임 시각 복원: 상대이동 오차 중앙 {np.median(err[1:])*100:.1f}cm p90 {np.percentile(err[1:],90)*100:.1f}cm · >15cm {bad.sum()}개 (kf {np.where(bad)[0][:12].tolist()}) · 간격 중앙 {np.median(gaps):.2f}s 최소 {gaps.min():.2f}s 최대 {gaps.max():.1f}s")
-    if not a.traj:                                           # 신뢰 구간만 남김
+    if not have_stamps:                                      # 신뢰 구간만 남김
         keep = np.isfinite(err) & (err <= a.max_err); keep[0] = True
         if a.tmax: keep &= (kf_ns - ns[0]) / 1e9 <= a.tmax
         print(f"노드 필터: {len(keep)} → {keep.sum()} (오차>{a.max_err}m 또는 tmax 초과 제외)"); Tp, j, err, kf_ns = Tp[keep], j[keep], err[keep], kf_ns[keep]
