@@ -1,7 +1,7 @@
 {
  "name": "mapillary_road_v1",
- "description": "도로 포함 환경(TIPS 1 km): Mask2Former Mapillary 로 인도·횡단보도 선호, 차도 고비용(230), 연석·차량·기둥 장애물. 차선 표시(Lane Marking - General)는 road 이되 crosswalk ≥0.3 픽셀에서는 crosswalk 가 road 를 덮음(overrides) — 근거리 횡단보도가 lane marking 으로 나오는 문제 대응 · 색: 인도 시안 #00e5ff vs 차도 진보라 #6a0dad (강한 대비), 횡단보도 노랑, 연석 주황",
- "model": "m2f_swinl_mapillary",
+ "description": "도로 포함 환경(TIPS 1 km): Mask2Former Mapillary 로 인도·횡단보도 선호, 차도 고비용(230), 연석·차량·기둥 장애물. 차선 표시(Lane Marking - General)는 road 이되 crosswalk ≥0.3 픽셀에서는 crosswalk 가 road 를 덮음(overrides) — 근거리 횡단보도가 lane marking 으로 나오는 문제 대응 · 색: 인도 시안 #00e5ff vs 차도 진보라 #6a0dad (강한 대비), 횡단보도 노랑, 연석 주황 · 모델: panoptic 체크포인트 @896 (semantic@384 대비 2D 인도 IoU 0.35→0.62)",
+ "model": "m2f_swinl_mapillary_pan",
  "classes": [
   {
    "name": "sidewalk",

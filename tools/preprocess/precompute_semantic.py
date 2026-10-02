@@ -19,6 +19,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("sem_dir"); ap.add_argument("--batch", type=int, default=8); ap.add_argument("--skip-existing", action="store_true")
 ap.add_argument("--classdict", default="default", help="클래스 사전 이름(classdicts/<name>.json) 또는 경로. 기본 default = grass/path/tree/person")
 ap.add_argument("--model", default=None, help=f"사전의 model 을 덮어씀 (실험용). 키: {list(CD.MODELS)}")
+ap.add_argument("--hybrid-suppress", action="store_true", help="hybrid: secondary 비지면 확신만큼 primary 지면 채널 억제 (실험 결과 지면 IoU 손해 → 기본 off)")
 ap.add_argument("--hub-id", default=None, help="모델 가중치 경로/허브 id 덮어쓰기 (레지스트리 backend 유지; 미세조정 체크포인트 비교용)")
 ap.add_argument("--size", type=int, default=0, help="모델 입력 긴 변(px) 덮어쓰기 (0=processor 기본; Mapillary M2F 기본 384²). 4:3 로 맞춤")
 ap.add_argument("--tta-flip", action="store_true", help="좌우 플립 TTA (확률 평균)")
@@ -29,6 +30,7 @@ H, W = 480, 640
 cd = CD.load(a.classdict)
 if a.model: cd["model"] = a.model; CD.validate(cd)
 mi = CD.model_info(cd); backend, hub = mi["backend"], (a.hub_id or mi["hub_id"])
+if not a.size and mi.get("size"): a.size = int(mi["size"])                  # 레지스트리 기본 입력 크기
 dev = "cuda" if torch.cuda.is_available() else "cpu"
 print("모델:", cd["model"], "=", hub, f"[{backend}]")
 if backend == "hybrid":                                                 # 두 모델을 올리고 클래스별로 채널 출처를 나눔
@@ -110,6 +112,9 @@ with torch.no_grad():
         probs = scores(ims)
         if backend == "hybrid":
             pp, ps = probs; chans = [(pp[:, g].sum(1) if use_primary[i] else ps[:, g].sum(1)) if g else torch.zeros_like(ps[:, 0]) for i, (_, g) in enumerate(groups)]
+            sec_ng = torch.stack([c for c, u in zip(chans, use_primary) if not u]).amax(0).clamp(0, 1)   # secondary 가 보는 비지면(장애물·문맥) 확신
+            for i, u in enumerate(use_primary):                                                           # primary 는 4클래스 softmax 라 기둥·나무에도 지면 확률을 줌 → (옵션) 비지면 확신만큼 억제
+                if u and a.hybrid_suppress: chans[i] = chans[i] * (1 - sec_ng)
             probs = None
         if probs is not None and a.sky_black > 0:                                               # 검은 하늘 픽셀은 투표 제외 (sim: 하늘=building 번짐 차단)
             dark = torch.stack([torch.from_numpy(np.asarray(im)).amax(-1) < a.sky_black for im in ims]).to(dev)

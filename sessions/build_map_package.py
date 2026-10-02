@@ -183,7 +183,7 @@ class Build:
             if cur.get("name") != want["name"] or (cur.get("model") or CD.DEFAULT_MODEL) != want["model"]:
                 raise RuntimeError(f"sem/ 이 다른 클래스 사전({cur.get('name')} / {cur.get('model') or CD.DEFAULT_MODEL})으로 만들어짐 → 새 root 를 쓰거나 --force B (sem 재계산)")
         if self.done("B", semdir, lambda: len(glob.glob(os.path.join(semdir, "*.npz"))) >= n_rgb > 0 and os.path.exists(cj)): return
-        self.run([PY, f"{TOOLS}/precompute_semantic.py", self.D["sem"], "--skip-existing", "--classdict", str(self.opt["classdict"])], logname="B.log")
+        self.run([PY, f"{TOOLS}/precompute_semantic.py", self.D["sem"], "--skip-existing", "--classdict", str(self.opt["classdict"])] + (["--size", str(self.opt["seg_size"])] if self.opt.get("seg_size") else []) + (["--tta-flip"] if self.opt.get("seg_tta_flip") else []), logname="B.log")   # seg_size: 모델 입력 긴 변(기본 레지스트리 값)
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # C (voxels) — 3D 기하 점에 B 의 2D 라벨을 투영해 "0.1 m semantic 복셀" 을 만든다. 지형 레이어의 마스터 표현.
     #   트랙 2: ① 기하 pcd 를 정한다 — robot_map.geometry

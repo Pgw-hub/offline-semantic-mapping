@@ -25,6 +25,7 @@ ap.add_argument("--mode", choices=["semantic", "geometric"], default="semantic",
 ap.add_argument("--band-min", type=float, default=0.3, help="지면 위 이 높이부터 장애물 밴드 시작 (m)")
 ap.add_argument("--ground-label", choices=["ground", "all"], default="ground", help="지면 셀 라벨: ground = 지면 역할(ground_preferred·soft) 클래스 중 argmax(확률<ground-min 이면 other) — 하늘/건물 등 문맥 표가 원거리 지면에 묻는 것 차단 · all = 전체 argmax(구 동작)")
 ap.add_argument("--ground-min", type=float, default=0.3)
+ap.add_argument("--band-label", choices=["all", "nonground"], default="nonground", help="밴드(지면 위) 복셀 라벨: nonground = 지면 역할 외 클래스 중 argmax(확률<ground-min 이면 미라벨→높이 규칙) · all = 전체 argmax(구 동작)")
 a = ap.parse_args(); t0 = time.time()
 mp = MapPackage(a.manifest); O = mp.occ; R = O["res"]; ijk = O["ijk"].astype(np.int64); hits = O["hits"]
 classes = mp.classes; n_cls = len(classes); cd = mp.classdict
@@ -40,6 +41,11 @@ if a.ground_label == "ground":                               # 지면 셀 라벨
     labg = np.full(len(lab), n_cls + 1, np.int16); am = subp.argmax(1); mx = subp.max(1)
     labg[has] = np.where(mx[has] >= a.ground_min, GIDX[am[has]], n_cls).astype(np.int16); Lg = labg[keep]
 else: Lg = L
+if a.band_label == "nonground":                              # 밴드 복셀: 비지면 클래스 중 argmax (hybrid 미세조정 모델이 기둥·나무에 준 지면 확률 무시)
+    NG = np.array([i for i in range(n_cls) if i not in set(PREF + SOFT)], np.int64); subn = mp.sem[:, NG]; hasn = mp.n_sem > 0
+    labb = np.full(len(lab), n_cls + 1, np.int16); amn = subn.argmax(1); mxn = subn.max(1)
+    labb[hasn] = np.where(mxn[hasn] >= a.ground_min, NG[amn[hasn]], n_cls + 1).astype(np.int16); Lb = labb[keep]
+else: Lb = L
 def pack(K):   # 축당 19비트(±26km@0.2m) → 57비트, ×8(라벨) 해도 int64 안전
     return ((K[:, 0] + (1 << 18)) << 38) | ((K[:, 1] + (1 << 18)) << 19) | (K[:, 2] + (1 << 18))
 def vote(L):   # 0.2 m 셀 다수결 → occupancy 셀 라벨
@@ -59,7 +65,7 @@ def vote(L):   # 0.2 m 셀 다수결 → occupancy 셀 라벨
     olab = np.full(len(ijk), n_cls + 1, np.int16); olab[found] = bestlab[pos_c[found]]
     return olab
 ok_p = pack(ijk)
-olab = vote(L); olab_g = vote(Lg) if a.ground_label == "ground" else olab
+olab_full = vote(L); olab_g = vote(Lg) if a.ground_label == "ground" else olab_full; olab = vote(Lb) if a.band_label == "nonground" else olab_full   # olab: 밴드 판정용
 
 # --- 지면: 열별 hits≥H_GROUND 최저 셀 ---
 col = (ijk[:, 0] + (1 << 20)) * (1 << 21) + (ijk[:, 1] + (1 << 20))
