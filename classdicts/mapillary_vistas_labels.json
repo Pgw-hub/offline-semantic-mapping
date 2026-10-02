@@ -1,0 +1,262 @@
+[
+{
+"id": 0,
+"label": "Bird"
+},
+{
+"id": 1,
+"label": "Ground Animal"
+},
+{
+"id": 2,
+"label": "Curb"
+},
+{
+"id": 3,
+"label": "Fence"
+},
+{
+"id": 4,
+"label": "Guard Rail"
+},
+{
+"id": 5,
+"label": "Barrier"
+},
+{
+"id": 6,
+"label": "Wall"
+},
+{
+"id": 7,
+"label": "Bike Lane"
+},
+{
+"id": 8,
+"label": "Crosswalk - Plain"
+},
+{
+"id": 9,
+"label": "Curb Cut"
+},
+{
+"id": 10,
+"label": "Parking"
+},
+{
+"id": 11,
+"label": "Pedestrian Area"
+},
+{
+"id": 12,
+"label": "Rail Track"
+},
+{
+"id": 13,
+"label": "Road"
+},
+{
+"id": 14,
+"label": "Service Lane"
+},
+{
+"id": 15,
+"label": "Sidewalk"
+},
+{
+"id": 16,
+"label": "Bridge"
+},
+{
+"id": 17,
+"label": "Building"
+},
+{
+"id": 18,
+"label": "Tunnel"
+},
+{
+"id": 19,
+"label": "Person"
+},
+{
+"id": 20,
+"label": "Bicyclist"
+},
+{
+"id": 21,
+"label": "Motorcyclist"
+},
+{
+"id": 22,
+"label": "Other Rider"
+},
+{
+"id": 23,
+"label": "Lane Marking - Crosswalk"
+},
+{
+"id": 24,
+"label": "Lane Marking - General"
+},
+{
+"id": 25,
+"label": "Mountain"
+},
+{
+"id": 26,
+"label": "Sand"
+},
+{
+"id": 27,
+"label": "Sky"
+},
+{
+"id": 28,
+"label": "Snow"
+},
+{
+"id": 29,
+"label": "Terrain"
+},
+{
+"id": 30,
+"label": "Vegetation"
+},
+{
+"id": 31,
+"label": "Water"
+},
+{
+"id": 32,
+"label": "Banner"
+},
+{
+"id": 33,
+"label": "Bench"
+},
+{
+"id": 34,
+"label": "Bike Rack"
+},
+{
+"id": 35,
+"label": "Billboard"
+},
+{
+"id": 36,
+"label": "Catch Basin"
+},
+{
+"id": 37,
+"label": "CCTV Camera"
+},
+{
+"id": 38,
+"label": "Fire Hydrant"
+},
+{
+"id": 39,
+"label": "Junction Box"
+},
+{
+"id": 40,
+"label": "Mailbox"
+},
+{
+"id": 41,
+"label": "Manhole"
+},
+{
+"id": 42,
+"label": "Phone Booth"
+},
+{
+"id": 43,
+"label": "Pothole"
+},
+{
+"id": 44,
+"label": "Street Light"
+},
+{
+"id": 45,
+"label": "Pole"
+},
+{
+"id": 46,
+"label": "Traffic Sign Frame"
+},
+{
+"id": 47,
+"label": "Utility Pole"
+},
+{
+"id": 48,
+"label": "Traffic Light"
+},
+{
+"id": 49,
+"label": "Traffic Sign (Back)"
+},
+{
+"id": 50,
+"label": "Traffic Sign (Front)"
+},
+{
+"id": 51,
+"label": "Trash Can"
+},
+{
+"id": 52,
+"label": "Bicycle"
+},
+{
+"id": 53,
+"label": "Boat"
+},
+{
+"id": 54,
+"label": "Bus"
+},
+{
+"id": 55,
+"label": "Car"
+},
+{
+"id": 56,
+"label": "Caravan"
+},
+{
+"id": 57,
+"label": "Motorcycle"
+},
+{
+"id": 58,
+"label": "On Rails"
+},
+{
+"id": 59,
+"label": "Other Vehicle"
+},
+{
+"id": 60,
+"label": "Trailer"
+},
+{
+"id": 61,
+"label": "Truck"
+},
+{
+"id": 62,
+"label": "Wheeled Slow"
+},
+{
+"id": 63,
+"label": "Car Mount"
+},
+{
+"id": 64,
+"label": "Ego Vehicle"
+}
+]

@@ -246,6 +246,12 @@
   (ground_*: 지면값=cost, soft·dynamic 은 밴드 통과, obstacle 은 밴드 lethal, context 지면 150); load_map/voxel_rerun 색은 사전에서. 구 npz(classdict 없음)는 이름으로 legacy 복원.
 - 오케스트레이터 options.classdict (기본 default). sem/ 이 다른 사전으로 만들어져 있으면 중단(--force B 또는 새 root). 매니페스트에 classdict 전체 기록.
 - 포털 Class dictionary 탭: 목록/편집(ADE 라벨 검색 추가, 역할, 코스트, 색)/Duplicate/Save/Delete, 빌드 폼에 사전 선택. classdicts/ade20k_labels.json 은 컨테이너에서 모델 config 로 덤프.
+- ★세그 모델 선택 (2026-10-02): 사전에 `"model"` 키로 모델이 묶임 (classdict.MODELS 레지스트리: segformer_b4_ade(기본) · m2f_swinl_mapillary · eomt_l_ade).
+  precompute_semantic 이 사전의 model 로 백엔드 분기(segformer softmax / mask2former·eomt 는 post_process_semantic_segmentation(return_segmentation_scores) 클래스 점수 clamp 0~1) — 출력 npz 형식 동일, 하류 무변경.
+  default 사전 회귀: 구 스크립트와 outdoor_v2 8프레임 max|diff| 0. step B 가드는 사전 이름+모델 비교. 라벨 패턴 `=label` = 정확 일치(Mapillary 'Curb' vs 'Curb Cut').
+  라벨 목록 classdicts/<space>_labels.json (ade20k, mapillary_vistas). 포털 편집기에 모델 select(라벨 공간 자동 전환), /api/classdicts 가 models/labels/default_model 반환. 클래스 상한 14(코스트맵 4비트 패킹).
+  예시 사전 mapillary_road_v1: sidewalk/crosswalk 선호(10/20), road ground_soft 200, curb·vehicle·pole·vegetation 장애물. 배경·실험: output/_exp_roadseg/ (5모델 비교·CPU 벤치, git 제외).
+  ★미지원: EoMT-DINOv3 변형(transformers 5.16 출력 깨짐), SAM 3(HF 게이트). 라이선스: ADE20K·Mapillary 비상업 → 제품화 전 확인.
 - 예시 사전 outdoor_v2 (car=obstacle, building/wall/fence=context) → 웹 빌드 web_172218_cdv2 로 검증 중.
 - 라벨 오염 수정 (2026-09-10): build_voxel_sem_map --edge-px 4 (클래스 경계 4px 안 라벨 보류) + --require-depth 1 (depth 없는 픽셀엔 LiDAR 라벨 안 줌). 옵션 label_edge_px/require_depth (기본 4/true).
   172935 log0-5 outdoor_v2 비교: 차량 위 0~1.2m 오라벨 19,973→10,344 (-48%), 라벨 복셀 -9%(경계·원거리 배경이 unknown 으로), car -13%.

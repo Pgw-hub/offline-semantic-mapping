@@ -59,7 +59,8 @@ def public_url():
     except Exception: pass
     _pub.update(t=time.time(), v=url); return url
 sys.path.insert(0, ROOT); import classdict as CD
-ADE_LABELS = json.load(open(os.path.join(ROOT, "classdicts", "ade20k_labels.json"))) if os.path.exists(os.path.join(ROOT, "classdicts", "ade20k_labels.json")) else []
+LABELS = {space: CD.labels_for(space) for space in {m["labels"] for m in CD.MODELS.values()}}   # 라벨 공간별 목록 (편집기 검색용): classdicts/<space>_labels.json
+ADE_LABELS = LABELS.get("ade20k", [])
 
 _ds_cache = {"t": 0, "v": []}
 def scan_datasets():
@@ -264,7 +265,8 @@ class H(http.server.SimpleHTTPRequestHandler):
         if p == "/api/jobs":
             return self.send_json({"jobs": JOBS.view(), "container": CONTAINER})
         if p == "/api/classdicts":
-            return self.send_json({"classdicts": CD.list_all(), "roles": CD.ROLES, "role_cost": CD.ROLE_GROUND_COST, "ade_labels": ADE_LABELS})
+            return self.send_json({"classdicts": CD.list_all(), "roles": CD.ROLES, "role_cost": CD.ROLE_GROUND_COST, "ade_labels": ADE_LABELS,
+                                   "models": CD.MODELS, "default_model": CD.DEFAULT_MODEL, "labels": LABELS})
         if p.startswith("/api/maps/") and p.endswith("/pcd"):
             name = os.path.basename(p[len("/api/maps/"):-len("/pcd")]); q = urllib.parse.parse_qs(u.query); src = q.get("source", ["voxels"])[0]
             if src not in ("voxels", "voxels_occ", "occupancy", "voxel3d", "voxel3d_tiles"): return self.send_json({"error": "source"}, 400)

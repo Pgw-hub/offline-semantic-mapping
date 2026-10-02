@@ -1,0 +1,19 @@
+{
+ "name": "mapillary_road_v1",
+ "description": "도로 포함 환경(TIPS 1 km): Mask2Former Mapillary 로 인도·횡단보도 선호, 차도 고비용, 연석·차량·기둥 장애물",
+ "model": "m2f_swinl_mapillary",
+ "classes": [
+  {"name": "sidewalk",   "ade": ["=sidewalk", "pedestrian area", "curb cut"],                                   "color": "#c8a578", "role": "ground_preferred", "cost": 10},
+  {"name": "crosswalk",  "ade": ["crosswalk"],                                                                   "color": "#f0d24a", "role": "ground_preferred", "cost": 20},
+  {"name": "bike_lane",  "ade": ["bike lane"],                                                                   "color": "#2e8b57", "role": "ground_soft",      "cost": 60},
+  {"name": "grass",      "ade": ["terrain", "sand", "snow"],                                                     "color": "#5faa5f", "role": "ground_soft",      "cost": 90},
+  {"name": "road",       "ade": ["=road", "service lane", "parking", "lane marking - general", "rail track"],   "color": "#804080", "role": "ground_soft",      "cost": 200},
+  {"name": "curb",       "ade": ["=curb"],                                                                       "color": "#00c8ff", "role": "obstacle",         "cost": 254},
+  {"name": "vegetation", "ade": ["vegetation"],                                                                  "color": "#286e3c", "role": "obstacle",         "cost": 254},
+  {"name": "person",     "ade": ["person", "bicyclist", "motorcyclist", "other rider", "animal", "bird"],        "color": "#dc3c3c", "role": "dynamic",          "cost": 254},
+  {"name": "vehicle",    "ade": ["=car", "truck", "=bus", "motorcycle", "=bicycle", "caravan", "trailer", "other vehicle", "wheeled slow", "on rails", "boat"], "color": "#5c99c7", "role": "obstacle", "cost": 254},
+  {"name": "pole",       "ade": ["pole", "street light", "traffic sign", "traffic light", "bench", "trash can", "fire hydrant", "bike rack", "phone booth", "junction box", "mailbox", "billboard", "banner", "manhole", "catch basin", "pothole"], "color": "#8a7f70", "role": "obstacle", "cost": 254},
+  {"name": "building",   "ade": ["building", "wall", "fence", "guard rail", "barrier", "bridge", "tunnel"],      "color": "#a8adb5", "role": "context",          "cost": 150},
+  {"name": "water",      "ade": ["water"],                                                                       "color": "#2060c0", "role": "obstacle",         "cost": 254}
+ ]
+}

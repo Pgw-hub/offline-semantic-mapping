@@ -33,11 +33,27 @@ import argparse, glob, json, os, shutil, subprocess, sys, time
 import yaml
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))          # 이 저장소 (우리 코드)
+sys.path.insert(0, REPO); import classdict as CD                               # 사전·세그 모델 레지스트리 (step B 가드)
 CG = REPO; TOOLS = f"{REPO}/tools/preprocess"
 CGREPO = os.environ.get("CG_REPO", "/data2/cg/concept-graphs") + "/conceptgraph"   # ConceptGraphs 설치 위치 (컨테이너에 editable 설치됨)
 HF_HOME = os.environ.get("HF_HOME", "/data2/cg/hf_cache")                        # 모델 캐시 (수십 GB, 데이터 디스크에 둠)
 PY = sys.executable
 
+# ─── 단계 사이 데이터 흐름 (한 세션 기준) ────────────────────────────────────────────────────────────
+#
+#   mcap ─┬─ Q 품질 점검
+#         ├─ P 자세 그래프 graph/ ──────────────┬───────────────┐
+#         ├─ A 카메라 데이터셋 dataset/<log>/ ◄─┘(자세 보간)     │
+#         ├─ S LiDAR 스캔 lidar_scans/ ◄────────────────────────┘(최종 프레임 보정)
+#         └─ R 세션 RGB sem/rgb/ ─► B SegFormer sem/sem/ (GPU)
+#
+#   A + B (+S 기하) ─► C 0.1 m semantic 복셀 voxel/session_voxsem.npz          ← 지형(stuff) 레이어
+#   A ───────────────► D ConceptGraphs 객체 (GPU) ─► E 세션 scene graph (노드·엣지) ← 객체(things) 레이어
+#   S + C ───────────► F 확률 occupancy 0.2 m  +  F3d 보행용 voxel3d (0.025/0.1 m 타일)
+#   C,E,F,F3d ───────► G map_manifest.json + 코스트맵   ─► H rerun·summary   ─► V 영상
+#
+#   각 step_X 메서드 위 주석에 그 단계의 목적·스크립트·산출물을 적어 두었다.
+# ────────────────────────────────────────────────────────────────────────────────────────────────────
 class Build:
     def __init__(self, cfg, dry=False, force=()):
         self.c = cfg; self.dry = dry; self.force = set(force)
@@ -89,6 +105,16 @@ class Build:
     # ---- 단계 ----
     @property
     def robot_map(self): return self.opt.get("robot_map") or None          # {"pcd": ..., "traj": ...} → 트랙 2 (로봇 저장 지도에 의미 입히기)
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # P (posegraph) — "어느 시각에 로봇이 어디 있었나"를 정하는 기하의 뼈대. 뒤 단계(A/S/C)가 모두 이 자세를 쓴다.
+    #   왜 필요한가: mcap 의 /Odometry/base 는 실시간 SLAM 자세라 루프클로저 전 드리프트가 남아 있다.
+    #                최종 보정(PGO) 자세로 바꿔 줘야 지도 내부가 어긋나지 않는다.
+    #   트랙 2(robot_map 있음): geometry/robot_graph.py — 로봇 lidar_slam 이 저장한 키프레임 자세(<name>.txt, 없으면 /path/pgo)
+    #                            를 읽어 graph/graph.json (T_odom ↔ T_corr 쌍) 으로 변환. 서버는 최적화를 안 한다.
+    #   트랙 1(robot_map 없음): geometry/build_graph.py — 서버가 직접 deskew → 키프레임 → 루프클로저(GICP) → GTSAM PGO.
+    #   산출: <root>/graph/{graph.json, odom_log_XXX.npz, *.rrd}. 소비: geometry/pose_provider.py 가 임의 시각 t 의 보정 자세를
+    #         T(t) = T_corr(k)·T_odom(k)⁻¹·T_odom(t) 로 보간해 준다 (--pose-graph 옵션으로 각 스크립트에 전달).
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_P(self):
         if self.robot_map:                                                  # 로봇 lidar_slam 최종 키프레임 자세(<name>.txt) → graph/
             if self.done("P", os.path.join(self.graph, "graph.json")): return
@@ -98,18 +124,39 @@ class Build:
         nums = ",".join(str(int(l[4:])) for l in self.logs)
         self.run([PY, f"{REPO}/geometry/build_graph.py", self.mcap_dir, "--logs", nums, "--out", self.graph, "--rrd"], env={"CUDA_VISIBLE_DEVICES": ""}, logname="P.log")
 
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # A (dataset) — mcap 을 "카메라 프레임 데이터셋" 으로 푼다. ConceptGraphs(D) 와 라벨 투영(C) 의 공통 입력.
+    #   스크립트: tools/preprocess/mcap_to_cg.py  (로그별 실행)
+    #   하는 일: rgb/depth 메시지를 시각으로 짝지어(pair_ms) 이미지 파일로 저장, 각 프레임의 카메라 자세(traj.txt, P 의
+    #            보정 자세로 보간), 시각표(stamps.npz). --lidar 면 depth 의 빈 픽셀을 ±0.4 s LiDAR 누적으로 채운다(lidar_fusion).
+    #   산출: dataset/<log>/{results/frame*.jpg, depth*.png, traj.txt, stamps.npz, lidar_world/}  (Replica 데이터셋 레이아웃)
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_A(self):
         for log in self.logs:
             out = self.ds(log)
             if self.done("A", os.path.join(out, "stamps.npz"), lambda: len(glob.glob(os.path.join(out, "results", "frame*.jpg"))) > 100): continue
             cmd = [PY, f"{TOOLS}/mcap_to_cg.py", self.mcap(log), self.calib, out, "--pair-ms", str(self.opt.get("pair_ms", 34))] + (["--lidar"] if self.opt["lidar_fusion"] else []) + self.pg()   # pair_ms: rgb-depth 최대 시차 (sim 카메라는 비동기 → 250)
             self.run(cmd, logname=f"A_{log}.log")
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # S (scans) — LiDAR 스캔을 "world 좌표 점 + 그 시각 센서 원점" 으로 스캔별 npz 저장. occupancy(F)·voxel3d(F3d)·
+    #   트랙 2 기하 pcd(C) 의 입력이다. 센서 원점이 같이 있어야 레이캐스팅(어디가 비었는지)이 가능하다.
+    #   트랙 2: tools/preprocess/export_registered_scans.py — lidar_slam 이 이미 deskew·정합해 발행한 /cloud_registered 를 쓰되,
+    #           발행 시점 실시간 프레임이므로 P 의 Δ(t)=T_corr·T_odom⁻¹ 로 최종 PGO 프레임에 맞춘다.
+    #   트랙 1: tools/preprocess/export_lidar_scans.py — raw /livox/lidar 를 점별 시각으로 deskew 해 world 로.
+    #   산출: dataset/<log>/lidar_scans/%06d.npz {xyz, origin, stamp_ns}
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_S(self):
         for log in self.logs:
             out = os.path.join(self.ds(log), "lidar_scans")
             if self.done("S", out, lambda: len(glob.glob(os.path.join(out, "*.npz"))) > 100): continue
             if self.robot_map: self.run([PY, f"{TOOLS}/export_registered_scans.py", self.mcap(log), self.calib, out] + self.pg(), logname=f"S_{log}.log")   # /cloud_registered → 최종 PGO 프레임
             else: self.run([PY, f"{TOOLS}/export_lidar_scans.py", self.mcap(log), self.calib, out] + self.pg(), logname=f"S_{log}.log")
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # R (rgb) — semantic 추론에 넣을 RGB 를 세션 단위로 뽑는다 (LiDAR 스캔 시각 기준 10 Hz).
+    #   스크립트: tools/preprocess/extract_rgb_session.py  (연속 로그 범위 a-b 만 지원)
+    #   왜 세션 단위인가: SegFormer(B) 는 GPU 가 비싼 단계라 로그 간 중복 없이 한 번만 돌리기 위해.
+    #   산출: sem/rgb/%06d.png + sem/rgb_index.npz (각 이미지가 어느 로그·어느 시각인지)
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_R(self):
         idx = os.path.join(self.D["sem"], "rgb_index.npz")
         if self.done("R", idx): return
@@ -117,15 +164,36 @@ class Build:
         if nums != list(range(min(nums), max(nums) + 1)):
             raise RuntimeError("extract_rgb_session 은 연속 로그 범위만 지원 (logs 를 a..b 로 주세요)")
         self.run([PY, f"{TOOLS}/extract_rgb_session.py", self.mcap_dir, self.D["sem"], f"{min(nums)}-{max(nums)}"], logname="R.log")
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # B (semantic) — RGB 마다 픽셀 단위 클래스 확률을 만든다. 지형(stuff) 의미의 유일한 원천. [GPU]
+    #   스크립트: tools/preprocess/precompute_semantic.py --classdict <이름>
+    #   모델: SegFormer-B4 (ADE20K 150 라벨) → classdicts/<이름>.json 규칙으로 우리 클래스(N채널)로 묶는다.
+    #   sem/classes.json 에 어떤 사전으로 만들었는지 기록. 다른 사전으로 만든 sem/ 이 있으면 중단(섞이면 라벨 의미가 어긋남).
+    #   산출: sem/sem/%06d.npz (프레임별 N채널 확률) + sem/classes.json
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_B(self):
         n_rgb = len(glob.glob(os.path.join(self.D["sem"], "rgb", "*.png")))
         semdir = os.path.join(self.D["sem"], "sem")
         cj = os.path.join(self.D["sem"], "classes.json")
         if os.path.exists(cj) and not self.dry:
-            cur = json.load(open(cj)).get("name")
-            if cur != self.opt["classdict"]: raise RuntimeError(f"sem/ 이 다른 클래스 사전({cur})으로 만들어짐 → 새 root 를 쓰거나 --force B (sem 재계산)")
+            cur = json.load(open(cj)); want = CD.load(self.opt["classdict"])        # 사전 이름뿐 아니라 사전에 묶인 세그 모델까지 같아야 재사용
+            if cur.get("name") != want["name"] or (cur.get("model") or CD.DEFAULT_MODEL) != want["model"]:
+                raise RuntimeError(f"sem/ 이 다른 클래스 사전({cur.get('name')} / {cur.get('model') or CD.DEFAULT_MODEL})으로 만들어짐 → 새 root 를 쓰거나 --force B (sem 재계산)")
         if self.done("B", semdir, lambda: len(glob.glob(os.path.join(semdir, "*.npz"))) >= n_rgb > 0 and os.path.exists(cj)): return
         self.run([PY, f"{TOOLS}/precompute_semantic.py", self.D["sem"], "--skip-existing", "--classdict", str(self.opt["classdict"])], logname="B.log")
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # C (voxels) — 3D 기하 점에 B 의 2D 라벨을 투영해 "0.1 m semantic 복셀" 을 만든다. 지형 레이어의 마스터 표현.
+    #   트랙 2: ① 기하 pcd 를 정한다 — robot_map.geometry
+    #              pcd            : 로봇이 저장한 지도 그대로 (sparse, 다운샘플됨)
+    #              keyframe_scans : 키프레임 시각의 /cloud_registered 만 모음 (기본값; 저장 지도의 ~4배 밀도, GT 와 2 cm 내 일치)
+    #              all_scans      : S 의 전체 스캔 (가장 조밀하지만 로봇 몸·정지 구간 잔상 포함)
+    #              every_N        : N 스캔마다
+    #           ② tools/preprocess/label_map_points.py — 프레임별 카메라 자세로 지도 점을 투영, depth z-buffer 로 가림 판정,
+    #              클래스 경계 edge_px 안 픽셀 제외, require_depth 면 depth 없는 픽셀엔 라벨 안 줌. depth 카메라 점으로 LiDAR 가
+    #              못 본 빈 곳 채움(depth_fill_range/gap, source=2). 여러 로그를 한 번에 → 세션 파일 직접 생성.
+    #   트랙 1: tools/preprocess/build_voxel_sem_map.py 로 로그별 복셀 → merge_voxels.py 로 병합.
+    #   산출: voxel/session_voxsem.npz {ijk, n_pts, rgb, sem_mean(N채널), n_sem, classdict …} + compiled/robot_map_semantic.pcd
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_C(self):
         if self.robot_map:                                                  # 로봇 지도 점에 라벨 투영 → session_voxsem 직접
             sess = os.path.join(self.D["voxel"], "session_voxsem.npz")
@@ -146,6 +214,14 @@ class Build:
         sess = os.path.join(self.D["voxel"], "session_voxsem.npz")
         if not self.done("C", sess):
             self.run([PY, f"{CG}/merge_voxels.py", sess] + outs, logname="C_merge.log")
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # D (objects) — 객체(things) 레이어. ConceptGraphs 를 A 의 데이터셋 위에 돌려 객체 인스턴스를 뽑는다. [GPU, 로그별]
+    #   실행: /data2/cg/concept-graphs 의 slam/rerun_realtime_mapping.py (우리 패치판; 환경변수로 옵션 전달)
+    #   하는 일: 프레임마다 검출(YOLO) + 분할(SAM) + CLIP 임베딩 → 3D 로 역투영 → 프레임 간 같은 객체끼리 병합.
+    #   CG_MASK_BOTTOM_PX: 화면 아래 로봇 몸 가림, CG_DROP_CLASSES: 동적 클래스(person) 제외.
+    #   주의: 기존 exps/ 가 있으면 지우고 다시 (불완전 detections 재사용 사고 이력).
+    #   산출: dataset/<log>/exps/r_mapping_stride10/{obj_json_*.json(bbox·태그), pcd_*.pkl.gz(점군·CLIP)}
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_D(self):
         env = {"YOLO_CONFIG_DIR": "/root/.yolo", "CG_MASK_BOTTOM_PX": str(self.opt["mask_bottom_px"]), "CG_DROP_CLASSES": self.opt["drop_classes"],
                "CG_LOG_SCENE_CLOUD": str(self.opt["scene_cloud"])}
@@ -156,6 +232,14 @@ class Build:
                 shutil.rmtree(os.path.join(self.ds(log), "exps"))          # 불완전 detections 재사용 방지
             env["CG_HEADLESS_RRD"] = os.path.join(self.ds(log), f"rerun_{log}.rrd")
             self.run([PY, "slam/rerun_realtime_mapping.py", f"scene_id={log}", f"dataset_root={self.D['dataset']}"], cwd=CGREPO, env=env, logname=f"D_{log}.log")
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # E (graph) — D 의 로그별 객체를 세션 하나의 "3D scene graph" 로 묶는다. 노드 = 객체, 엣지 = 관계.
+    #   ① map_compiler.py merge : 로그 간 같은 객체 병합 → compiled/session_objects.json (+ _clip.npz, CLIP 1024D)
+    #   ② map_compiler.py edges : 기하 휴리스틱 엣지 (on top of / next to) → compiled/session_edges.json
+    #   ③ voxel_rerun_v2.py     : 객체 bbox 발자국 아래의 지배 지형(C) 조회 → compiled/voxel_session_relations.json (객체-지형 엣지)
+    #   ④ (옵션 vlm_edges) vlm_edges.py : Qwen2.5-VL 에 객체 쌍 이미지를 보여 관계 판정 → compiled/session_edges_vlm.json
+    #      꺼져 있으면 빈 목록을 저장해 매니페스트 항목은 항상 존재하게 한다.
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_E(self):
         env = {"CG_RAIBO_ROOT": self.D["dataset"], "CG_OUT_DIR": self.D["compiled"]}
         so = os.path.join(self.D["compiled"], "session_objects.json")
@@ -178,6 +262,15 @@ class Build:
                 self.run([PY, f"{CG}/edges_session_rerun.py", self.D["dataset"], self.D["compiled"], os.path.join(self.D["compiled"], "vlm_edges_session.rrd")], logname="E_vlm_session.log")
         elif not os.path.exists(vlm) and not self.dry:
             json.dump([], open(vlm, "w")); self.say("  VLM 엣지 비활성 → 빈 목록 저장")
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # F (occupancy) — "무엇이 있다" 뿐 아니라 "어디가 비었다" 를 확률로 아는 레이어. 코스트맵(G)·초기 위치 정합의 근거.
+    #   스크립트: build_occupancy.py  (S 의 스캔 + C 의 복셀)
+    #   하는 일: 스캔마다 센서 원점→점 레이캐스팅. 끝점 셀 hit(prob_hit), 통과 셀 miss(prob_miss) 를 log-odds 로 누적 (OctoMap 식,
+    #            외부 라이브러리 없이 numpy). 한두 번 스친 사람·튀는 점은 miss 가 쌓여 free 가 된다.
+    #            C 의 0.1 m 표면 복셀 각각에도 occ/free/미관측 상태를 붙이고, 동적 클래스인데 free 공간이면 surf_removed 표시.
+    #   산출: compiled/session_occupancy.npz {ijk(0.2 m), hits, misses, logodds, state, surf_state, surf_removed}
+    #   이어서 step_F3d (보행용 3D 사전맵) 를 호출한다.
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_F(self):
         out = os.path.join(self.D["compiled"], "session_occupancy")
         if self.done("F", out + ".npz"): return
@@ -186,6 +279,15 @@ class Build:
                   "--res", str(self.opt["occupancy_res"]), "--prob-hit", str(self.opt["prob_hit"]), "--prob-miss", str(self.opt["prob_miss"])],
                  env={"CUDA_VISIBLE_DEVICES": ""}, logname="F.log")
         self.step_F3d()
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # F3d (voxel3d) — 보행 컨트롤러용 "3D 확률 복셀 사전맵". F 와 목적이 다르다: F 는 nav 코스트맵용 0.2 m, 이것은 로봇
+    #   voxel_mapping 의 VoxelMap 격자(0.025×0.025×0.1 m) 로 getHeight(x,y) 가 바로 읽을 표면 높이(mean_z)를 준다.
+    #   스크립트: build_voxel3d.py (S 의 스캔 + C 의 복셀) → voxel3d_view.py (rerun·BEV)
+    #   하는 일: 0.1 m 확률 격자 레이캐스팅(점유 판정) + 세부 격자 count/mean_z/std_z + depth 채움(빈 곳만) + 평탄 채움(바닥 빈칸)
+    #            + 클래스 id + 10 m 타일 바이너리(로봇은 주변 3×3 타일만 적재). 규격: docs/VOXEL3D_PRIOR.md
+    #   산출: compiled/session_voxel3d.npz, session_voxel3d_tiles/{index.json, t_<tx>_<ty>.bin}, voxel3d_view.rrd, voxel3d_bev.png
+    #   options.voxel3d: false 면 생략. 확률 임계(prob_hit/miss) 는 F 와 공유.
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_F3d(self):
         """보행용 3D 확률 복셀 사전맵 (voxel3d). 확률 판정은 prob_hit/prob_miss(occupancy 와 공유)."""
         v3 = self.opt.get("voxel3d")
@@ -203,6 +305,16 @@ class Build:
             self.run([PY, f"{CG}/voxel3d_view.py", out + ".npz", rrd, "--voxsem", os.path.join(self.D["voxel"], "session_voxsem.npz"), "--bev", os.path.join(self.D["compiled"], "voxel3d_bev.png")] + (["--sub", "2"] if len(self.logs) > 2 else []),
                      env={"CUDA_VISIBLE_DEVICES": ""}, logname="F_voxel3d_view.log")
     opt_default_voxel3d = {"res_xy": 0.025, "res_z": 0.1, "prob_res": 0.1, "free_range": 8.0, "tile_m": 10.0, "fill_flat": 0.04, "depth": True}
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # G (package) — 지금까지의 산출물을 "맵 패키지" 하나로 묶는 매니페스트를 쓴다. 이후 소비자(load_map, verify_requests,
+    #   localize, export_pcd, 포털)는 재계산 없이 이 JSON 만 읽는다.
+    #   ① compiled/map_manifest.json : map_id, frame(좌표계 설명), geometry_source, classdict 전체, 빌드 옵션, files{키: 경로·크기·설명}
+    #      files 키: terrain_voxels(C) / occupancy_probabilistic(F) / objects, objects_clip, edges_*(E) / voxel3d_prior, voxel3d_tiles(F3d)
+    #      경로는 <root> 기준 상대경로 (load_map 규약). 파일이 하나라도 없으면 실패시킨다.
+    #   ② costmap_from_occupancy.py --register : F 의 occupancy + C 의 라벨 → nav2 등급 코스트맵.
+    #      지면 = hits ≥ h_ground 인 가장 낮은 셀, 장애물 = 지면 위 [band_min, clearance] 밴드의 hits ≥ h_obs 셀,
+    #      지면 코스트 = 클래스 사전의 role/cost. → compiled/session_costmap_occ.npz, 매니페스트에 costmap_2d(_occ) 등록.
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_G(self):
         man = os.path.join(self.D["compiled"], "map_manifest.json")
         rel = lambda p: os.path.relpath(p, self.root)
@@ -240,6 +352,11 @@ class Build:
             if "costmap_2d_occ" in m["files"] and "costmap_2d" not in m["files"]:
                 m["files"]["costmap_2d"] = dict(m["files"]["costmap_2d_occ"]); json.dump(m, open(man, "w"), ensure_ascii=False, indent=1)
             tot = sum(v["bytes"] for v in m["files"].values()); self.say(f"  패키지 {len(m['files'])} 파일 · {tot/1e6:.1f} MB")
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # H (view) — 사람이 볼 것. 패키지를 load_map.py 로 읽어 rerun 파일과 요약을 만든다 (CPU).
+    #   ① compiled/map_package.rrd : 복셀·객체·엣지·occupancy 를 한 장면에 (기본 0.1 m 점, view_cubes 면 큐브)
+    #   ② compiled/summary.json + bev.png : 셀 수·객체 수·크기 등 통계와 상단 뷰 썸네일 — 웹 포털 카드가 읽는다. 항상 갱신.
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_H(self):
         man = os.path.join(self.D["compiled"], "map_manifest.json"); rrd = os.path.join(self.D["compiled"], "map_package.rrd")
         if not self.done("H", rrd):
@@ -273,6 +390,11 @@ class Build:
         except Exception as e:
             self.say(f"  chown 실패(무시): {e}")
 
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # Q (quality) — 빌드 맨 앞에서 mcap 자체의 상태를 점검한다 (토픽별 주기·크기, 유실 구간, 카메라 커버리지).
+    #   스크립트: tools/mcap_quality.py. 결과가 나쁘면 뒤 단계 결과를 해석할 때 참고 (빌드를 막지는 않음).
+    #   산출: compiled/data_quality.{json, rrd}
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_Q(self):
         out = os.path.join(self.D["compiled"], "data_quality")
         if self.done("Q", out + ".rrd"): return
@@ -280,6 +402,10 @@ class Build:
         self.run([PY, f"{REPO}/tools/mcap_quality.py", self.mcap_dir, out, "--logs", *map(str, nums), "--img-stride", str(self.opt.get("quality_img_stride", 15))],
                  env={"CUDA_VISIBLE_DEVICES": ""}, logname="Q.log")
 
+    # ───────────────────────────────────────────────────────────────────────────────────────────
+    # V (video) — 검수용 배속 영상. ① RGB 만 (session_rgb_x<speed>.mp4) ② RGB | 객체 검출 | 세그멘테이션 3분할
+    #   (session_pipeline_x<speed>.mp4). 포털에서 자동재생. video_speed 0 이면 생략.
+    # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_V(self):
         sp = int(self.opt.get("video_speed", 0) or 0)
         if sp <= 0: self.say("  video_speed 0 → 생략"); return
@@ -291,6 +417,8 @@ class Build:
             if not self.done("V", out2):
                 self.run([PY, f"{REPO}/tools/make_pipeline_video.py", self.root, out2, "--speed", str(sp), "--logs", *self.logs], logname="V_pipeline.log")
 
+    # go — 단계 문자열 순서대로 step_<X> 를 호출. 각 단계는 산출물이 있으면 건너뛰므로(멱등) 중단된 빌드를 같은 명령으로 재개할 수 있다.
+    #      --force X 는 그 단계 산출물만 지우고 다시 만든다. 끝나면 컨테이너(root)가 만든 파일 소유권을 호스트 사용자로 돌린다.
     def go(self, steps):
         try:
             for s in steps:

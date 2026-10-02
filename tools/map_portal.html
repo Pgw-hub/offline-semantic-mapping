@@ -135,8 +135,8 @@ table.cdt input[type=text]{width:120px}table.cdt input[type=number]{width:70px}t
   </section>
 
   <section class="screen" id="classdicts">
-    <div class="hero" style="padding-bottom:28px"><div class="in"><div class="eyebrow">SegFormer-B4 · ADE20K 150 labels → map classes</div><h2>Class dictionary</h2>
-      <p>3D semantic voxel 빌더가 쓰는 클래스 정의입니다. ADE20K 의 150개 라벨을 묶어 클래스를 만들고, 각 클래스에 주행 역할(선호 지면·통행 가능 지면·장애물·동적·문맥)과 코스트를 줍니다. 빌드 폼에서 사전을 고르면 그 정의로 맵이 만들어지고, 사전은 매니페스트에 기록됩니다.</p></div></div>
+    <div class="hero" style="padding-bottom:28px"><div class="in"><div class="eyebrow">Segmentation model labels → map classes</div><h2>Class dictionary</h2>
+      <p>3D semantic voxel 빌더가 쓰는 세그멘테이션 모델과 클래스 정의입니다. 사전마다 모델(SegFormer ADE20K · Mask2Former Mapillary · EoMT ADE20K)을 고르고, 그 모델의 라벨을 묶어 클래스를 만든 뒤 각 클래스에 주행 역할(선호 지면·통행 가능 지면·장애물·동적·문맥)과 코스트를 줍니다. 빌드 폼에서 사전을 고르면 그 모델·정의로 맵이 만들어지고, 사전은 매니페스트에 기록됩니다. 횡단보도·연석이 필요하면 Mapillary 모델 사전(mapillary_road_v1)을 쓰세요.</p></div></div>
     <div class="body cdwrap">
       <aside class="cdlist"><div class="cdhead"><b>Dictionaries</b><button class="btn-soft" id="cdNew" style="height:28px;padding:0 10px">New</button></div><div id="cdItems"></div></aside>
       <div class="cdedit" id="cdEdit"></div>
@@ -189,7 +189,7 @@ table.cdt input[type=text]{width:120px}table.cdt input[type=number]{width:70px}t
     <label>Dataset<select name="dataset" id="bDataset"></select></label>
     <div class="row2"><label>Map name<input name="name" id="bName" required pattern="[A-Za-z0-9][A-Za-z0-9_-]{1,48}" placeholder="예: campus_20260910"></label><label>Map ID (표시 이름)<input name="map_id" id="bMapId" placeholder="비우면 이름과 같음"></label></div>
     <div class="row2"><label>Logs from<input name="log_from" id="bFrom" type="number"></label><label>Logs to<input name="log_to" id="bTo" type="number"></label></div>
-    <label style="margin-top:10px">Class dictionary (SegFormer 클래스 정의)<select name="opt_classdict" id="bClassdict"></select></label>
+    <label style="margin-top:10px">Class dictionary (세그 모델 + 클래스 정의)<select name="opt_classdict" id="bClassdict"></select></label>
     <details class="adv"><summary>고급 설정 (기본값으로 두어도 됩니다)</summary><div class="optgrid" id="bOpts"></div></details>
     <label class="chk"><input type="checkbox" name="overwrite"> 같은 이름의 맵이 있으면 덮어쓰기(건너뛰기 없이 이어서 빌드)</label>
     <div id="bErr" class="err" hidden></div>
@@ -217,15 +217,19 @@ const fmt=n=>n==null?"—":Number(n).toLocaleString("ko-KR"), fmtM=n=>n==null?"�
 const CLASSES=[["grass","Grass","#79916f"],["path","Path","#8d939b"],["tree","Tree","#4f7a5c"],["person","Person","#d1852f"],["other","Other","#5c99c7"],["unknown(LiDAR only)","Unlabeled (LiDAR only)","#7a7a7a"]];
 const TAGCOL=["#5c99c7","#79916f","#a8adb5","#d1852f","#4f7a5c","#b8562f","#8d939b","#6f7680"];
 let MAPS=[], DATASETS=[], JOBS=[], OPTION_SPEC={}, PUBLIC_URL="", TOKEN_REQUIRED=false, state={q:"",site:"all",st:"all",view:"grid",cur:null,mode:"pipeline",panel:"layers",screen:"library",dsq:""};
-let CDS=[], ADE=[], ROLES=[], ROLE_COST={}, cdCur=null;
+let CDS=[], ADE=[], ROLES=[], ROLE_COST={}, cdCur=null, MODELS={}, LABELS={}, DEFAULT_MODEL="segformer_b4_ade";
+function labelsOf(c){const m=MODELS[(c&&c.model)||DEFAULT_MODEL]; return (m&&LABELS[m.labels])||ADE;}   // 사전의 모델이 쓰는 라벨 공간
+function labelHit(l,s){l=l.toLowerCase(); return s.startsWith("=")?l===s.slice(1).trim():l.includes(s);}   // '=label' 정확 일치, 아니면 부분문자열
 const ROLE_LABEL={ground_preferred:"선호 지면",ground_soft:"통행 가능 지면(비쌈)",obstacle:"장애물",dynamic:"동적",context:"문맥"};
-async function loadClassdicts(){const r=await fetch("/api/classdicts"); const d=await r.json(); CDS=d.classdicts; ADE=d.ade_labels; ROLES=d.roles; ROLE_COST=d.role_cost; if(!cdCur||!CDS.find(c=>c.name===cdCur.name)) cdCur=JSON.parse(JSON.stringify(CDS[0])); renderClassdicts(); fillClassdictSelect();}
-function fillClassdictSelect(){const sel=document.getElementById("bClassdict"); if(!sel) return; const cur=sel.value||"default"; sel.innerHTML=CDS.filter(c=>!c.error).map(c=>`<option value="${c.name}" ${c.name===cur?"selected":""}>${c.name} — ${c.classes.map(x=>x.name).join(", ")}</option>`).join("");}
-function adeIdsFor(subs){const s=subs.map(x=>x.toLowerCase()); return ADE.filter(l=>s.some(x=>l.label.toLowerCase().includes(x))).map(l=>l.label);}
-function renderClassdicts(){document.getElementById("cdItems").innerHTML=CDS.map(c=>`<div class="cditem ${cdCur&&c.name===cdCur.name?"on":""}" data-cd="${c.name}">${c.name}${c.error?" ⚠":""}<div class="m">${c.error||`${c.classes.length} classes · ${c.description||""}`}</div></div>`).join("");
-  const c=cdCur, ro=c.name==="default"; const e=document.getElementById("cdEdit");
+async function loadClassdicts(){const r=await fetch("/api/classdicts"); const d=await r.json(); CDS=d.classdicts; ADE=d.ade_labels; ROLES=d.roles; ROLE_COST=d.role_cost; MODELS=d.models||{}; LABELS=d.labels||{}; DEFAULT_MODEL=d.default_model||DEFAULT_MODEL; if(!cdCur||!CDS.find(c=>c.name===cdCur.name)) cdCur=JSON.parse(JSON.stringify(CDS[0])); renderClassdicts(); fillClassdictSelect();}
+function modelTitle(c){const m=MODELS[(c&&c.model)||DEFAULT_MODEL]; return m?m.title.split(" (")[0]:(c.model||DEFAULT_MODEL);}
+function fillClassdictSelect(){const sel=document.getElementById("bClassdict"); if(!sel) return; const cur=sel.value||"default"; sel.innerHTML=CDS.filter(c=>!c.error).map(c=>`<option value="${c.name}" ${c.name===cur?"selected":""}>${c.name} [${modelTitle(c)}] — ${c.classes.map(x=>x.name).join(", ")}</option>`).join("");}
+function adeIdsFor(subs,c){const s=subs.map(x=>x.toLowerCase()); return labelsOf(c||cdCur).filter(l=>s.some(x=>labelHit(l.label,x))).map(l=>l.label);}
+function renderClassdicts(){document.getElementById("cdItems").innerHTML=CDS.map(c=>`<div class="cditem ${cdCur&&c.name===cdCur.name?"on":""}" data-cd="${c.name}">${c.name}${c.error?" ⚠":""}<div class="m">${c.error||`${modelTitle(c)} · ${c.classes.length} classes · ${c.description||""}`}</div></div>`).join("");
+  const c=cdCur, ro=c.name==="default"; const e=document.getElementById("cdEdit"); const mi=MODELS[c.model||DEFAULT_MODEL]||{};
   e.innerHTML=`<div class="top"><label>이름<input id="cdName" value="${c.name}" ${ro?"disabled":""} pattern="[A-Za-z0-9][A-Za-z0-9_-]{0,40}"></label><label style="flex:1;min-width:240px">설명<input id="cdDesc" value="${c.description||""}" ${ro?"disabled":""}></label>${ro?`<span class="note">default 는 읽기 전용입니다. Duplicate 로 복제해 편집하세요.</span>`:""}</div>
-   <table class="cdt"><tr><th>클래스</th><th>ADE20K 라벨 (부분문자열 매칭)</th><th>매칭되는 라벨</th><th>역할</th><th>지면 코스트</th><th>색</th><th></th></tr>
+   <div class="top"><label>Segmentation model<select id="cdModel" ${ro?"disabled":""}>${Object.entries(MODELS).map(([k,m])=>`<option value="${k}" ${(c.model||DEFAULT_MODEL)===k?"selected":""}>${m.title}</option>`).join("")}</select></label><span class="note" style="flex:1;min-width:240px">${mi.note||""} 라벨 공간: ${mi.labels||"ade20k"} (${labelsOf(c).length}개). 모델을 바꾸면 라벨 매칭을 다시 확인하세요.</span></div>
+   <table class="cdt"><tr><th>클래스</th><th>모델 라벨 (부분문자열 매칭 · '=라벨' 은 정확 일치)</th><th>매칭되는 라벨</th><th>역할</th><th>지면 코스트</th><th>색</th><th></th></tr>
    ${c.classes.map((k,i)=>`<tr data-i="${i}"><td><input type="text" class="f-name" value="${k.name}" ${ro?"disabled":""} pattern="[a-z][a-z0-9_]{0,30}"></td>
      <td><div class="adechips">${k.ade.map((a,j)=>`<span class="adechip">${a}${ro?"":`<button data-rm="${i}:${j}" title="제거">×</button>`}</span>`).join("")}</div>${ro?"":`<div class="adeadd"><input class="f-ade" data-i="${i}" placeholder="라벨 검색·추가 (예: car)"><div class="sugg" hidden></div></div>`}</td>
      <td style="font-size:12px;color:var(--color-ink-muted-48);max-width:220px">${adeIdsFor(k.ade).join(", ")||"<span style='color:#8f3d1c'>매칭 없음</span>"}</td>
@@ -235,9 +239,10 @@ function renderClassdicts(){document.getElementById("cdItems").innerHTML=CDS.map
      <td>${ro?"":`<button class="btn-soft" data-del="${i}" style="height:28px;padding:0 8px">삭제</button>`}</td></tr>`).join("")}</table>
    <div class="foot"><span class="note">역할이 코스트맵 규칙을 정합니다: 선호/통행 지면 → 지면 코스트, 장애물 → 밴드에서 lethal, 동적 → free 공간이면 제거, 문맥 → 지면 150.</span>
      ${ro?"":`<button class="btn-soft" id="cdAddRow">+ 클래스</button><button class="btn-soft" id="cdDelete">사전 삭제</button>`}<button class="btn-soft" id="cdDup">Duplicate</button>${ro?"":`<button class="btn-pill" id="cdSave">Save</button>`}</div><div id="cdErr" class="err" hidden></div>`;
-  if(!ro) e.querySelectorAll(".f-ade").forEach(inp=>{inp.addEventListener("input",()=>{const q=inp.value.trim().toLowerCase(); const box=inp.nextElementSibling; if(!q){box.hidden=true;return;} const hits=ADE.filter(l=>l.label.toLowerCase().includes(q)).slice(0,20); box.innerHTML=hits.map(h=>`<div data-pick="${h.label.split(",")[0].trim()}">${h.label}</div>`).join("")||"<div>일치 없음</div>"; box.hidden=false;});
+  const ms=e.querySelector("#cdModel"); if(ms&&!ro) ms.addEventListener("change",()=>{cdCur=readEditor(); renderClassdicts();});
+  if(!ro) e.querySelectorAll(".f-ade").forEach(inp=>{inp.addEventListener("input",()=>{const q=inp.value.trim().toLowerCase(); const box=inp.nextElementSibling; if(!q){box.hidden=true;return;} const hits=labelsOf(cdCur).filter(l=>l.label.toLowerCase().includes(q.replace(/^=/,""))).slice(0,20); box.innerHTML=hits.map(h=>`<div data-pick="${h.label.split(",")[0].trim()}">${h.label}</div>`).join("")||"<div>일치 없음</div>"; box.hidden=false;});
     inp.addEventListener("keydown",ev=>{if(ev.key==="Enter"){ev.preventDefault(); const v=inp.value.trim().toLowerCase(); if(v){cdCur=readEditor(); cdCur.classes[+inp.dataset.i].ade.push(v); renderClassdicts();}}});});}
-function readEditor(){const e=document.getElementById("cdEdit"); const c=JSON.parse(JSON.stringify(cdCur)); if(c.name!=="default"&&e.querySelector("#cdName")){c.name=e.querySelector("#cdName").value.trim(); c.description=e.querySelector("#cdDesc").value; e.querySelectorAll("tr[data-i]").forEach(tr=>{const i=+tr.dataset.i; c.classes[i].name=tr.querySelector(".f-name").value.trim(); c.classes[i].role=tr.querySelector(".f-role").value; c.classes[i].cost=Number(tr.querySelector(".f-cost").value); c.classes[i].color=tr.querySelector(".f-color").value;});} return c;}
+function readEditor(){const e=document.getElementById("cdEdit"); const c=JSON.parse(JSON.stringify(cdCur)); if(c.name!=="default"&&e.querySelector("#cdName")){c.name=e.querySelector("#cdName").value.trim(); c.description=e.querySelector("#cdDesc").value; if(e.querySelector("#cdModel")) c.model=e.querySelector("#cdModel").value; e.querySelectorAll("tr[data-i]").forEach(tr=>{const i=+tr.dataset.i; c.classes[i].name=tr.querySelector(".f-name").value.trim(); c.classes[i].role=tr.querySelector(".f-role").value; c.classes[i].cost=Number(tr.querySelector(".f-cost").value); c.classes[i].color=tr.querySelector(".f-color").value;});} return c;}
 async function saveClassdict(){const c=readEditor(); const headers={"Content-Type":"application/json"}; if(TOKEN_REQUIRED){const t=localStorage.getItem("portal_token"); if(t) headers["X-Portal-Token"]=t;}
   const r=await fetch("/api/classdicts",{method:"POST",headers,body:JSON.stringify(c)}); const j=await r.json(); const er=document.getElementById("cdErr"); if(!r.ok){er.textContent=j.error||"실패"; er.hidden=false; return;} cdCur=j.classdict; await loadClassdicts();}
 /* ---------------- Localization (interactive) ---------------- */
@@ -399,7 +404,7 @@ document.addEventListener("click",e=>{
   const jl=e.target.closest("[data-joblog]"); if(jl){showLog(jl.dataset.joblog); return;}
   if(e.target.closest("#dsRescan")){fetch("/api/datasets/rescan",{method:"POST"}).then(loadDatasets); return;}
   const ci=e.target.closest("[data-cd]"); if(ci){cdCur=JSON.parse(JSON.stringify(CDS.find(c=>c.name===ci.dataset.cd))); renderClassdicts(); return;}
-  if(e.target.closest("#cdNew")||e.target.closest("#cdDup")){const base=e.target.closest("#cdDup")?readEditor():{classes:[]}; cdCur={name:(base.name&&base.name!=="default"?base.name+"_copy":"custom_"+Date.now().toString(36).slice(-4)),description:base.description||"",classes:JSON.parse(JSON.stringify(base.classes||[]))}; if(!cdCur.classes.length) cdCur.classes=JSON.parse(JSON.stringify(CDS[0].classes)); renderClassdicts(); return;}
+  if(e.target.closest("#cdNew")||e.target.closest("#cdDup")){const base=e.target.closest("#cdDup")?readEditor():{classes:[]}; cdCur={name:(base.name&&base.name!=="default"?base.name+"_copy":"custom_"+Date.now().toString(36).slice(-4)),description:base.description||"",model:base.model||DEFAULT_MODEL,classes:JSON.parse(JSON.stringify(base.classes||[]))}; if(!cdCur.classes.length) cdCur.classes=JSON.parse(JSON.stringify(CDS[0].classes)); renderClassdicts(); return;}
   if(e.target.closest("#cdAddRow")){cdCur=readEditor(); cdCur.classes.push({name:"new_class",ade:[],color:"#5c99c7",role:"context",cost:150}); renderClassdicts(); return;}
   const del=e.target.closest("[data-del]"); if(del){cdCur=readEditor(); cdCur.classes.splice(+del.dataset.del,1); renderClassdicts(); return;}
   const rm=e.target.closest("[data-rm]"); if(rm){const [i,j]=rm.dataset.rm.split(":").map(Number); cdCur=readEditor(); cdCur.classes[i].ade.splice(j,1); renderClassdicts(); return;}
