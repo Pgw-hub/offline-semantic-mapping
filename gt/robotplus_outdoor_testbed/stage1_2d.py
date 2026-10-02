@@ -7,6 +7,7 @@ import numpy as np, cv2, yaml
 from PIL import Image, ImageDraw
 HERE = os.path.dirname(os.path.abspath(__file__))
 ap = argparse.ArgumentParser(); ap.add_argument("root"); ap.add_argument("--stride", type=int, default=1); ap.add_argument("--panels", type=int, default=8); ap.add_argument("--video", help="프레임별 4분할(RGB|pred|GT|errors) 영상 mp4 경로"); ap.add_argument("--fps", type=int, default=10)
+ap.add_argument("--write-labels", help="학습용 2D GT 라벨 PNG 저장 디렉터리 (0 sidewalk 1 road 2 crosswalk 3 grass, 255 = GT 없음)")
 ap.add_argument("--write-oracle", help="2D GT 를 사전 채널 one-hot npz 로 저장할 sem_dir (오라클 맵 빌드용: sem/ 에 npz, classes.json·rgb_index.npz·rgb 는 원본 링크)")
 ap.add_argument("--calib", default="/data2/20261002/railab_raibo_20261002_054154/config_snapshot/raisin_root/calibration")
 a = ap.parse_args(); root = os.path.abspath(a.root)
@@ -95,6 +96,8 @@ for f in sem_files:
         iou_t = "  ".join(f"{k} IoU {v:.2f}" for k, v in fr["iou"].items()); txt(fr_img, f"errors: green=correct red=wrong   {iou_t}", Wc + 8, Hc + 22)
         for k, n in enumerate(EVAL): cv2.rectangle(fr_img, (Wc + 8 + k * 110, Hc - 22), (Wc + 24 + k * 110, Hc - 8), tuple(int(c) for c in COL[k][::-1]), -1); txt(fr_img, n, Wc + 28 + k * 110, Hc - 10)
         cv2.imwrite(os.path.join(vdir, f"{len(per_frame):06d}.png"), fr_img)
+    if a.write_labels:
+        os.makedirs(a.write_labels, exist_ok=True); lab8 = np.where(valid, gimg, 255).astype(np.uint8); Image.fromarray(lab8).save(os.path.join(a.write_labels, f"{si:06d}.png"))
     if a.write_oracle:                                                                   # GT one-hot (평가 클래스만, 나머지 채널 0; GT 없는 픽셀 전부 0 → other/미라벨)
         oh = np.zeros((Hc, Wc, NCH), np.uint8)
         for ch, k in pred_map.items(): oh[..., ch][valid & (gimg == k)] = 255

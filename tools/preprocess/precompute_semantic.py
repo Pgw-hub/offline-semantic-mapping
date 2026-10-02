@@ -19,6 +19,10 @@ ap = argparse.ArgumentParser()
 ap.add_argument("sem_dir"); ap.add_argument("--batch", type=int, default=8); ap.add_argument("--skip-existing", action="store_true")
 ap.add_argument("--classdict", default="default", help="클래스 사전 이름(classdicts/<name>.json) 또는 경로. 기본 default = grass/path/tree/person")
 ap.add_argument("--model", default=None, help=f"사전의 model 을 덮어씀 (실험용). 키: {list(CD.MODELS)}")
+ap.add_argument("--size", type=int, default=0, help="모델 입력 긴 변(px) 덮어쓰기 (0=processor 기본; Mapillary M2F 기본 384²). 4:3 로 맞춤")
+ap.add_argument("--tta-flip", action="store_true", help="좌우 플립 TTA (확률 평균)")
+ap.add_argument("--sky-black", type=int, default=0, help="RGB 최대값 < 이 값인 픽셀(검은 하늘)은 모든 채널 0 (sim 전용)")
+ap.add_argument("--ema", type=float, default=0.0, help="시간 평활: p = ema·p_prev + (1−ema)·p_cur (프레임 순서대로)")
 a = ap.parse_args(); D = a.sem_dir; os.makedirs(D + "/sem", exist_ok=True)
 H, W = 480, 640
 cd = CD.load(a.classdict)
@@ -42,7 +46,17 @@ else:
     elif backend == "eomt": from transformers import EomtForUniversalSegmentation as MaskModel
     else: raise SystemExit(f"알 수 없는 backend: {backend}")
     proc = AutoImageProcessor.from_pretrained(hub); model = MaskModel.from_pretrained(hub).to(dev).eval()   # fp32 (마스크 모델 fp16 은 미검증)
-    def scores(ims):                                                   # → (B, C, H, W) 클래스 점수 0~1
+    SIZE = {"height": int(a.size * 3 / 4), "width": a.size} if a.size else None
+    def scores_once(ims):
+        kw = {"size": SIZE} if SIZE else {}
+        out = model(**proc(images=ims, return_tensors="pt", **kw).to(dev))
+        res = proc.post_process_semantic_segmentation(out, target_sizes=[(H, W)] * len(ims), return_segmentation_scores=True)
+        return torch.stack([r.segmentation_scores for r in res]).float().clamp(0, 1)
+    def scores(ims):                                                   # → (B, C, H, W) 클래스 점수 0~1 (+ 플립 TTA)
+        s_ = scores_once(ims)
+        if a.tta_flip: s_ = 0.5 * (s_ + scores_once([im.transpose(Image.FLIP_LEFT_RIGHT) for im in ims]).flip(-1))
+        return s_
+    def _unused(ims):
         out = model(**proc(images=ims, return_tensors="pt").to(dev))
         res = proc.post_process_semantic_segmentation(out, target_sizes=[(H, W)] * len(ims), return_segmentation_scores=True)
         return torch.stack([r.segmentation_scores for r in res]).float().clamp(0, 1)
@@ -57,17 +71,24 @@ json.dump(cd, open(D + "/classes.json", "w", encoding="utf-8"), ensure_ascii=Fal
 files = sorted(glob.glob(D + "/rgb/*.png"))
 if a.skip_existing:
     files = [f for f in files if not os.path.exists(D + "/sem/%s.npz" % os.path.basename(f)[:-4])]
-print("프레임:", len(files), "device:", dev); t0 = time.time()
+print("프레임:", len(files), "device:", dev); t0 = time.time(); ema_prev = None
 with torch.no_grad():
     for s0 in range(0, len(files), a.batch):
         batch = files[s0:s0 + a.batch]
         ims = [Image.open(p).convert("RGB") for p in batch]
         probs = scores(ims)
+        if a.sky_black > 0:                                               # 검은 하늘 픽셀은 투표 제외 (sim: 하늘=building 번짐 차단)
+            dark = torch.stack([torch.from_numpy(np.asarray(im)).amax(-1) < a.sky_black for im in ims]).to(dev)
+            probs = probs * (~dark)[:, None].float()
         chans = [probs[:, g].sum(1) if g else torch.zeros_like(probs[:, 0]) for _, g in groups]
         for i, os_, th in overrides:                                   # 노면 표시 우선: 예) crosswalk ≥override_min 인 픽셀은 road 표를 받지 않음
             m = chans[i] >= th
             for o in os_: chans[o] = torch.where(m, torch.zeros_like(chans[o]), chans[o])
-        arr = (torch.stack(chans, dim=-1).clamp(0, 1) * 255).byte().cpu().numpy()      # (B,H,W,N)
+        st = torch.stack(chans, dim=-1).clamp(0, 1)
+        if a.ema > 0:                                                     # 시간 평활 (배치 안에서도 순서대로)
+            for b in range(st.shape[0]):
+                st[b] = a.ema * ema_prev + (1 - a.ema) * st[b] if ema_prev is not None else st[b]; ema_prev = st[b].clone()
+        arr = (st * 255).byte().cpu().numpy()      # (B,H,W,N)
         for j, p in enumerate(batch):
             np.savez_compressed(D + "/sem/%s.npz" % os.path.basename(p)[:-4], sem=arr[j])
         if (s0 // a.batch) % 25 == 0: print(f"  {s0}/{len(files)}  {time.time()-t0:.0f}s")

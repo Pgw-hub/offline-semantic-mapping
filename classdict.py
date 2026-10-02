@@ -24,6 +24,10 @@ MODELS = {
                          "note": "실내·실외 일반 장면. road/sidewalk 는 있으나 횡단보도 없음. 가볍고 빠름(GPU 0.03 s/프레임)."},
     "m2f_swinl_mapillary": {"title": "Mask2Former Swin-L · Mapillary Vistas (2021, 65 라벨)", "hub_id": "facebook/mask2former-swin-large-mapillary-vistas-semantic", "backend": "mask2former", "labels": "mapillary_vistas",
                             "note": "도로 장면 전용. Sidewalk / Crosswalk / Curb / Road / Bike Lane 분리. 비상업 라이선스(제품화 전 확인)."},
+    "m2f_swinl_mapillary_pan": {"title": "Mask2Former Swin-L · Mapillary Vistas panoptic (2021, 65 라벨)", "hub_id": "facebook/mask2former-swin-large-mapillary-vistas-panoptic", "backend": "mask2former", "labels": "mapillary_vistas",
+                                "note": "semantic 체크포인트와 같은 라벨, panoptic 학습본을 semantic 후처리로 사용 (비교용)."},
+    "segformer_sim_ft": {"title": "SegFormer-B2 · 시뮬 GT 미세조정 (2026-10, 4 라벨)", "hub_id": os.path.join(REPO, "models", "segformer_sim_ft"), "backend": "segformer", "labels": "sim_gt4",
+                         "note": "gt/robotplus_outdoor_testbed/train_segformer.py 로 시뮬 2D GT 학습. 로컬 체크포인트 models/segformer_sim_ft (git 제외)."},
     "eomt_l_ade": {"title": "EoMT-L · ADE20K (2025, 150 라벨)", "hub_id": "tue-mps/ade20k_semantic_eomt_large_512", "backend": "eomt", "labels": "ade20k",
                    "note": "SegFormer 와 같은 라벨, 경계가 깔끔하고 아스팔트 포장 인도 오판이 적음. 3배 느림(GPU 0.09 s/프레임)."},
 }

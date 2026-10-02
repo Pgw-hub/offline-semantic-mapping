@@ -1,0 +1,43 @@
+{
+ "name": "sim_ft_v1",
+ "description": "시뮬 2D GT 로 미세조정한 SegFormer (sidewalk/road/crosswalk/grass 4클래스) — 모델 키 segformer_sim_ft. 코스트·역할은 mapillary_road_v1 과 동일(인도10/횡단20/차도230/잔디90)",
+ "model": "segformer_sim_ft",
+ "classes": [
+  {
+   "name": "sidewalk",
+   "ade": [
+    "=sidewalk"
+   ],
+   "color": "#00e5ff",
+   "role": "ground_preferred",
+   "cost": 10
+  },
+  {
+   "name": "crosswalk",
+   "ade": [
+    "=crosswalk"
+   ],
+   "color": "#ffe600",
+   "role": "ground_preferred",
+   "cost": 20
+  },
+  {
+   "name": "grass",
+   "ade": [
+    "=grass"
+   ],
+   "color": "#3cb043",
+   "role": "ground_soft",
+   "cost": 90
+  },
+  {
+   "name": "road",
+   "ade": [
+    "=road"
+   ],
+   "color": "#6a0dad",
+   "role": "ground_soft",
+   "cost": 230
+  }
+ ]
+}

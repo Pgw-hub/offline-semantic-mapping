@@ -1,0 +1,18 @@
+[
+{
+"id": 0,
+"label": "sidewalk"
+},
+{
+"id": 1,
+"label": "road"
+},
+{
+"id": 2,
+"label": "crosswalk"
+},
+{
+"id": 3,
+"label": "grass"
+}
+]

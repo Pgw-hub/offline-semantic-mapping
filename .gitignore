@@ -20,3 +20,5 @@ data2_cg
 sessions/jobs.json
 output/*/localize/
 refer/
+models/
+gt/robotplus_outdoor_testbed/train_data/
