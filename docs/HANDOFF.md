@@ -267,7 +267,7 @@
 - ★"인도인데 차도" 원인 (2026-10-02, compiled/diag_flow_*.jpg · diag_contested.png): 두 가지가 겹침.
   (1) 모델 시점 의존 — 로봇이 인도 위에 서면 발밑의 넓은 균일 회색 면이 화면 아래를 채우고 연석·차도 맥락이 없어 Mapillary 가 전부 road 로 판정(길 건너서 보면 sidewalk). 이미지 단위 인도 픽셀의 road 확률 0.16 인데 복셀 단위 0.3 = 프레임 간 투표 분열.
   (2) 투표권이 근거리에만 — label_map_points require_depth=1 은 D455 depth 있는 픽셀만 투표(프레임 000124: 시야 안 51,874점 중 43,564 depth 없음 → 5,993 투표). 멀리서 맞게 본 프레임은 투표 못 하고 가까이서 틀리게 본 프레임만 투표.
-  해법 (2): label_map_points `--require-depth 2`(세션 `require_depth: lidar`) — depth 없는 픽셀은 LiDAR 지도 점끼리 픽셀 블록(3 px) 최소 거리 z-buffer 로 가림 판정(+`--zbuf-tol 0.3`, `--zbuf-range 15`는 depth 없는 투표 거리 상한). 포털 옵션 require_depth 가 true/false/lidar select.
+  해법 (2): label_map_points `--require-depth 2`(세션 `require_depth: lidar`) — depth 없는 픽셀은 LiDAR 지도 점끼리 픽셀 블록(3 px) 최소 거리 z-buffer 로 가림 판정(+`--zbuf-tol 0.3`, `--zbuf-range`(기본 40 = 사실상 없음)는 depth 없는 투표 거리 상한). 포털 옵션 require_depth 가 true/false/lidar select.
   4변형 비교(compiled/compare_require_depth.png; 코스트맵 셀 sidewalk10 / road230 / ctx150 / 미라벨60): A depth only 6,906/9,872/6,483/10,286 · B 가림 없음 11,626/8,662/11,991/555 · **C lidar z-buffer 40 m 11,195/8,698/10,896/2,569 (채택)** · D lidar 15 m 9,912/8,833/9,367/5,386.
   ctx150 증가는 가림 누수가 아니라 북쪽 광장을 모델이 building/other 로 보는 것 + 원거리 지면이 지평선 픽셀의 '검은 하늘=building' 라벨을 받는 것(거리 상한으로 일부만 감소). (1) 은 모델 문제 → AIHub 추가 학습 또는 기하(연석 높이) 사전 규칙이 과제.
   변형 root: output/t3_sim_1002_road_{nodepth,zbuf,zbuf15} (dataset/sem/graph 심볼릭링크, C 부터). 본 맵 t3_sim_1002_road 는 C 설정으로 재빌드.
