@@ -19,7 +19,7 @@ if os.path.exists(_cj):
     import json; _cd = json.load(open(_cj, encoding="utf-8"))
     NAMES = [c["name"] for c in _cd["classes"]]
     import sys as _s; _s.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))); import classdict as _CD
-    SEG_TITLE = "Segmentation: " + _CD.MODELS.get(_cd.get("model") or _CD.DEFAULT_MODEL, {}).get("title", "SegFormer-B4 · ADE20K").split(" (")[0] + f"  [{_cd.get('name')}]"
+    SEG_TITLE = "Segmentation: " + _CD.MODELS.get(_cd.get("model") or _CD.DEFAULT_MODEL, {}).get("title", "SegFormer-B4 · ADE20K").split(" (")[0].replace(" · ", " - ") + f"  [{_cd.get('name')}]"   # cv2 Hershey 폰트는 "·" 미지원
     COL = np.array([[int(c["color"][1:3], 16), int(c["color"][3:5], 16), int(c["color"][5:7], 16)] for c in _cd["classes"]], np.float32)[:, ::-1]   # BGR
 else:
     COL = np.array([(95, 200, 95), (210, 170, 110), (40, 120, 60), (230, 60, 60)], np.float32)[:, ::-1]
@@ -47,13 +47,15 @@ for lg in logs:
     stamps = np.load(os.path.join(d, "stamps.npz"))["stamps"].astype(np.int64)
     visdir = os.path.join(d, "exps", a.det_exp, "vis"); vis_frames = sorted(int(os.path.basename(p)[5:11]) for p in glob.glob(os.path.join(visdir, "frame??????.jpg")))
     vis_arr = np.array(vis_frames) if vis_frames else None
-    for i in range(0, n, a.speed):
+    fps_log = (n - 1) / max((stamps[-1] - stamps[0]) / 1e9, 1e-6) if n > 1 else a.src_fps     # 실제 소스 fps (sim 은 ~8 Hz, 실로봇 30 Hz)
+    step = max(1, int(round(a.speed * fps_log / 30.0)))                                        # 출력 30 fps 에서 x{speed} 배속이 되는 프레임 간격
+    for i in range(0, n, step):
         rgb = cv2.imread(fs[i])
         # 검출 패널
         det = None
         if vis_arr is not None and len(vis_arr):
             j = vis_arr[np.argmin(np.abs(vis_arr - i))]
-            if abs(j - i) <= a.speed // 2 + 1:
+            if abs(j - i) <= max(step, 10) // 2 + 1:
                 det = cv2.imread(os.path.join(visdir, f"frame{j:06d}.jpg")); n_det_hit += 1
         if det is None:
             det = rgb.copy(); cv2.putText(det, "no detection frame", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 1, cv2.LINE_AA)
@@ -66,12 +68,12 @@ for lg in logs:
             if os.path.exists(sp):
                 base = cv2.imread(rp) if os.path.exists(rp) else rgb
                 seg = seg_overlay(cv2.resize(base, (W, H)), np.load(sp)["sem"]); n_seg_hit += 1
-        t = t_sess + i / a.src_fps; mm, ss = divmod(int(t), 60)
+        t = t_sess + i / fps_log; mm, ss = divmod(int(t), 60)
         frame = np.hstack([panel_title(cv2.resize(rgb, (W, H)), f"RGB   {lg}  frame {i:04d}  {mm:02d}:{ss:02d}  x{a.speed}"),
                            panel_title(det, "Detection: YOLO-World + SAM (stride 10)"),
                            panel_title(seg, SEG_TITLE)])
         cv2.imwrite(os.path.join(tmp, f"{k:05d}.jpg"), frame, [cv2.IMWRITE_JPEG_QUALITY, 88]); k += 1
-    t_sess += n / a.src_fps; print(f"  {lg}: {n} frames → 누적 {k}", flush=True)
+    t_sess += n / fps_log; print(f"  {lg}: {n} frames @ {fps_log:.1f} fps, step {step} → 누적 {k}", flush=True)
 os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
 subprocess.run(["ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-framerate", "30", "-i", os.path.join(tmp, "%05d.jpg"), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", str(a.crf), "-movflags", "+faststart", a.out], check=True)
 shutil.rmtree(tmp)
