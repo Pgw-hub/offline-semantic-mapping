@@ -178,7 +178,7 @@ class Build:
         n_rgb = len(glob.glob(os.path.join(self.D["sem"], "rgb", "*.png")))
         semdir = os.path.join(self.D["sem"], "sem")
         cj = os.path.join(self.D["sem"], "classes.json")
-        if os.path.exists(cj) and not self.dry:
+        if os.path.exists(cj) and not self.dry and "B" not in self.force:          # --force B 면 재계산이므로 가드 생략
             cur = json.load(open(cj)); want = CD.load(self.opt["classdict"])        # 사전 이름뿐 아니라 사전에 묶인 세그 모델까지 같아야 재사용
             if cur.get("name") != want["name"] or (cur.get("model") or CD.DEFAULT_MODEL) != want["model"]:
                 raise RuntimeError(f"sem/ 이 다른 클래스 사전({cur.get('name')} / {cur.get('model') or CD.DEFAULT_MODEL})으로 만들어짐 → 새 root 를 쓰거나 --force B (sem 재계산)")

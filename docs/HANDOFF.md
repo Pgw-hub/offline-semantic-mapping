@@ -473,3 +473,23 @@
   거리대별 GT 인도 → (sidewalk/road/building): 0–5 m 35/37/16 → **56/40/0** · 5–10 m 54/16/18 → 43/**46**/3 · 10–20 m 52/6/21 → 29/**34**/12 · 20 m+ 34/4/33 → 20/8/28.
   ⇒ 텍스처는 **근거리 인도 인식과 building 번짐은 개선**했지만, 5 m 밖에서 타일 면이 'road' 로 넘어가는 새 오류가 더 큼(실패 에피소드 'road 형' 11→15, building 형 8→2). 어두운 아스팔트+중앙선으로 road 마스크가 강해져 인접한 밝은 타일 면까지 묶이는 것으로 보임. 큰 콘크리트 슬래브형 타일은 Mapillary 에서 도로(콘크리트 포장)와 혼동.
   권장 텍스처: 한국식 보도블록(30 cm 급 벽돌/헤링본, 적갈색·베이지 등 색 대비) + 점자블록, 차도는 미세 입자 아스팔트, 하늘색 하늘. 영상 compiled/stage1_2d_x10.mp4, 패널 stage1_panels.jpg, 타임라인 stage1_timeline.png.
+
+## 모델·설정 자율 스윕 — GT 기준 (2026-10-02~03, 텍스처 sim 105020 기준, gt/robotplus_outdoor_testbed/experiments.jsonl)
+하네스: run_exp.py (base root 의 dataset/graph/voxel 공유, sem 만 새로 → stage1 2D, --build 로 C..H + gt_eval). precompute 옵션 --size/--tta-flip/--sky-black/--ema/--hub-id/--model.
+| 설정 | 2D 인도 / 횡단보도 IoU | 3D 인도 / 횡단보도 / 차도 IoU | 인도→차도 | 횡단보도 재현 |
+|---|---|---|---|---|
+| M2F semantic @384 (원래) | 0.346 / 0.364 | 0.439 / 0.601 / 0.443 | 39.3% | 60% |
+| M2F semantic @640 (+flip) | 0.412 (0.421) / 0.562 | 0.535 / 0.818 / 0.524 | 27.7% | 84% |
+| M2F semantic @896 / @1024 | 0.574 / 0.543 | – | – | – |
+| M2F **panoptic** @640 | 0.520 / 0.579 | 0.753 / 0.806 / 0.754 | 5.0% | 90% |
+| M2F panoptic @896 / **@1024** | 0.615 / **0.620** / 0.628 | **0.786 / 0.825 / 0.810** | 2.7% | 89% |
+| sky-black 25, EMA 0.5 (@640) | 0.406 / 0.406 | – | – | 효과 없음 |
+| SegFormer-B2 미세조정 A (054154 학습 → 105020 적용, 교차 녹화) | 0.673 / 0.623 | 0.802 / 0.771 / 0.690 | 13.0% | 92% |
+| SegFormer-B2 미세조정 B (두 녹화 학습, log_003 홀드아웃) | 0.886 / 0.805 (홀드아웃 0.895/0.721) | **0.924 / 0.939 / 0.892** | 1.1% | 98% |
+| Hybrid B (지면 ft-B + 장애물 Mapillary pan) + band nonground | 0.771 / 0.769 | 0.914 / 0.921 / 0.864 | 1.3% | 99.5% |
+- 결론: ① 사전학습 쪽 최선 = **Mapillary panoptic 체크포인트 + 입력 896~1024**(입력 640×480 을 키워 넣어도 내부 stride 효과로 인도 IoU 0.35→0.62). semantic 체크포인트는 같은 라벨인데 일관되게 못함. 하늘 마스크·EMA·플립은 무의미(±0.01).
+  ② 시뮬 GT 로 미세조정한 SegFormer-B2(gt/…/train_segformer.py, 3~4k step 10분) 가 GT 수준(홀드아웃 2D 인도 0.90, 3D 0.92). 교차 녹화(무텍스처→텍스처)도 0.80 으로 Mapillary 최선과 동급.
+  ③ 미세조정 모델은 4 지면 클래스뿐 → **hybrid 백엔드**(classdicts/hybrid_road_v1: 지면 = segformer_sim_ft, 그 외 = Mapillary pan@896)로 장애물·문맥 유지. 미세조정 모델이 기둥·나무에도 지면 확률을 주므로 costmap `--band-label nonground`(기본) 필수 — 없으면 장애물 lethal 26→13%. primary 억제(--hybrid-suppress)는 지면 IoU 를 깎아 기본 off.
+  ④ 오라클(0.81)을 넘는 이유: 오라클 2D GT 는 LiDAR 점 픽셀에만 있어 커버리지가 한계였고, 모델은 모든 픽셀에 라벨을 주므로 미관측 셀이 줄어듦.
+- 적용: 레지스트리 m2f_swinl_mapillary(_pan) 기본 size 896, mapillary_road_v1 → panoptic, 미세조정 가중치 models/segformer_sim_ft(=B, git 제외), 텍스처 세션 YAML classdict hybrid_road_v1. 오케스트레이터 options.seg_size/seg_tta_flip. --force B 때 사전 가드 생략.
+- ★주의: 미세조정 모델은 이 테스트베드 sim 전용(실로봇 일반화 안 됨). 실로봇은 Mapillary panoptic@896 + AIHub Surface Masking 미세조정이 같은 길.
