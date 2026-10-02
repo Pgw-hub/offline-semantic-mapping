@@ -22,7 +22,7 @@ OPTION_SPEC = {   # 웹 폼에서 받는 옵션: (타입, 기본값, 범위)
     "occupancy_res": ("float", 0.2, (0.1, 0.5)), "prob_hit": ("float", 0.85, (0.5, 0.99)), "prob_miss": ("float", 0.45, (0.05, 0.5)),
     "h_ground": ("int", 2, (1, 10)), "h_obs": ("int", 3, (1, 10)), "clearance": ("float", 1.4, (0.5, 3.0)), "band_min": ("float", 0.3, (0.1, 1.0)),
     "view_cubes": ("bool", False, None), "view_coarse": ("float", 0.3, (0.1, 1.0)), "video_speed": ("int", 15, (0, 60)), "video_pipeline": ("bool", True, None),
-    "classdict": ("str", "default", None), "label_edge_px": ("int", 4, (0, 12)), "require_depth": ("bool", True, None),
+    "classdict": ("str", "default", None), "label_edge_px": ("int", 4, (0, 12)), "require_depth": ("str", "true", None),
     "geometry": ("str", "keyframe_scans", None),   # keyframe_scans(기본, 트랙 2) | all_scans | pcd(로봇 저장 지도 그대로) | raw_scans(기존 트랙 1)
     "pose_graph": ("bool", False, None), "lidar_extrinsic": ("str", "calib", None), "livox_flip": ("bool", True, None),
     "depth_fill_range": ("float", 4.0, (0.0, 10.0)), "depth_fill_gap": ("float", 0.15, (0.05, 0.5)),
@@ -167,6 +167,7 @@ def make_yaml(spec):
     if opts["classdict"] != "default" and not os.path.exists(os.path.join(CD.DIR, f"{opts['classdict']}.json")): raise ValueError(f"클래스 사전 '{opts['classdict']}' 없음")
     if opts["geometry"] not in GEOMETRIES: raise ValueError(f"geometry 는 {GEOMETRIES} 중 하나")
     if opts["lidar_extrinsic"] not in ("calib", "slam"): raise ValueError("lidar_extrinsic 은 calib | slam")
+    if str(opts["require_depth"]).lower() not in ("true", "false", "lidar"): raise ValueError("require_depth 는 true | false | lidar")
     y["options"].update({"lidar_extrinsic": opts["lidar_extrinsic"], "livox_flip": opts["livox_flip"], "depth_fill_range": opts["depth_fill_range"], "depth_fill_gap": opts["depth_fill_gap"]})
     if opts["geometry"] != "raw_scans":                          # 트랙 2: 로봇 저장 지도(.pcd/.txt) 필요
         rm = ds.get("robot_map")

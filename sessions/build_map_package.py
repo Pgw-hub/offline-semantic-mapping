@@ -103,6 +103,9 @@ class Build:
     def ds(self, log): return os.path.join(self.D["dataset"], log)
 
     # ---- 단계 ----
+    def rd_arg(self):
+        rd = self.opt.get("require_depth", True)                      # true/false 또는 'lidar'(=2: depth 없으면 LiDAR 자체 z-buffer)
+        return "2" if rd in (2, "2", "lidar", "zbuf") else ("1" if rd and rd not in ("false", "0") else "0")
     @property
     def robot_map(self): return self.opt.get("robot_map") or None          # {"pcd": ..., "traj": ...} → 트랙 2 (로봇 저장 지도에 의미 입히기)
     # ───────────────────────────────────────────────────────────────────────────────────────────
@@ -203,14 +206,14 @@ class Build:
                 sel = ["--keyframes", self.robot_map.get("traj") or os.path.join(self.graph, "keyframes_tum.txt")] if geom == "keyframe_scans" else (["--every", geom.split("_")[1]] if geom.startswith("every_") else [])
                 self.run([PY, f"{TOOLS}/scans_to_pcd.py", pcd, "--scans", *[os.path.join(self.ds(l), "lidar_scans") for l in self.logs]] + sel, logname="C_geometry.log")
             self.run([PY, f"{TOOLS}/label_map_points.py", pcd, self.calib, self.D["sem"], sess, "--datasets", *[self.ds(l) for l in self.logs],
-                      "--mask-bottom", str(self.opt["mask_bottom_px"]), "--edge-px", str(self.opt["label_edge_px"]), "--require-depth", "1" if self.opt["require_depth"] else "0",
+                      "--mask-bottom", str(self.opt["mask_bottom_px"]), "--edge-px", str(self.opt["label_edge_px"]), "--require-depth", self.rd_arg(),
                       "--pcd-out", os.path.join(self.D["compiled"], "robot_map_semantic.pcd"), "--depth-fill-range", str(self.opt.get("depth_fill_range", 5.0)), "--depth-gap", str(self.opt.get("depth_fill_gap", 0.15))], logname="C_robot_map.log"); return
         outs = []
         for log in self.logs:
             out = os.path.join(self.D["voxel"], f"{log}_voxsem.npz"); outs.append(out)
             if self.done("C", out): continue
             self.run([PY, f"{TOOLS}/build_voxel_sem_map.py", self.mcap(log), self.calib, self.ds(log), self.D["sem"], out, "--mask-bottom", str(self.opt["mask_bottom_px"]),
-                      "--edge-px", str(self.opt["label_edge_px"]), "--require-depth", "1" if self.opt["require_depth"] else "0"] + self.pg(), logname=f"C_{log}.log")
+                      "--edge-px", str(self.opt["label_edge_px"]), "--require-depth", self.rd_arg()] + self.pg(), logname=f"C_{log}.log")
         sess = os.path.join(self.D["voxel"], "session_voxsem.npz")
         if not self.done("C", sess):
             self.run([PY, f"{CG}/merge_voxels.py", sess] + outs, logname="C_merge.log")

@@ -12,7 +12,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."
 
 ap = argparse.ArgumentParser(); ap.add_argument("pcd"); ap.add_argument("calib"); ap.add_argument("sem_dir"); ap.add_argument("out"); ap.add_argument("--datasets", nargs="+", required=True)
 ap.add_argument("--vox", type=float, default=0.1); ap.add_argument("--mask-bottom", type=int, default=60); ap.add_argument("--edge-px", type=int, default=4)
-ap.add_argument("--require-depth", type=int, default=1); ap.add_argument("--max-range", type=float, default=40.0); ap.add_argument("--pcd-out")
+ap.add_argument("--require-depth", type=int, default=1, help="1: depth 없는 픽셀의 점 제외 · 0: 가림 판정 없이 허용(벽 뒤 점에 라벨 샘) · 2: depth 없으면 LiDAR 지도 점 자체 z-buffer(픽셀 블록 최소 거리)로 가림 판정 — 원거리 프레임도 투표")
+ap.add_argument("--zbuf-px", type=int, default=3, help="require-depth 2 의 z-buffer 픽셀 블록"); ap.add_argument("--zbuf-tol", type=float, default=0.3, help="블록 최소 거리 + tol + 0.05·z 안이면 보임")
+ap.add_argument("--zbuf-range", type=float, default=15.0, help="require-depth 2: depth 없는 점은 이 거리(m) 안에서만 투표 (원거리 지면이 지평선 픽셀의 하늘/건물 라벨을 받는 것 방지)")
+ap.add_argument("--max-range", type=float, default=40.0); ap.add_argument("--pcd-out")
 ap.add_argument("--depth-fill-range", type=float, default=0.0, help="depth 카메라 점으로 LiDAR 빈 곳 채우기 (카메라 거리 상한 m, 0=끔)")
 ap.add_argument("--depth-gap", type=float, default=0.15, help="LiDAR 지도 점이 이 거리 안에 있으면 depth 점 추가 안 함 (표면 이중화 방지)")
 ap.add_argument("--depth-px-stride", type=int, default=3); ap.add_argument("--depth-frame-stride", type=int, default=2); ap.add_argument("--depth-edge", type=float, default=0.12, help="이웃 픽셀과 depth 차 (m) 이상이면 경계(flying pixel) 로 버림")
@@ -57,7 +60,14 @@ for ds in a.datasets:
         u = np.round(fx * pc[:, 0] / np.where(zl > 0, zl, 1) + cx).astype(np.int64); v = np.round(fy * pc[:, 1] / np.where(zl > 0, zl, 1) + cy).astype(np.int64)
         infov = (zl > 0.3) & (u >= 0) & (u < Wc) & (v >= 0) & (v < Hc - a.mask_bottom)
         dcam = np.zeros(len(cand), np.float32); dcam[infov] = dep[v[infov], u[infov]]
-        vis = infov & (((dcam <= 0) & (not a.require_depth)) | ((dcam > 0) & (np.abs(zl - dcam) < 0.25 + 0.05 * zl)))
+        vis = infov & (dcam > 0) & (np.abs(zl - dcam) < 0.25 + 0.05 * zl)                       # depth 있는 픽셀: D455 z-buffer
+        nd = infov & (dcam <= 0)
+        if a.require_depth == 2 and nd.any():                                                      # depth 없는 픽셀: LiDAR 지도 점끼리 z-buffer (같은 픽셀 블록의 최소 거리 표면만 보임)
+            zb = np.full((Hc // a.zbuf_px + 1, Wc // a.zbuf_px + 1), np.inf, np.float32)
+            np.minimum.at(zb, (v[infov] // a.zbuf_px, u[infov] // a.zbuf_px), zl[infov].astype(np.float32))
+            zbp = zb[v[nd] // a.zbuf_px, u[nd] // a.zbuf_px]
+            vis[nd] = (zl[nd] < zbp + a.zbuf_tol + 0.05 * zl[nd]) & (zl[nd] < a.zbuf_range)
+        elif a.require_depth == 0: vis |= nd                                                       # 가림 판정 없이 허용
         vis[vis] &= ~edge[v[vis], u[vis]]
         pi = cand[vis]; uu, vv = u[vis], v[vis]
         sem_sum[pi] += sem[vv, uu].astype(np.float32) / 255.0; n_sem[pi] += 1; rgb_sum[pi] += rgb[vv, uu]
