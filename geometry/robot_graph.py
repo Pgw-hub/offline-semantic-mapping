@@ -85,6 +85,8 @@ if __name__ == "__main__":
         keep = np.isfinite(err) & (err <= a.max_err); keep[0] = True
         if a.tmax: keep &= (kf_ns - ns[0]) / 1e9 <= a.tmax
         print(f"노드 필터: {len(keep)} → {keep.sum()} (오차>{a.max_err}m 또는 tmax 초과 제외)"); Tp, j, err, kf_ns = Tp[keep], j[keep], err[keep], kf_ns[keep]
+    if len(kf_ns) < 2:                                           # /path/pgo 가 pose 1~2개뿐인 녹화(20261002 sim)에서 발생 → 오도메트리 TUM(geometry/odom_traj.py) 을 --traj 로
+        raise SystemExit(f"키프레임이 {len(kf_ns)}개뿐 — /path/pgo 마지막 메시지 poses {0 if P is None else len(P)}개. 로봇 저장 지도 .txt 를 --traj 로 주거나, 점프가 없으면 geometry/odom_traj.py 로 만든 TUM 을 --traj 로 사용")
     # 연속 노드 간 상대이동 일관성: PGO 상대이동 vs 실시간 오도메트리 상대이동 (점프 없는 구간은 수 cm 여야 함)
     To = T[j]; rp = np.einsum("nij,njk->nik", np.linalg.inv(Tp[:-1]), Tp[1:]); ro = np.einsum("nij,njk->nik", np.linalg.inv(To[:-1]), To[1:])
     dpos = np.linalg.norm(rp[:, :3, 3] - ro[:, :3, 3], axis=1); dyaw = np.abs(np.degrees(wrap(np.arctan2(rp[:, 1, 0], rp[:, 0, 0]) - np.arctan2(ro[:, 1, 0], ro[:, 0, 0]))))
