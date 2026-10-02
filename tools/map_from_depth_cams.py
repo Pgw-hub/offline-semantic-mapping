@@ -12,6 +12,7 @@
 """
 import argparse, glob, json, os, struct, subprocess, sys, tempfile, time
 import numpy as np, yaml
+import sys as _rs, os as _ro; _rs.path.insert(0, _ro.path.join(_ro.path.dirname(_ro.path.abspath(__file__)), "../geometry")); import raisin_msgs as RM   # 레코더 v1/v2 레이아웃 공용 디코더
 
 NEAR_FAR = {"d455_front": (0.1, 6.0), "d430_front": (0.1, 3.0), "d430_rear": (0.1, 3.0)}
 CALIB_DEPTH = {"d455_front": ("d455_front_depth_aligned_caminfo.yaml", "d455_front_depth_aligned.yaml"),
@@ -161,12 +162,13 @@ def main():
             if ch.topic in ("robot_state", "/Odometry/base"):
                 want = "robot_state" if a.pose == "robot_state" else "/Odometry/base"
                 if ch.topic != want: continue
-                d = m.data; sec, nsec = struct.unpack_from("<iI", d, 0)
-                if want == "robot_state": v = struct.unpack_from("<7d", d, 12); pq = v[3:7]          # base_pos xyz + quat wxyz
-                else: v = struct.unpack_from("<7d", d, 8); pq = (v[6], v[3], v[4], v[5])             # Odometry: pos xyz + quat xyzw
+                d = m.data
+                if want == "robot_state": ns_v, p_v, pq = RM.robot_state(d, sch); v = (*p_v, *pq)          # base_pos xyz + quat wxyz
+                else: ns_v, p_v, q_v = RM.odom(d, sch); v = (*p_v, *q_v); pq = (q_v[3], q_v[0], q_v[1], q_v[2])   # Odometry: quat xyzw → wxyz
+                sec, nsec = divmod(ns_v, 10**9)
                 ns_p.append(sec * 10**9 + nsec); pos_p.append(v[:3]); q_p.append(pq)
             elif ch.topic.endswith("_compressed"): raw[ch.topic].append(parse_pkt(m.data))
-            else: raw[ch.topic].append(m.data)                         # raw Image 는 나중에 zlib 해제
+            else: raw[ch.topic].append((m.data, sch))                  # raw Image 는 나중에 디코딩 (v1 zlib / v2 raw)
     if a.pose_graph:                                                   # PoseProvider (로봇 PGO 그래프) — Δ(t) 보정 포함
         sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "geometry"))
         from pose_provider import PoseProvider
@@ -194,7 +196,7 @@ def main():
 
     tmp = tempfile.mkdtemp()
     if raw.get("d455_front/rgb") and not a.force_compressed:
-        rgb_frames = [decode_raw_rgb(d) for d in raw["d455_front/rgb"]]; rgb_src = "raw"
+        rgb_frames = [RM.rgb_image(d, s_, order="rgb") for d, s_ in raw["d455_front/rgb"]]; rgb_src = "raw"
     else:
         rgb_frames = decode_av1(raw.get("d455_front/rgb_compressed", []), tmp, "rgb", pix="rgb24"); rgb_src = "AV1"
     rgb_ns = np.array([x[0] for x in rgb_frames], np.int64) if rgb_frames else np.zeros(0, np.int64)
@@ -207,7 +209,7 @@ def main():
     for cam in cams:
         near, far = NEAR_FAR[cam]
         if raw.get(f"{cam}/depth") and not a.force_compressed:         # raw: 이미 미터 단위(스케일 복원 불필요)
-            fr = [decode_raw_depth(d) for d in raw[f"{cam}/depth"]]; src = "raw"
+            fr = [RM.depth_image(d, s_) for d, s_ in raw[f"{cam}/depth"]]; src = "raw"
         elif raw.get(f"{cam}/depth_compressed"):
             fr = [(t, g.astype(np.float32) * (far - near) / 255.0 + near) for t, g in decode_av1(raw[f"{cam}/depth_compressed"], tmp, cam)]
             fr = [(t, np.where(z <= near + 1e-6, 0.0, z).astype(np.float32)) for t, z in fr]; src = "AV1"

@@ -6,6 +6,7 @@
 """
 import argparse, os, struct, sys
 import numpy as np
+import sys as _rs, os as _ro; _rs.path.insert(0, _ro.path.join(_ro.path.dirname(_ro.path.abspath(__file__)), "../../geometry")); import raisin_msgs as RM   # 레코더 v1/v2 레이아웃 공용 디코더
 from mcap.reader import make_reader
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "geometry"))
 from pc2_reader import parse_pc2, xyz_of
@@ -18,10 +19,9 @@ ns, pos, q, scans = [], [], [], []
 with open(a.mcap, "rb") as f:
     for sch, ch, msg in make_reader(f).iter_messages(topics=["/Odometry/base", "/cloud_registered"]):
         if ch.topic == "/cloud_registered":
-            h, P = parse_pc2(msg.data); scans.append((h["ns"], xyz_of(P).astype(np.float32), h["frame"]))
+            h, P = RM.pc2(msg.data, sch); scans.append((h["ns"], xyz_of(P).astype(np.float32), h["frame"]))
         else:
-            v = struct.unpack_from("<7d", msg.data, 8); sec, nsec = struct.unpack_from("<iI", msg.data, 0)
-            ns.append(sec * 10**9 + nsec); pos.append(v[:3]); q.append([v[6], v[3], v[4], v[5]])
+            ns_, p_, q_ = RM.odom(msg.data, sch); ns.append(ns_); pos.append(p_); q.append([q_[3], q_[0], q_[1], q_[2]])
 odom = Odom(np.array(ns, np.int64), np.array(pos), np.array(q)); pp = None
 if a.pose_graph:
     from pose_provider import PoseProvider; pp = PoseProvider(a.pose_graph); print("pose graph:", a.pose_graph, pp.meta)

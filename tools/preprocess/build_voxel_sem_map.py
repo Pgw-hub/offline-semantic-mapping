@@ -13,6 +13,7 @@
 import argparse, glob, os, struct, zlib
 import cv2
 import numpy as np
+import sys as _rs, os as _ro; _rs.path.insert(0, _ro.path.join(_ro.path.dirname(_ro.path.abspath(__file__)), "../../geometry")); import raisin_msgs as RM   # 레코더 v1/v2 레이아웃 공용 디코더
 import sys as _s, os as _o; _s.path.insert(0, _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), '..', '..', 'geometry')); from extrinsics import lidar_t_bl
 import yaml
 from mcap.reader import make_reader
@@ -53,9 +54,8 @@ def load_T(calib, name):
     return T
 
 
-def decode_lidar(data):
-    from pc2_reader import decode_livox                                  # CustomMsg / PointCloud2 자동, LIVOX_FLIP 환경변수
-    ns, xyz, _, _ = decode_livox(data); return ns, xyz
+def decode_lidar(data, sch=None):
+    ns, xyz, _, _ = RM.lidar_scan(data, sch); return ns, xyz
 
 
 def pack(ijk):
@@ -94,7 +94,7 @@ def main():
             if ch.topic == "/livox/lidar":
                 ns, xyz = decode_lidar(msg.data); lidar[ns] = xyz
             else:
-                v = struct.unpack_from("<7d", msg.data, 8); sec, nsec = struct.unpack_from("<iI", msg.data, 0)
+                ns_v, p_v, q_v = RM.odom(msg.data, sch); v = (*p_v, *q_v); sec, nsec = divmod(ns_v, 10**9)
                 gt_ns.append(sec*10**9+nsec); gt_pos.append(v[0:3]); gt_quat.append([v[6], v[3], v[4], v[5]])
     order = np.argsort(gt_ns)
     gt_ns = np.array(gt_ns, np.int64)[order]; gt_pos = np.array(gt_pos)[order]; gt_quat = np.array(gt_quat)[order]

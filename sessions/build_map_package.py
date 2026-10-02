@@ -92,7 +92,7 @@ class Build:
     def step_P(self):
         if self.robot_map:                                                  # 로봇 lidar_slam 최종 키프레임 자세(<name>.txt) → graph/
             if self.done("P", os.path.join(self.graph, "graph.json")): return
-            self.run([PY, f"{REPO}/geometry/robot_graph.py", self.mcap_dir, self.graph, "--traj", self.robot_map["traj"], "--rrd"], env={"CUDA_VISIBLE_DEVICES": ""}, logname="P.log"); return
+            self.run([PY, f"{REPO}/geometry/robot_graph.py", self.mcap_dir, self.graph] + (["--traj", self.robot_map["traj"]] if self.robot_map.get("traj") else []) + ["--rrd"], env={"CUDA_VISIBLE_DEVICES": ""}, logname="P.log"); return   # traj 없으면 /path/pgo 마지막 메시지 + 오도메트리 매칭
         if not self.opt["pose_graph"]: self.say("  pose_graph 꺼짐 → 생략"); return
         if self.done("P", os.path.join(self.graph, "graph.json")): return
         nums = ",".join(str(int(l[4:])) for l in self.logs)
@@ -102,7 +102,7 @@ class Build:
         for log in self.logs:
             out = self.ds(log)
             if self.done("A", os.path.join(out, "stamps.npz"), lambda: len(glob.glob(os.path.join(out, "results", "frame*.jpg"))) > 100): continue
-            cmd = [PY, f"{TOOLS}/mcap_to_cg.py", self.mcap(log), self.calib, out] + (["--lidar"] if self.opt["lidar_fusion"] else []) + self.pg()
+            cmd = [PY, f"{TOOLS}/mcap_to_cg.py", self.mcap(log), self.calib, out, "--pair-ms", str(self.opt.get("pair_ms", 34))] + (["--lidar"] if self.opt["lidar_fusion"] else []) + self.pg()   # pair_ms: rgb-depth 최대 시차 (sim 카메라는 비동기 → 250)
             self.run(cmd, logname=f"A_{log}.log")
     def step_S(self):
         for log in self.logs:
@@ -132,7 +132,7 @@ class Build:
             if self.done("C", sess): return
             geom = self.robot_map.get("geometry", "keyframe_scans"); pcd = self.robot_map["pcd"] if geom == "pcd" else os.path.join(self.D["compiled"], f"geometry_{geom}.pcd")
             if geom != "pcd":                                               # keyframe_scans | all_scans | every_N : S 단계 /cloud_registered 에서 기하 pcd 생성
-                sel = ["--keyframes", self.robot_map["traj"]] if geom == "keyframe_scans" else (["--every", geom.split("_")[1]] if geom.startswith("every_") else [])
+                sel = ["--keyframes", self.robot_map.get("traj") or os.path.join(self.graph, "keyframes_tum.txt")] if geom == "keyframe_scans" else (["--every", geom.split("_")[1]] if geom.startswith("every_") else [])
                 self.run([PY, f"{TOOLS}/scans_to_pcd.py", pcd, "--scans", *[os.path.join(self.ds(l), "lidar_scans") for l in self.logs]] + sel, logname="C_geometry.log")
             self.run([PY, f"{TOOLS}/label_map_points.py", pcd, self.calib, self.D["sem"], sess, "--datasets", *[self.ds(l) for l in self.logs],
                       "--mask-bottom", str(self.opt["mask_bottom_px"]), "--edge-px", str(self.opt["label_edge_px"]), "--require-depth", "1" if self.opt["require_depth"] else "0",

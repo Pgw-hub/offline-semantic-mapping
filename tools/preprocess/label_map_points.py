@@ -30,7 +30,7 @@ idx = np.load(os.path.join(a.sem_dir, "rgb_index.npz")); rgb_ns = idx["rgb_stamp
 print(f"지도 점 {N:,} · bbox {M.min(0).round(1)}..{M.max(0).round(1)} · 카메라 {Wc}x{Hc} fx {fx:.1f}")
 
 sem_sum = None; n_sem = np.zeros(N, np.float32); rgb_sum = np.zeros((N, 3), np.float32); first = np.full(N, 10**9, np.int64); n_vis_tot = 0; n_frames = 0
-DF = {"key": [], "sem": [], "rgb": [], "fr": []}; n_df_cand = n_df_kept = 0                       # depth 채움 후보 (0.1 m 격자 키로 집계)
+DF = {"key": [], "sem": [], "rgb": [], "fr": [], "xyz": []}; n_df_cand = n_df_kept = 0                       # depth 채움 후보 (0.1 m 격자 키로 집계)
 vv_g, uu_g = np.mgrid[0:Hc:a.depth_px_stride, 0:Wc:a.depth_px_stride]
 for ds in a.datasets:
     st = np.load(os.path.join(ds, "stamps.npz"))["stamps"]; traj = np.loadtxt(os.path.join(ds, "traj.txt")).reshape(-1, 4, 4); assert len(st) == len(traj)
@@ -83,7 +83,7 @@ for ds in a.datasets:
                 n_df_cand += len(pw); n_df_kept += int(far.sum())
                 if far.any():
                     K_ = np.floor(pw[far] / a.vox).astype(np.int64); o_ = 1 << 20; DF["key"].append(((K_[:, 0] + o_) << 42) | ((K_[:, 1] + o_) << 21) | (K_[:, 2] + o_))
-                    DF["sem"].append(sem[vc[far], uc[far]].astype(np.float32) / 255.0); DF["rgb"].append(rgb[vc[far], uc[far]].astype(np.float32)); DF["fr"].append(np.full(int(far.sum()), fi + li * 600, np.int64))
+                    DF["sem"].append(sem[vc[far], uc[far]].astype(np.float32) / 255.0); DF["rgb"].append(rgb[vc[far], uc[far]].astype(np.float32)); DF["fr"].append(np.full(int(far.sum()), fi + li * 600, np.int64)); DF["xyz"].append(pw[far].astype(np.float32))   # 3D prior(voxel3d) 용 원점 좌표
         if fi % 200 == 0: print(f"  frame {fi}/{len(sel)} 보이는 지도 점 {int(vis.sum()):,}")
 if sem_sum is None: sys.exit("semantic 프레임 없음")
 NCH = sem_sum.shape[1]; CLASSES = CLASSES or [str(i) for i in range(NCH)]
@@ -113,7 +113,9 @@ if DF["key"]:
 m = (1 << 21) - 1; ijk = (np.stack([(uk >> 42) & m, (uk >> 21) & m, uk & m], -1) - o).astype(np.int32)
 np.savez_compressed(a.out, ijk=ijk, n_pts=n_pts.astype(np.int32), rgb=rgb_v, sem_mean=sem_v.astype(np.float16), n_sem=ns_.astype(np.int32), first_frame=ff.astype(np.int32), source=source_v,
                     vox=a.vox, classes=np.array(CLASSES), n_frames=n_frames, map_xyz=M.astype(np.float32), map_sem=sem_mean_pt.astype(np.float16), map_n_sem=n_sem.astype(np.int32),
-                    geometry_source=np.array(f"robot map {os.path.basename(a.pcd)}"), **({"classdict": np.array(json.dumps(classdict, ensure_ascii=False))} if classdict else {}))
+                    geometry_source=np.array(f"robot map {os.path.basename(a.pcd)}"),
+                    depth_xyz=(np.concatenate(DF["xyz"]) if DF["xyz"] else np.zeros((0, 3), np.float32)),   # ← depth 채움 점(LiDAR gap 밖, 필터 통과) 원점 좌표; build_voxel3d.py 가 씀
+                    **({"classdict": np.array(json.dumps(classdict, ensure_ascii=False))} if classdict else {}))
 lab = int(has.sum()); am = sem_mean_pt[has].argmax(1)
 print(f"지도 점 {N:,} 중 라벨 받음 {lab:,} ({100*lab/N:.0f}%) · 프레임 {n_frames} · 프레임당 보이는 점 평균 {n_vis_tot/max(n_frames,1):,.0f}")
 print("라벨 분포:", {c: int((am == i).sum()) for i, c in enumerate(CLASSES)}); print("복셀", n, "저장:", a.out)

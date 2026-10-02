@@ -11,6 +11,7 @@
 """
 import argparse, glob, json, os, struct, sys, time
 import numpy as np
+import sys as _rs, os as _ro; _rs.path.insert(0, _ro.path.join(_ro.path.dirname(_ro.path.abspath(__file__)), "../geometry")); import raisin_msgs as RM   # 레코더 v1/v2 레이아웃 공용 디코더
 from mcap.reader import make_reader
 from scipy.spatial import cKDTree
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "geometry"))
@@ -33,9 +34,9 @@ ns, pos, q = [], [], []; raw, reg = {}, {}
 for f in files:
     for sch, ch, m in make_reader(open(f, "rb")).iter_messages(topics=["/Odometry/base", "/livox/lidar", "/cloud_registered"]):
         if ch.topic == "/Odometry/base":
-            v = struct.unpack_from("<7d", m.data, 8); sec, nsec = struct.unpack_from("<iI", m.data, 0); ns.append(sec * 10**9 + nsec); pos.append(v[:3]); q.append([v[6], v[3], v[4], v[5]])
+            ns_v, p_v, q_v = RM.odom(m.data, sch); v = (*p_v, *q_v); sec, nsec = divmod(ns_v, 10**9); ns.append(sec * 10**9 + nsec); pos.append(v[:3]); q.append([v[6], v[3], v[4], v[5]])
         else:
-            h, P = parse_pc2(m.data); (raw if ch.topic == "/livox/lidar" else reg)[h["ns"]] = xyz_of(P)
+            h, P = RM.pc2(m.data, sch); (raw if ch.topic == "/livox/lidar" else reg)[h["ns"]] = xyz_of(P)
 odom = Odom(np.array(ns, np.int64), np.array(pos), np.array(q))
 rk = np.array(sorted(raw)); stamps = []
 for t in sorted(reg):                                          # registered stamp ↔ 가장 가까운 raw stamp (1 ms 안)

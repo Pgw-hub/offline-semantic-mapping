@@ -10,6 +10,7 @@ import argparse, os, struct, zlib
 
 import cv2
 import numpy as np
+import sys as _rs, os as _ro; _rs.path.insert(0, _ro.path.join(_ro.path.dirname(_ro.path.abspath(__file__)), "../../geometry")); import raisin_msgs as RM   # 레코더 v1/v2 레이아웃 공용 디코더
 import sys as _s, os as _o; _s.path.insert(0, _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), '..', '..', 'geometry')); from extrinsics import lidar_t_bl
 import yaml
 from mcap.reader import make_reader
@@ -55,10 +56,9 @@ LIDAR_DT = np.dtype([("ot", "<u4"), ("x", "<f4"), ("y", "<f4"), ("z", "<f4"),
                      ("refl", "u1"), ("tag", "u1"), ("line", "u1")])
 
 
-def decode_lidar(data):
+def decode_lidar(data, sch=None):
     """/livox/lidar (CustomMsg 또는 PointCloud2 자동) -> (stamp_ns, Nx3 float32, refl). 좌표 180° 보정(-x,-y) 은 LIVOX_FLIP 환경변수(기본 켬)."""
-    from pc2_reader import decode_livox
-    ns, xyz, _, refl = decode_livox(data); return ns, xyz, refl
+    ns, xyz, _, refl = RM.lidar_scan(data, sch); return ns, xyz, refl
 
 
 def main():
@@ -97,18 +97,21 @@ def main():
         r = make_reader(f)
         for sch, ch, msg in r.iter_messages(topics=topics):
             if ch.topic == "/livox/lidar":
-                ns, xyz, refl = decode_lidar(msg.data)
+                ns, xyz, refl = decode_lidar(msg.data, sch)
                 lidar[ns] = (xyz, refl)
             elif ch.topic == "/Odometry/base":
-                v = struct.unpack_from("<7d", msg.data, 8)
-                sec, nsec = struct.unpack_from("<iI", msg.data, 0)
-                gt_ns.append(sec * 10**9 + nsec)
-                gt_pos.append(v[0:3])
-                gt_quat.append([v[6], v[3], v[4], v[5]])
-            else:
+                ns_, p_, q_ = RM.odom(msg.data, sch)
+                gt_ns.append(ns_)
+                gt_pos.append(p_)
+                gt_quat.append([q_[3], q_[0], q_[1], q_[2]])
+            elif not RM.is_v2(sch):
                 sec, nsec, w, h, rawlen, zlen = struct.unpack_from("<iIIIII", msg.data, 0)
                 assert (w, h) == (Wd, Hd) and rawlen == w * h * 2, (w, h, rawlen)
                 depth_z[sec * 10**9 + nsec] = msg.data[24:24 + zlen]
+            else:                                                               # v2: raw 32FC1/16UC1 → uint16 mm zlib (아래 소비 코드 동일)
+                ns_, mm = RM.depth_image_mm(msg.data, sch)
+                assert mm.shape == (Hd, Wd), (mm.shape, (Hd, Wd), "depth 크기가 calib caminfo 와 다름")
+                depth_z[ns_] = zlib.compress(mm.tobytes(), 1)
     order = np.argsort(gt_ns)
     gt_ns = np.array(gt_ns, dtype=np.int64)[order]
     gt_pos = np.array(gt_pos, dtype=np.float64)[order]
@@ -177,8 +180,7 @@ def main():
     with open(a.mcap, "rb") as f:
         r = make_reader(f)
         for sch, ch, msg in r.iter_messages(topics=["d455_front/rgb"]):
-            sec, nsec, w, h, chn, rawlen, zlen = struct.unpack_from("<iIIIIII", msg.data, 0)
-            ns = sec * 10**9 + nsec
+            ns = RM.stamp_ns(msg.data, sch)
             T_wb = pose_at(ns)
             if T_wb is None:
                 n_nopose += 1; continue
@@ -190,7 +192,8 @@ def main():
             if abs(int(d_stamps[k] - ns)) / 1e6 > a.pair_ms:
                 n_nodepth += 1; continue
 
-            rgb = np.frombuffer(zlib.decompress(msg.data[28:28 + zlen]), np.uint8).reshape(h, w, chn)
+            rgb = RM.rgb_image(msg.data, sch, order="rgb")[1]
+            if rgb.shape[:2] != (Hc, Wc): rgb = cv2.resize(rgb, (Wc, Hc), interpolation=cv2.INTER_AREA)   # sim 은 1280×960 으로 발행 — caminfo(640×480) 격자에 맞춤
             dep = np.frombuffer(zlib.decompress(depth_z[d_stamps[k]]), np.uint16).reshape(Hd, Wd)
             dep_c = dep[vd, ud]
             dep_c[~valid] = 0

@@ -1,4 +1,5 @@
 import numpy as np, struct, zlib, os, sys, glob, cv2
+import sys as _rs, os as _ro; _rs.path.insert(0, _ro.path.join(_ro.path.dirname(_ro.path.abspath(__file__)), "../../geometry")); import raisin_msgs as RM   # 레코더 v1/v2 레이아웃 공용 디코더
 from mcap.reader import make_reader
 SESSION=sys.argv[1]; OUT=sys.argv[2]; LOGS=sys.argv[3]  # "0-10"
 a,b=(int(x) for x in LOGS.split("-"))
@@ -10,16 +11,15 @@ for F in mcaps:
     lts=[]; rgbs=[]
     with open(F,"rb") as f:
         for sch,ch,msg in make_reader(f).iter_messages(topics=["/livox/lidar","d455_front/rgb"]):
-            sec,nsec=struct.unpack_from("<iI",msg.data,0); hs=sec*10**9+nsec        # 헤더 stamp (log_time 은 수신 벽시계 → sim 에선 헤더와 다른 시계)
+            hs=RM.stamp_ns(msg.data,sch)        # 헤더 stamp (log_time 은 수신 벽시계 → sim 에선 헤더와 다른 시계)
             if ch.topic=="/livox/lidar": lts.append(hs)
-            else: rgbs.append((hs,msg.data))
-    rt=np.array([t for t,_ in rgbs],dtype=np.int64)
+            else: rgbs.append((hs,msg.data,sch))
+    rt=np.array([t for t,_,_ in rgbs],dtype=np.int64)
     sel=sorted(set(int(np.argmin(np.abs(rt-lt))) for lt in lts))
     local2g={}
     for i in sel:
-        t,d=rgbs[i]
-        sec,nsec,w,h,ch_,rawlen,zlen=struct.unpack_from("<iIIIIII",d,0)
-        img=np.frombuffer(zlib.decompress(d[28:28+zlen]),dtype=np.uint8).reshape(h,w,ch_)
+        t,d,sch_=rgbs[i]
+        img=RM.rgb_image(d,sch_,order="bgr")[1]                     # cv2.imwrite 는 BGR
         cv2.imwrite(OUT+"/rgb/%06d.png"%gidx,img)
         local2g[i]=gidx; rgb_stamps.append(rgbs[i][0]); gidx+=1
     for lt in lts:

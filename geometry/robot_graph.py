@@ -9,6 +9,7 @@
 """
 import argparse, glob, json, os, struct, sys, time
 import numpy as np
+import sys as _rs, os as _ro; _rs.path.insert(0, _ro.path.join(_ro.path.dirname(_ro.path.abspath(__file__)), ".")); import raisin_msgs as RM   # 레코더 v1/v2 레이아웃 공용 디코더
 from mcap.reader import make_reader
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deskew import q2R as _q2R_wxyz
@@ -26,11 +27,11 @@ def read(mcap_dir, logs):
     for f in files:
         name = os.path.basename(f)[:-5]; ns, pos, qx = [], [], []
         for sch, ch, m in make_reader(open(f, "rb")).iter_messages(topics=["/Odometry/base", "/path/pgo"]):
-            d = m.data; sec, nsec = struct.unpack_from("<iI", d, 0)
+            d = m.data
             if ch.topic == "/Odometry/base":
-                v = struct.unpack_from("<13d", d, 8); ns.append(sec * 10**9 + nsec); pos.append(v[:3]); qx.append(v[3:7])
+                ns_, v = RM.odom13(d, sch); ns.append(ns_); pos.append(v[:3]); qx.append(v[3:7])
             else:
-                N = struct.unpack_from("<I", d, 8)[0]; P = np.frombuffer(d, "<f8", N * 7, 12).reshape(N, 7)
+                P, _ = RM.path_poses(d, sch)
                 if last_path is None or len(P) >= len(last_path): last_path = P.copy()
         per_log[name] = (np.array(ns, np.int64), np.array(pos), np.array(qx))
     ns = np.concatenate([v[0] for v in per_log.values()]); pos = np.concatenate([v[1] for v in per_log.values()]); qx = np.concatenate([v[2] for v in per_log.values()])
@@ -104,6 +105,12 @@ if __name__ == "__main__":
          "optimized_at": time.strftime("%Y-%m-%d %H:%M"), "mcap_dir": a.mcap_dir, "logs": sorted(per_log), "keyframe": {"source": "robot", "n": len(nodes)},
          "odom_jumps_ns": jumps.tolist(), "pose_change_m": {"median": float(np.median(corr)), "max": float(corr.max())}}
     json.dump(g, open(os.path.join(a.out, "graph.json"), "w"), ensure_ascii=False)
+    def _q_of(R):                                                    # 회전행렬 → quat xyzw
+        w = np.sqrt(max(1 + R[0, 0] + R[1, 1] + R[2, 2], 0)) / 2; s4 = 4 * w if w > 1e-8 else 1e-8
+        return [(R[2, 1] - R[1, 2]) / s4, (R[0, 2] - R[2, 0]) / s4, (R[1, 0] - R[0, 1]) / s4, w]
+    with open(os.path.join(a.out, "keyframes_tum.txt"), "w") as fh:      # 키프레임 자세 TUM (저장 지도 .txt 가 없을 때 scans_to_pcd --keyframes 로 쓰임)
+        fh.write("# stamp x y z qx qy qz qw  (robot lidar_slam PGO; " + src + ")\n")
+        for i in range(len(kf_ns)): fh.write(" ".join(["%.9f" % (kf_ns[i] / 1e9)] + ["%.6f" % v for v in Tp[i, :3, 3]] + ["%.7f" % v for v in _q_of(Tp[i, :3, :3])]) + "\n")
     if a.rrd:
         import rerun as rr, rerun.blueprint as rrb
         rr.init("robot_graph"); rr.save(os.path.join(a.out, "graph_view.rrd"))

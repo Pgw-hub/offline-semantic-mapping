@@ -9,6 +9,7 @@
 """
 import argparse, glob, json, os, sys, time
 import numpy as np, yaml, open3d as o3d
+import sys as _rs, os as _ro; _rs.path.insert(0, _ro.path.join(_ro.path.dirname(_ro.path.abspath(__file__)), ".")); import raisin_msgs as RM   # 레코더 v1/v2 레이아웃 공용 디코더
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from deskew import Odom, read_mcap, deskew_scan, R_batch
 import struct
@@ -40,7 +41,7 @@ def dejump_odometry(mcap_dir, logs, jump_mps=4.0, jump_degps=200.0, lookback=4):
     for li in logs:
         with open(os.path.join(mcap_dir, "log_%03d.mcap" % li), "rb") as f:
             for sch, ch, msg in make_reader(f).iter_messages(topics=["/Odometry/base"]):
-                v = struct.unpack_from("<7d", msg.data, 8); sec, nsec = struct.unpack_from("<iI", msg.data, 0)
+                ns_v, p_v, q_v = RM.odom(msg.data, sch); v = (*p_v, *q_v); sec, nsec = divmod(ns_v, 10**9)
                 ns.append(sec * 10**9 + nsec); pos.append(v[0:3]); q.append([v[6], v[3], v[4], v[5]])
     ns = np.array(ns, np.int64); o = np.argsort(ns); ns = ns[o]; pos = np.array(pos)[o]; q = np.array(q)[o]; q /= np.linalg.norm(q, axis=1, keepdims=True)
     T = np.tile(np.eye(4), (len(ns), 1, 1)); T[:, :3, :3] = R_batch(q); T[:, :3, 3] = pos

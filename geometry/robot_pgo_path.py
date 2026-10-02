@@ -6,6 +6,7 @@
 """
 import argparse, glob, os, struct, sys
 import numpy as np
+import sys as _rs, os as _ro; _rs.path.insert(0, _ro.path.join(_ro.path.dirname(_ro.path.abspath(__file__)), ".")); import raisin_msgs as RM   # 레코더 v1/v2 레이아웃 공용 디코더
 from mcap.reader import make_reader
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -22,11 +23,11 @@ def read(mcap_dir, logs):
     od_t, od_T, last_path, last_path_t = [], [], None, None
     for f in files:
         for sch, ch, m in make_reader(open(f, "rb")).iter_messages(topics=["/Odometry/base", "/path/pgo"]):
-            d = m.data; sec, nsec = struct.unpack_from("<iI", d, 0); t = sec + nsec * 1e-9
+            d = m.data; t = RM.stamp_ns(d, sch) / 1e9
             if ch.topic == "/Odometry/base":
-                v = struct.unpack_from("<13d", d, 8); od_t.append(t); od_T.append(T_of(v[:3], v[3:7]))
+                _, v = RM.odom13(d, sch); od_t.append(t); od_T.append(T_of(v[:3], v[3:7]))
             else:
-                N = struct.unpack_from("<I", d, 8)[0]; P = np.frombuffer(d, "<f8", N * 7, 12).reshape(N, 7)
+                P, _ = RM.path_poses(d, sch)
                 if last_path is None or len(P) >= len(last_path): last_path, last_path_t = P.copy(), t
     od_t = np.array(od_t); o = np.argsort(od_t)
     return od_t[o], np.array(od_T)[o], last_path, last_path_t

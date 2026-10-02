@@ -7,6 +7,7 @@
 """
 import argparse, collections, glob, json, os, struct, time, zlib
 import numpy as np, cv2
+import sys as _rs, os as _ro; _rs.path.insert(0, _ro.path.join(_ro.path.dirname(_ro.path.abspath(__file__)), "../geometry")); import raisin_msgs as RM   # 레코더 v1/v2 레이아웃 공용 디코더
 import rerun as rr, rerun.blueprint as rrb
 from mcap.reader import make_reader
 import sys as _s, os as _o; _s.path.insert(0, _o.path.join(_o.path.dirname(_o.path.abspath(__file__)), "..", "geometry")); from pc2_reader import decode_livox
@@ -112,26 +113,24 @@ for li, f in zip(a.logs, files):
             if ch.topic == "d455_front/rgb":
                 ci += 1
                 if ci % a.img_stride: continue
-                s_, ns_, w, h, chn, rawlen, zlen = struct.unpack_from("<iIIIIII", d, 0)
-                img = np.frombuffer(zlib.decompress(d[28:28 + zlen]), np.uint8).reshape(h, w, chn)
+                img = RM.rgb_image(d, sch, order="bgr")[1]
                 ok, jpg = cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])
                 rr.log("playback/rgb", rr.ImageEncoded(contents=jpg.tobytes()))
             elif ch.topic == "d455_front/depth":
                 di += 1
                 if di % a.img_stride: continue
-                s_, ns_, w, h, rawlen, zlen = struct.unpack_from("<iIIIII", d, 0)
-                dep = np.frombuffer(zlib.decompress(d[24:24 + zlen]), np.uint16).reshape(h, w)
+                dep = RM.depth_image_mm(d, sch)[1]
                 rr.log("playback/depth", rr.DepthImage(dep, meter=1000.0))
             elif ch.topic == "/livox/lidar":
                 si += 1
                 if si % a.lidar_stride: continue
-                xyz = decode_livox(d)[1][::4]                             # CustomMsg / PointCloud2 자동 (LIVOX_FLIP)
+                xyz = RM.lidar_scan(d, sch)[1][::4]                             # CustomMsg / PointCloud2 자동 (LIVOX_FLIP)
                 z = xyz[:, 2]; c = np.clip((z - z.min()) / (np.ptp(z) + 1e-6), 0, 1)
                 col = np.stack([(255 * c), (120 * np.ones_like(c)), (255 * (1 - c))], -1).astype(np.uint8)
                 rr.log("playback/robot/lidar/points", rr.Points3D(xyz, colors=col, radii=0.03))
             else:
-                v = struct.unpack_from("<7d", d, 8); traj.append(v[0:3])
-                rr.log("playback/robot", rr.Transform3D(translation=v[0:3], rotation=rr.Quaternion(xyzw=[v[3], v[4], v[5], v[6]])))
+                _, p_, q_ = RM.odom(d, sch); traj.append(p_)
+                rr.log("playback/robot", rr.Transform3D(translation=p_, rotation=rr.Quaternion(xyzw=list(q_))))
                 rr.log("playback/robot/marker", rr.Points3D([[0, 0, 0]], colors=[[255, 80, 80]], radii=0.15))
                 if len(traj) % 10 == 0:
                     rr.log("playback/odom/path", rr.LineStrips3D([np.array(traj, np.float32)], colors=[[255, 200, 60]], radii=0.03))
