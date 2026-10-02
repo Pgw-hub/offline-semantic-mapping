@@ -28,6 +28,9 @@ MODELS = {
                                 "note": "semantic 체크포인트와 같은 라벨, panoptic 학습본을 semantic 후처리로 사용 (비교용)."},
     "segformer_sim_ft": {"title": "SegFormer-B2 · 시뮬 GT 미세조정 (2026-10, 4 라벨)", "hub_id": os.path.join(REPO, "models", "segformer_sim_ft"), "backend": "segformer", "labels": "sim_gt4",
                          "note": "gt/robotplus_outdoor_testbed/train_segformer.py 로 시뮬 2D GT 학습. 로컬 체크포인트 models/segformer_sim_ft (git 제외)."},
+    "hybrid_simft_mapillary": {"title": "Hybrid · 지면 = SegFormer 시뮬 미세조정, 그 외 = Mask2Former Mapillary", "hub_id": "", "backend": "hybrid", "labels": "mapillary_vistas",
+                               "primary": "segformer_sim_ft", "secondary": "m2f_swinl_mapillary",
+                               "note": "사전의 라벨 패턴이 primary 라벨 공간에 정확히 있으면 primary 채널, 아니면 secondary(Mapillary) 라벨 매칭. 지면 4클래스는 GT 수준, 장애물·문맥은 Mapillary."},
     "eomt_l_ade": {"title": "EoMT-L · ADE20K (2025, 150 라벨)", "hub_id": "tue-mps/ade20k_semantic_eomt_large_512", "backend": "eomt", "labels": "ade20k",
                    "note": "SegFormer 와 같은 라벨, 경계가 깔끔하고 아스팔트 포장 인도 오판이 적음. 3배 느림(GPU 0.09 s/프레임)."},
 }

@@ -6,7 +6,7 @@ import argparse, json, os, subprocess, sys, time, glob
 HERE = os.path.dirname(os.path.abspath(__file__)); REPO = os.path.dirname(os.path.dirname(HERE)); OUT = os.path.join(REPO, "output")
 ap = argparse.ArgumentParser(); ap.add_argument("base"); ap.add_argument("name"); ap.add_argument("--pre", default=""); ap.add_argument("--sem-dir"); ap.add_argument("--build", action="store_true"); ap.add_argument("--classdict", default="mapillary_road_v1"); ap.add_argument("--stride", type=int, default=2)
 a = ap.parse_args(); base = os.path.join(OUT, a.base); root = os.path.join(OUT, f"exp_{a.base}_{a.name}"); os.makedirs(root + "/compiled", exist_ok=True)
-for d in ["dataset", "graph"]:
+for d in ["dataset", "graph", "voxel"]:                       # voxel: stage1 이 지도 점(map_xyz) 을 읽음 (기하 동일) — 3D 빌드(C) 시엔 exp 자체 voxel 로 교체
     if not os.path.exists(f"{root}/{d}"): os.symlink(f"../{a.base}/{d}", f"{root}/{d}")
 sem = root + "/sem"
 if a.sem_dir:
@@ -26,6 +26,7 @@ s2 = json.load(open(root + "/compiled/stage1_2d.json"))["summary"]
 row = {"exp": os.path.basename(root), "base": a.base, "pre": a.pre, "sem_dir": a.sem_dir, "iou2d": {k: v["iou"] for k, v in s2["overall"].items()}, "sw_by_range": {k: v["sidewalk"]["iou"] for k, v in s2["by_range"].items()},
        "sw_pred": {k: s2["sidewalk_gt_pred_dist_by_robot_pos"][k] for k in s2["sidewalk_gt_pred_dist_by_robot_pos"]}}
 if a.build:
+    if os.path.islink(root + "/voxel"): os.unlink(root + "/voxel")      # C 단계가 exp 자체 복셀을 만들도록 링크 제거
     y = open(f"{REPO}/sessions/session_{a.base}.yaml").read().replace(f"root: {a.base}\n", f"root: {os.path.basename(root)}\n"); yp = f"{REPO}/sessions/session_{os.path.basename(root)}.yaml"; open(yp, "w").write(y)
     t0 = time.time(); subprocess.run([sys.executable, f"{REPO}/sessions/build_map_package.py", os.path.basename(yp), "--steps", "C,E,F,G,H"], cwd=f"{REPO}/sessions", check=True, stdout=open(root + "/compiled/build.log", "w"), stderr=subprocess.STDOUT)
     subprocess.run([sys.executable, f"{HERE}/gt_eval.py", "eval", root], check=True, stdout=open(root + "/compiled/gt_eval.log", "w"), stderr=subprocess.STDOUT)

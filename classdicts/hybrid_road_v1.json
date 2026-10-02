@@ -1,0 +1,155 @@
+{
+ "name": "hybrid_road_v1",
+ "description": "지면(sidewalk/crosswalk/road/grass)=시뮬 미세조정 SegFormer, 그 외(curb/pole/vegetation/building/vehicle/person/water/bike_lane)=Mapillary M2F. 코스트·역할은 mapillary_road_v1 과 동일",
+ "model": "hybrid_simft_mapillary",
+ "classes": [
+  {
+   "name": "sidewalk",
+   "ade": [
+    "=sidewalk"
+   ],
+   "color": "#00e5ff",
+   "role": "ground_preferred",
+   "cost": 10
+  },
+  {
+   "name": "crosswalk",
+   "ade": [
+    "=crosswalk"
+   ],
+   "color": "#ffe600",
+   "role": "ground_preferred",
+   "cost": 20,
+   "overrides": [
+    "road"
+   ],
+   "override_min": 0.15
+  },
+  {
+   "name": "bike_lane",
+   "ade": [
+    "bike lane"
+   ],
+   "color": "#8b4513",
+   "role": "ground_soft",
+   "cost": 60
+  },
+  {
+   "name": "grass",
+   "ade": [
+    "=grass"
+   ],
+   "color": "#3cb043",
+   "role": "ground_soft",
+   "cost": 90
+  },
+  {
+   "name": "road",
+   "ade": [
+    "=road"
+   ],
+   "color": "#6a0dad",
+   "role": "ground_soft",
+   "cost": 230
+  },
+  {
+   "name": "curb",
+   "ade": [
+    "=curb"
+   ],
+   "color": "#ff6f00",
+   "role": "obstacle",
+   "cost": 254
+  },
+  {
+   "name": "vegetation",
+   "ade": [
+    "vegetation"
+   ],
+   "color": "#1b5e20",
+   "role": "obstacle",
+   "cost": 254
+  },
+  {
+   "name": "person",
+   "ade": [
+    "person",
+    "bicyclist",
+    "motorcyclist",
+    "other rider",
+    "animal",
+    "bird"
+   ],
+   "color": "#ff1744",
+   "role": "dynamic",
+   "cost": 254
+  },
+  {
+   "name": "vehicle",
+   "ade": [
+    "=car",
+    "truck",
+    "=bus",
+    "motorcycle",
+    "=bicycle",
+    "caravan",
+    "trailer",
+    "other vehicle",
+    "wheeled slow",
+    "on rails",
+    "boat"
+   ],
+   "color": "#2962ff",
+   "role": "obstacle",
+   "cost": 254
+  },
+  {
+   "name": "pole",
+   "ade": [
+    "pole",
+    "street light",
+    "traffic sign",
+    "traffic light",
+    "bench",
+    "trash can",
+    "fire hydrant",
+    "bike rack",
+    "phone booth",
+    "junction box",
+    "mailbox",
+    "billboard",
+    "banner",
+    "manhole",
+    "catch basin",
+    "pothole"
+   ],
+   "color": "#9e9e9e",
+   "role": "obstacle",
+   "cost": 254
+  },
+  {
+   "name": "building",
+   "ade": [
+    "building",
+    "wall",
+    "fence",
+    "guard rail",
+    "barrier",
+    "bridge",
+    "tunnel"
+   ],
+   "color": "#607d8b",
+   "role": "context",
+   "cost": 150
+  },
+  {
+   "name": "water",
+   "ade": [
+    "water"
+   ],
+   "color": "#0d47a1",
+   "role": "obstacle",
+   "cost": 254
+  }
+ ]
+}

@@ -19,6 +19,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("sem_dir"); ap.add_argument("--batch", type=int, default=8); ap.add_argument("--skip-existing", action="store_true")
 ap.add_argument("--classdict", default="default", help="클래스 사전 이름(classdicts/<name>.json) 또는 경로. 기본 default = grass/path/tree/person")
 ap.add_argument("--model", default=None, help=f"사전의 model 을 덮어씀 (실험용). 키: {list(CD.MODELS)}")
+ap.add_argument("--hub-id", default=None, help="모델 가중치 경로/허브 id 덮어쓰기 (레지스트리 backend 유지; 미세조정 체크포인트 비교용)")
 ap.add_argument("--size", type=int, default=0, help="모델 입력 긴 변(px) 덮어쓰기 (0=processor 기본; Mapillary M2F 기본 384²). 4:3 로 맞춤")
 ap.add_argument("--tta-flip", action="store_true", help="좌우 플립 TTA (확률 평균)")
 ap.add_argument("--sky-black", type=int, default=0, help="RGB 최대값 < 이 값인 픽셀(검은 하늘)은 모든 채널 0 (sim 전용)")
@@ -27,11 +28,40 @@ a = ap.parse_args(); D = a.sem_dir; os.makedirs(D + "/sem", exist_ok=True)
 H, W = 480, 640
 cd = CD.load(a.classdict)
 if a.model: cd["model"] = a.model; CD.validate(cd)
-mi = CD.model_info(cd); backend, hub = mi["backend"], mi["hub_id"]
+mi = CD.model_info(cd); backend, hub = mi["backend"], (a.hub_id or mi["hub_id"])
 dev = "cuda" if torch.cuda.is_available() else "cpu"
 print("모델:", cd["model"], "=", hub, f"[{backend}]")
+if backend == "hybrid":                                                 # 두 모델을 올리고 클래스별로 채널 출처를 나눔
+    import importlib; HYB = mi
+    def _load(key, hub_override=None):
+        m_ = CD.MODELS[key]; h_ = hub_override or m_["hub_id"]
+        if m_["backend"] == "segformer":
+            from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
+            p_ = SegformerImageProcessor.from_pretrained(h_); md = SegformerForSemanticSegmentation.from_pretrained(h_, torch_dtype=torch.float16 if dev == "cuda" else torch.float32).to(dev).eval()
+            def sc(ims):
+                inp = p_(images=ims, return_tensors="pt").to(dev); pv = inp["pixel_values"].half() if dev == "cuda" else inp["pixel_values"]
+                return torch.nn.functional.interpolate(md(pixel_values=pv).logits.float(), size=(H, W), mode="bilinear", align_corners=False).softmax(1)
+        else:
+            from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
+            p_ = AutoImageProcessor.from_pretrained(h_); md = Mask2FormerForUniversalSegmentation.from_pretrained(h_).to(dev).eval()
+            SZ = {"height": int(a.size * 3 / 4), "width": a.size} if a.size else None
+            def sc(ims):
+                kw = {"size": SZ} if SZ else {}; out = md(**p_(images=ims, return_tensors="pt", **kw).to(dev))
+                res = p_.post_process_semantic_segmentation(out, target_sizes=[(H, W)] * len(ims), return_segmentation_scores=True)
+                return torch.stack([r.segmentation_scores for r in res]).float().clamp(0, 1)
+        return {int(k): v for k, v in md.config.id2label.items()}, sc
+    id2l_p, sc_p = _load(HYB["primary"], a.hub_id); id2l_s, sc_s = _load(HYB["secondary"])
+    pri = {l.lower() for l in id2l_p.values()}
+    use_primary = [all(x.lstrip("=") in pri for x in c["ade"]) for c in cd["classes"]]          # 사전 패턴이 전부 primary 라벨이면 primary 채널
+    gp = CD.ade_ids(cd, id2l_p); gs = CD.ade_ids(cd, id2l_s)
+    print("hybrid: primary 클래스", [c["name"] for c, u in zip(cd["classes"], use_primary) if u], "| secondary", [c["name"] for c, u in zip(cd["classes"], use_primary) if not u])
+    class _M: pass
+    model = _M(); model.config = _M(); model.config.id2label = {**{k: v for k, v in id2l_s.items()}}
+    def scores(ims): return (sc_p(ims), sc_s(ims))
 
-if backend == "segformer":
+
+if backend == "hybrid": pass
+elif backend == "segformer":
     from transformers import SegformerForSemanticSegmentation, SegformerImageProcessor
     proc = SegformerImageProcessor.from_pretrained(hub)
     model = SegformerForSemanticSegmentation.from_pretrained(hub, torch_dtype=torch.float16 if dev == "cuda" else torch.float32).to(dev).eval()
@@ -63,6 +93,7 @@ else:
 
 id2l = {int(k): v for k, v in model.config.id2label.items()}
 groups = list(zip(CD.names(cd), CD.ade_ids(cd, id2l)))
+if backend == "hybrid": groups = [(n, (gp[i] if use_primary[i] else gs[i])) for i, n in enumerate(CD.names(cd))]
 for n, g in groups: print(n, "ids:", g, [id2l[i] for i in g])
 names_ = CD.names(cd); overrides = [(names_.index(c["name"]), [names_.index(o) for o in c["overrides"]], float(c.get("override_min", 0.3))) for c in cd["classes"] if c.get("overrides")]
 for i, os_, th in overrides: print(f"override: {names_[i]} ≥{th} → {[names_[o] for o in os_]} = 0")
@@ -77,10 +108,13 @@ with torch.no_grad():
         batch = files[s0:s0 + a.batch]
         ims = [Image.open(p).convert("RGB") for p in batch]
         probs = scores(ims)
-        if a.sky_black > 0:                                               # 검은 하늘 픽셀은 투표 제외 (sim: 하늘=building 번짐 차단)
+        if backend == "hybrid":
+            pp, ps = probs; chans = [(pp[:, g].sum(1) if use_primary[i] else ps[:, g].sum(1)) if g else torch.zeros_like(ps[:, 0]) for i, (_, g) in enumerate(groups)]
+            probs = None
+        if probs is not None and a.sky_black > 0:                                               # 검은 하늘 픽셀은 투표 제외 (sim: 하늘=building 번짐 차단)
             dark = torch.stack([torch.from_numpy(np.asarray(im)).amax(-1) < a.sky_black for im in ims]).to(dev)
             probs = probs * (~dark)[:, None].float()
-        chans = [probs[:, g].sum(1) if g else torch.zeros_like(probs[:, 0]) for _, g in groups]
+        if probs is not None: chans = [probs[:, g].sum(1) if g else torch.zeros_like(probs[:, 0]) for _, g in groups]
         for i, os_, th in overrides:                                   # 노면 표시 우선: 예) crosswalk ≥override_min 인 픽셀은 road 표를 받지 않음
             m = chans[i] >= th
             for o in os_: chans[o] = torch.where(m, torch.zeros_like(chans[o]), chans[o])
