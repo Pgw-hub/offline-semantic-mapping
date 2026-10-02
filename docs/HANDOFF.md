@@ -270,7 +270,18 @@
   해법 (2): label_map_points `--require-depth 2`(세션 `require_depth: lidar`) — depth 없는 픽셀은 LiDAR 지도 점끼리 픽셀 블록(3 px) 최소 거리 z-buffer 로 가림 판정(+`--zbuf-tol 0.3`, `--zbuf-range`(기본 40 = 사실상 없음)는 depth 없는 투표 거리 상한). 포털 옵션 require_depth 가 true/false/lidar select.
   4변형 비교(compiled/compare_require_depth.png; 코스트맵 셀 sidewalk10 / road230 / ctx150 / 미라벨60): A depth only 6,906/9,872/6,483/10,286 · B 가림 없음 11,626/8,662/11,991/555 · **C lidar z-buffer 40 m 11,195/8,698/10,896/2,569 (채택)** · D lidar 15 m 9,912/8,833/9,367/5,386.
   ctx150 증가는 가림 누수가 아니라 북쪽 광장을 모델이 building/other 로 보는 것 + 원거리 지면이 지평선 픽셀의 '검은 하늘=building' 라벨을 받는 것(거리 상한으로 일부만 감소). (1) 은 모델 문제 → AIHub 추가 학습 또는 기하(연석 높이) 사전 규칙이 과제.
-  변형 root: output/t3_sim_1002_road_{nodepth,zbuf,zbuf15} (dataset/sem/graph 심볼릭링크, C 부터). 본 맵 t3_sim_1002_road 는 C 설정으로 재빌드.
+  변형 root: output/t3_sim_1002_road_{nodepth,zbuf,zbuf15,depthonly} (dataset/sem/graph 심볼릭링크, C 부터). 본 맵 t3_sim_1002_road 는 C 설정으로 재빌드.
+
+## 시뮬 테스트베드 GT 와 정확도 (2026-10-02) — gt/robotplus_outdoor_testbed/
+- GT 출처: 사용자가 Claude Design 으로 만든 `Outdoor Testbed 3D.html`(프로젝트 "Outdoor Testbed 3D Model") — 단위 m, Y-up, 원점 교차로 중심, −Z 북. 도로·사선도로 폴리곤, 횡단보도(북 z∈[−8.2,−4.2], 남 [6.5,10.5], 동 x∈[6.25,9.25]), 인도(sitePoly−도로), 화단, 등판로, 건물·가로수·기둥·울타리 발자국을 gt_eval.py 가 shapely 로 포팅 → 0.2 m 격자(gt_design.{npz,png}).
+- 정합은 의미 라벨 없이 **지면 높이**(차도가 인도보다 0.15 m 낮음: 셀 최저 z 봉우리 −0.52/−0.42)로: GT 도로 셀 ↔ 맵 '낮은 지면' 마스크, 거울±·yaw 1° 전수·FFT 상관 평행이동 → mirror 1 · yaw 278° · t(−3.57, 6.19). 검증: GT 도로 셀의 90% 가 낮은 지면, GT 인도 셀의 82% 가 높은 지면. 결과 gt_map_frame.npz, root/compiled/{gt_map_frame,gt_overlay}.png, gt_eval.json.
+  ★map_ground 는 n_pts 필터 금지(로봇 지도 점은 복셀당 1점). ★costmap_from_occupancy 를 직접 돌릴 때 out 에 .npz 를 붙이면 .npz.npz 로 저장+매니페스트 오등록 — 오케스트레이터 --force G 로 돌릴 것.
+- 코스트맵 지면 라벨 규칙 추가: costmap_from_occupancy `--ground-label ground`(기본) = 지면 역할(ground_preferred·soft) 클래스 중 argmax(확률<--ground-min 0.3 이면 other); `all` 은 구 동작. YAML costmap.ground_label/ground_min. 인도 IoU 0.519→0.551. ground_min 0.15 는 IoU 0.589 지만 인도→차도 11.5→16.6% 라 불채택.
+- GT 기준 결과 (ground-label ground 0.3; 인도 IoU / 인도→차도 / 횡단보도 재현 / 차도 IoU):
+  A depth only 0.325 / 19.0% / 78.4% / 0.448 · B 가림 없음 0.574 / 9.8% / 71.6% / 0.571 · **C lidar z-buffer(채택) 0.551 / 11.5% / 75.2% / 0.530** · D lidar 15 m 0.468 / 13.4% / 75.4% / 0.498.
+  C 본 맵의 GT 클래스별 맵 라벨: 인도 → sidewalk 55% · context 25% · road 11% · 미라벨 7% (인도 라벨 정밀도 0.99 = 재현율 문제) · 차도 → road 73% · context 26% · 횡단보도 → crosswalk 75% · road 24%. GT 장애물 발자국은 15% 만 관측(건물·가로수 대부분 미주행 구역).
+  ★남은 오류 두 종류(gt_overlay.png): (1) 빨강 = 로봇이 걸어간 인도 삼각 구역이 road(모델 시점 의존), (2) 자홍 = 원거리 지면(사선 도로·북쪽)이 context — 검은 하늘=building 라벨이 지평선 근처 픽셀에서 원거리 점에 묻음. 거리 상한(D)은 (2) 를 조금 줄이고 인도 재현을 더 잃음.
+  다음 후보: 하늘 영역 마스크(sim 은 검은 하늘 → 밝기 임계로 픽셀 제외, 실외 실로봇은 'Sky' 라벨), 거리 가중 투표, AIHub 추가 학습, 연석 높이 기하 사전.
 - 예시 사전 outdoor_v2 (car=obstacle, building/wall/fence=context) → 웹 빌드 web_172218_cdv2 로 검증 중.
 - 라벨 오염 수정 (2026-09-10): build_voxel_sem_map --edge-px 4 (클래스 경계 4px 안 라벨 보류) + --require-depth 1 (depth 없는 픽셀엔 LiDAR 라벨 안 줌). 옵션 label_edge_px/require_depth (기본 4/true).
   172935 log0-5 outdoor_v2 비교: 차량 위 0~1.2m 오라벨 19,973→10,344 (-48%), 라벨 복셀 -9%(경계·원거리 배경이 unknown 으로), car -13%.

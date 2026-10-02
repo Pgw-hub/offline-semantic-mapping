@@ -349,7 +349,8 @@ class Build:
         cm = self.opt["costmap"]; out = os.path.join(self.D["compiled"], "session_costmap_occ")
         if not self.done("G", out + ".npz"):
             self.run([PY, f"{CG}/costmap_from_occupancy.py", man, out, "--register", "--h-ground", str(cm["h_ground"]), "--h-obs", str(cm["h_obs"]),
-                      "--clearance", str(cm["clearance"]), "--band-min", str(cm["band_min"])], env={"CUDA_VISIBLE_DEVICES": ""}, logname="G_costmap.log")
+                      "--clearance", str(cm["clearance"]), "--band-min", str(cm["band_min"]), "--ground-label", str(cm.get("ground_label", "ground")), "--ground-min", str(cm.get("ground_min", 0.3))],
+                     env={"CUDA_VISIBLE_DEVICES": ""}, logname="G_costmap.log")   # ground_label/ground_min: 지면 셀 라벨 = 지면 역할 클래스 argmax (costmap_from_occupancy)
         if not self.dry:   # 로더 기본 키(costmap_2d)도 같은 파일을 가리키게
             m = json.load(open(man))
             if "costmap_2d_occ" in m["files"] and "costmap_2d" not in m["files"]:

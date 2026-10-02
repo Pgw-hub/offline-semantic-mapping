@@ -177,6 +177,7 @@ def cmd_eval(roots):
         img = np.zeros(cost.shape + (3,), np.uint8)
         for k, name in enumerate(CLASSES): img[gt_m == k] = tuple(int(c * 0.45) for c in COLORS[name])
         img[(cost == 230) & sw] = (255, 40, 40); img[((cost == 10) | (cost == 20)) & rd] = (60, 120, 255); img[(gt_m == ci) & (cost != 20) & (cost != 255)] = (255, 160, 0)
+        img[(cost == 150) & (sw | rd)] = (255, 0, 255)                       # 자홍 = GT 인도/차도인데 맵 context(150)
         Image.fromarray(np.flipud(img.transpose(1, 0, 2))).resize((H * 2, W * 2), Image.NEAREST).save(os.path.join(root, "compiled", "gt_overlay.png"))
 
 if __name__ == "__main__":

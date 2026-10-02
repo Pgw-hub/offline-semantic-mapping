@@ -23,6 +23,8 @@ ap.add_argument("--register", action="store_true", help="매니페스트에 cost
 ap.add_argument("--mode", choices=["semantic", "geometric"], default="semantic",
                 help="geometric = 라벨 무시: 지면은 전부 free(0), 밴드 안 확인된 점은 전부 lethal (nav2 static/obstacle layer 와 같은 규칙)")
 ap.add_argument("--band-min", type=float, default=0.3, help="지면 위 이 높이부터 장애물 밴드 시작 (m)")
+ap.add_argument("--ground-label", choices=["ground", "all"], default="ground", help="지면 셀 라벨: ground = 지면 역할(ground_preferred·soft) 클래스 중 argmax(확률<ground-min 이면 other) — 하늘/건물 등 문맥 표가 원거리 지면에 묻는 것 차단 · all = 전체 argmax(구 동작)")
+ap.add_argument("--ground-min", type=float, default=0.3)
 a = ap.parse_args(); t0 = time.time()
 mp = MapPackage(a.manifest); O = mp.occ; R = O["res"]; ijk = O["ijk"].astype(np.int64); hits = O["hits"]
 classes = mp.classes; n_cls = len(classes); cd = mp.classdict
@@ -33,22 +35,31 @@ print("클래스 사전:", cd["name"], {c["name"]: c["role"] for c in cd["classe
 # --- 0.2m 셀 라벨: 0.1m 표면 복셀 다수결 (person·free 안 동적 복셀 제외) ---
 ctr = mp.voxel_centers(); lab = mp.labels(); keep = ~mp.surf_removed
 K = np.floor(ctr[keep] / R).astype(np.int64); L = lab[keep]
+if a.ground_label == "ground":                               # 지면 셀 라벨은 지면 역할 클래스 중 argmax (문맥·장애물 표는 밴드 판정에만)
+    GIDX = np.array(PREF + SOFT, np.int64); subp = mp.sem[:, GIDX]; has = mp.n_sem > 0
+    labg = np.full(len(lab), n_cls + 1, np.int16); am = subp.argmax(1); mx = subp.max(1)
+    labg[has] = np.where(mx[has] >= a.ground_min, GIDX[am[has]], n_cls).astype(np.int16); Lg = labg[keep]
+else: Lg = L
 def pack(K):   # 축당 19비트(±26km@0.2m) → 57비트, ×8(라벨) 해도 int64 안전
     return ((K[:, 0] + (1 << 18)) << 38) | ((K[:, 1] + (1 << 18)) << 19) | (K[:, 2] + (1 << 18))
-kp = pack(K); order = np.argsort(kp); kp, L = kp[order], L[order]
-uk, st = np.unique(kp, return_index=True); en = np.r_[st[1:], len(kp)]
-# 다수결(벡터화): 각 (셀,라벨) 쌍 카운트
-assert n_cls + 2 <= 16, "라벨 16개 초과 (4비트 패킹)"                    # 클래스 + other + unknown ≤ 16 (57비트 키 ×16 = 61비트, int64 안전)
-pair = kp * 16 + L.astype(np.int64); up, cnt = np.unique(pair, return_counts=True)
-cell_of = np.searchsorted(uk, up >> 4); labs = (up & 15).astype(np.int16)
-best = np.zeros(len(uk), np.int64); bestlab = np.full(len(uk), n_cls + 1, np.int16)
-o2 = np.lexsort((cnt, cell_of))                            # 셀별 마지막 = 최대 카운트
-cell_of, labs, cnt = cell_of[o2], labs[o2], cnt[o2]
-last = np.r_[cell_of[1:] != cell_of[:-1], True]
-bestlab[cell_of[last]] = labs[last]
-# occupancy 셀에 라벨 붙이기
-ok_p = pack(ijk); pos = np.searchsorted(uk, ok_p); pos_c = np.minimum(pos, len(uk) - 1); found = uk[pos_c] == ok_p
-olab = np.full(len(ijk), n_cls + 1, np.int16); olab[found] = bestlab[pos_c[found]]
+def vote(L):   # 0.2 m 셀 다수결 → occupancy 셀 라벨
+    kp = pack(K); order = np.argsort(kp); kp, L = kp[order], L[order]
+    uk, st = np.unique(kp, return_index=True); en = np.r_[st[1:], len(kp)]
+    # 다수결(벡터화): 각 (셀,라벨) 쌍 카운트
+    assert n_cls + 2 <= 16, "라벨 16개 초과 (4비트 패킹)"                    # 클래스 + other + unknown ≤ 16 (57비트 키 ×16 = 61비트, int64 안전)
+    pair = kp * 16 + L.astype(np.int64); up, cnt = np.unique(pair, return_counts=True)
+    cell_of = np.searchsorted(uk, up >> 4); labs = (up & 15).astype(np.int16)
+    best = np.zeros(len(uk), np.int64); bestlab = np.full(len(uk), n_cls + 1, np.int16)
+    o2 = np.lexsort((cnt, cell_of))                            # 셀별 마지막 = 최대 카운트
+    cell_of, labs, cnt = cell_of[o2], labs[o2], cnt[o2]
+    last = np.r_[cell_of[1:] != cell_of[:-1], True]
+    bestlab[cell_of[last]] = labs[last]
+    # occupancy 셀에 라벨 붙이기
+    ok_p = pack(ijk); pos = np.searchsorted(uk, ok_p); pos_c = np.minimum(pos, len(uk) - 1); found = uk[pos_c] == ok_p
+    olab = np.full(len(ijk), n_cls + 1, np.int16); olab[found] = bestlab[pos_c[found]]
+    return olab
+ok_p = pack(ijk)
+olab = vote(L); olab_g = vote(Lg) if a.ground_label == "ground" else olab
 
 # --- 지면: 열별 hits≥H_GROUND 최저 셀 ---
 col = (ijk[:, 0] + (1 << 20)) * (1 << 21) + (ijk[:, 1] + (1 << 20))
@@ -59,7 +70,7 @@ kmin = np.full(len(ucol), 1 << 30, np.int64); np.minimum.at(kmin, inv, ijk[gm, 2
 gcell = pack(np.c_[(ucol // (1 << 21)) - (1 << 20), (ucol % (1 << 21)) - (1 << 20), kmin])
 all_p = ok_p; oa = np.argsort(all_p); sp = all_p[oa]
 p2 = np.searchsorted(sp, gcell); p2c = np.minimum(p2, len(sp) - 1); f2 = sp[p2c] == gcell
-glab = np.full(len(ucol), n_cls + 1, np.int16); glab[f2] = olab[oa[p2c[f2]]]
+glab = np.full(len(ucol), n_cls + 1, np.int16); glab[f2] = olab_g[oa[p2c[f2]]]      # 지면 라벨 (ground-label 모드)
 
 # --- 격자 ---
 i_all = ucol // (1 << 21) - (1 << 20); j_all = ucol % (1 << 21) - (1 << 20)
