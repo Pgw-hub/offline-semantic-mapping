@@ -282,6 +282,14 @@
   C 본 맵의 GT 클래스별 맵 라벨: 인도 → sidewalk 55% · context 25% · road 11% · 미라벨 7% (인도 라벨 정밀도 0.99 = 재현율 문제) · 차도 → road 73% · context 26% · 횡단보도 → crosswalk 75% · road 24%. GT 장애물 발자국은 15% 만 관측(건물·가로수 대부분 미주행 구역).
   ★남은 오류 두 종류(gt_overlay.png): (1) 빨강 = 로봇이 걸어간 인도 삼각 구역이 road(모델 시점 의존), (2) 자홍 = 원거리 지면(사선 도로·북쪽)이 context — 검은 하늘=building 라벨이 지평선 근처 픽셀에서 원거리 점에 묻음. 거리 상한(D)은 (2) 를 조금 줄이고 인도 재현을 더 잃음.
   다음 후보: 하늘 영역 마스크(sim 은 검은 하늘 → 밝기 임계로 픽셀 제외, 실외 실로봇은 'Sky' 라벨), 거리 가중 투표, AIHub 추가 학습, 연석 높이 기하 사전.
+- **단계별 손실 분리 (2026-10-02)** — gt/robotplus_outdoor_testbed/stage1_2d.py: GT 를 카메라로 역투영(지도 점 → 픽셀, LiDAR z-buffer, 지면+0.3 m 이내 점만, 2 px 채움)해 프레임별 2D 정답을 만들고 Mapillary 출력과 비교.
+  2D 단계 결과(250프레임, GT 인도 픽셀 → 예측): 0–5 m sidewalk 33% · **road 39%** · building 16% / 5–10 m 54% · road 17% · building 18% / 10–20 m 52% · building 21% / 20–60 m 34% · **building 33%**.
+  로봇이 인도 위: sidewalk 39% · road 17% · 기타 38% ↔ 차도 위: sidewalk 65% · road 4%. 2D 인도 IoU 0.48(5–10 m 0.53, 20 m+ 0.34), 횡단보도 0–5 m 0.80 → 10–20 m 0.26.
+  ⇒ 두 손실 모두 **2D 모델 단계**에서 시작: (1) 발밑 인도 → road (연석·차도 맥락 없는 균일 회색 면), (2) 거리↑ building (검은 하늘 번짐). 패널 compiled/stage1_panels.jpg, 수치 stage1_2d.json.
+  ★2D GT 결함: 수관 아래 지면 점이 없는 셀은 수관 점이 GT(grass) 를 받음 — grass 만 영향.
+  **오라클**(2D GT one-hot → 같은 투영·투표·코스트맵, 루트 output/t3_sim_1002_road_oracle, stage1 --write-oracle): 인도 IoU **0.814** · 횡단보도 0.821 · 차도 0.905 · 인도→차도 0.1%.
+  오라클의 남은 손실은 전부 '미라벨'(GT 인도 17%, 횡단보도 17%, 차도 8% = 카메라가 z-buffer 허용 안에서 못 본 셀) — 투영 단계는 **오라벨을 만들지 않고 커버리지만 잃는다**.
+  ⇒ 손실 분해(인도 IoU): GT 1.0 → 투영·커버리지 0.81 → **2D 모델 0.55**. 개선 우선순위 = 모델(sim 미세조정: 750프레임 2D GT 자동 라벨 보유) ≫ 커버리지(더 많은 시점/후방 카메라).
 - 예시 사전 outdoor_v2 (car=obstacle, building/wall/fence=context) → 웹 빌드 web_172218_cdv2 로 검증 중.
 - 라벨 오염 수정 (2026-09-10): build_voxel_sem_map --edge-px 4 (클래스 경계 4px 안 라벨 보류) + --require-depth 1 (depth 없는 픽셀엔 LiDAR 라벨 안 줌). 옵션 label_edge_px/require_depth (기본 4/true).
   172935 log0-5 outdoor_v2 비교: 차량 위 0~1.2m 오라벨 19,973→10,344 (-48%), 라벨 복셀 -9%(경계·원거리 배경이 unknown 으로), car -13%.
