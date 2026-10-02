@@ -6,7 +6,8 @@ import argparse, glob, json, os, sys
 import numpy as np, cv2, yaml
 from PIL import Image, ImageDraw
 HERE = os.path.dirname(os.path.abspath(__file__))
-ap = argparse.ArgumentParser(); ap.add_argument("root"); ap.add_argument("--stride", type=int, default=1); ap.add_argument("--panels", type=int, default=8); ap.add_argument("--write-oracle", help="2D GT 를 사전 채널 one-hot npz 로 저장할 sem_dir (오라클 맵 빌드용: sem/ 에 npz, classes.json·rgb_index.npz·rgb 는 원본 링크)")
+ap = argparse.ArgumentParser(); ap.add_argument("root"); ap.add_argument("--stride", type=int, default=1); ap.add_argument("--panels", type=int, default=8); ap.add_argument("--video", help="프레임별 4분할(RGB|pred|GT|errors) 영상 mp4 경로"); ap.add_argument("--fps", type=int, default=10)
+ap.add_argument("--write-oracle", help="2D GT 를 사전 채널 one-hot npz 로 저장할 sem_dir (오라클 맵 빌드용: sem/ 에 npz, classes.json·rgb_index.npz·rgb 는 원본 링크)")
 ap.add_argument("--calib", default="/data2/20261002/railab_raibo_20261002_054154/config_snapshot/raisin_root/calibration")
 a = ap.parse_args(); root = os.path.abspath(a.root)
 g = np.load(os.path.join(HERE, "gt_map_frame.npz"), allow_pickle=True); gt = g["label"]; GCL = list(g["classes"]); gx0, gy0, R = float(g["x0"]), float(g["y0"]), float(g["res"])
@@ -29,6 +30,8 @@ conf = np.zeros((2, NB, 4, 5), np.int64)
 chan = np.zeros((NB, NCH + 1), np.int64)                                                 # GT 인도 픽셀의 예측 채널 분포 (마지막 = 확률<0.3 none)                                                 # [로봇 위치(0 인도,1 차도/기타), 거리대, GT, pred(0..3 + other)]
 per_frame = []; MASK_BOTTOM = 60
 sem_files = sorted(glob.glob(root + "/sem/sem/*.npz"))[::a.stride]
+if a.video:
+    import tempfile, subprocess; vdir = tempfile.mkdtemp(prefix="stage1_video_", dir=root + "/compiled")
 if a.write_oracle:
     os.makedirs(os.path.join(a.write_oracle, "sem"), exist_ok=True)
     for fn in ["classes.json", "rgb_index.npz"]:
@@ -65,6 +68,21 @@ for f in sem_files:
         gm = valid & (gimg == k); pm = valid & (pred == k); inter = (gm & pm).sum(); uni = (gm | pm).sum()
         if gm.sum() > 200: fr["iou"][n] = round(float(inter / max(uni, 1)), 3)
     per_frame.append(fr)
+    if a.video:
+        rgb = np.asarray(Image.open(root + f"/sem/rgb/{si:06d}.png").convert("RGB"))
+        p_img = (0.4 * rgb + 0.6 * COL[np.where(valid, pred, 4)]).astype(np.uint8); g_img = (0.4 * rgb + 0.6 * COL[np.where(valid, gimg, 4)]).astype(np.uint8)
+        err = (0.35 * rgb).astype(np.uint8); okp = valid & (gimg == pred); wrong = valid & (gimg != pred)
+        err[okp] = (0.4 * rgb[okp] + (0, 110, 0)).astype(np.uint8); err[wrong] = (0.3 * rgb[wrong] + (170, 0, 0)).astype(np.uint8)
+        top = np.concatenate([rgb, p_img], 1); bot = np.concatenate([g_img, err], 1); fr_img = np.concatenate([top, bot], 0)
+        fr_img = cv2.cvtColor(fr_img, cv2.COLOR_RGB2BGR)
+        def txt(img, t, x, y, col=(255, 255, 255)):
+            cv2.putText(img, t, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 0, 0), 3, cv2.LINE_AA); cv2.putText(img, t, (x, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, col, 1, cv2.LINE_AA)
+        pos = "robot ON SIDEWALK" if robot_on == 0 else "robot on road/other"
+        txt(fr_img, f"#{si:06d}  {os.path.basename(ds)} f{j}   {pos}", 8, 22); txt(fr_img, "model prediction (Mapillary -> dict)", Wc + 8, 22)
+        txt(fr_img, "2D GT (back-projected from testbed GT)", 8, Hc + 22)
+        iou_t = "  ".join(f"{k} IoU {v:.2f}" for k, v in fr["iou"].items()); txt(fr_img, f"errors: green=correct red=wrong   {iou_t}", Wc + 8, Hc + 22)
+        for k, n in enumerate(EVAL): cv2.rectangle(fr_img, (Wc + 8 + k * 110, Hc - 22), (Wc + 24 + k * 110, Hc - 8), tuple(int(c) for c in COL[k][::-1]), -1); txt(fr_img, n, Wc + 28 + k * 110, Hc - 10)
+        cv2.imwrite(os.path.join(vdir, f"{len(per_frame):06d}.png"), fr_img)
     if a.write_oracle:                                                                   # GT one-hot (평가 클래스만, 나머지 채널 0; GT 없는 픽셀 전부 0 → other/미라벨)
         oh = np.zeros((Hc, Wc, NCH), np.uint8)
         for ch, k in pred_map.items(): oh[..., ch][valid & (gimg == k)] = 255
@@ -94,3 +112,6 @@ if panels:
         for k, im in enumerate(ims): sheet.paste(Image.fromarray(im).resize((W_, H_)), (k * W_, r * (H_ + 18) + 18))
         d.text((4, r * (H_ + 18) + 3), f"#{si:06d}  RGB | pred | GT(2D) | errors(red)   sidewalk IoU {iou_sw}", fill=(0, 0, 0))
     sheet.save(root + "/compiled/stage1_panels.jpg", quality=85)
+if a.video:
+    subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-framerate", str(a.fps), "-i", os.path.join(vdir, "%06d.png"), "-c:v", "libx264", "-pix_fmt", "yuv420p", "-crf", "23", a.video], check=True)
+    import shutil; shutil.rmtree(vdir); print("video:", a.video, os.path.getsize(a.video) // 1_000_000, "MB")
