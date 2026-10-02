@@ -252,6 +252,13 @@
   라벨 목록 classdicts/<space>_labels.json (ade20k, mapillary_vistas). 포털 편집기에 모델 select(라벨 공간 자동 전환), /api/classdicts 가 models/labels/default_model 반환. 클래스 상한 14(코스트맵 4비트 패킹).
   예시 사전 mapillary_road_v1: sidewalk/crosswalk 선호(10/20), road ground_soft 200, curb·vehicle·pole·vegetation 장애물. 배경·실험: output/_exp_roadseg/ (5모델 비교·CPU 벤치, git 제외).
   ★미지원: EoMT-DINOv3 변형(transformers 5.16 출력 깨짐), SAM 3(HF 게이트). 라이선스: ADE20K·Mapillary 비상업 → 제품화 전 확인.
+
+## 20261002 sim 도로 환경 — Mask2Former Mapillary 첫 빌드 (2026-10-02)
+- 데이터 /data2/20261002/railab_raibo_20261002_054154 (원본 ~/raisin_logs/data_logger_data/20261002 복사, 3 로그 170 s, sim 시각 53.6~128.9 s, rgb 1,338 프레임). 캘리브는 데이터셋 자체 config_snapshot/raisin_root/calibration (0923 것과 mm 차이).
+- ★이 녹화의 /path/pgo 는 메시지마다 pose 2개뿐 → robot_graph 키프레임 복원 1노드로 실패(ufunc invert TypeError → 명확한 메시지로 교체). /Odometry/base 는 루프클로저 점프 0 → geometry/odom_traj.py 로 TUM(every 4, 189 kf) 만들어 robot_map.traj 로 (PGO 보정 Δ=0). 세션 sessions/session_t3_sim_1002_road.yaml (0923 설정 + classdict mapillary_road_v1).
+- sim 렌더(검은 하늘·평면 회색 인도·흰 줄무늬 횡단보도·구형 나무)에도 Mapillary 가 횡단보도/차도/인도/연석을 분리(compiled/sem_overlay_samples.jpg). 검은 하늘은 building(49.9% 픽셀, depth 없어 복셀 미반영), 넓은 밝은 회색 광장 일부는 road/building 으로 혼동.
+- 결과 output/t3_sim_1002_road (280 s): 지도 점 211,706 중 66% 라벨(road 44k · sidewalk 29k · crosswalk 4.1k · curb 876 · pole 7.8k · building 51k), occupancy 676k 셀, 코스트맵 290×278@0.2 m(sidewalk10 6,832 · crosswalk20 933 · 차도 10,822 · lethal 564). compiled/robot_map_semantic.pcd = 요청한 semantic PCD. BEV compiled/bev.png, 코스트맵 compiled/costmap_preview.png.
+- ★사전 road cost 200 은 코스트맵 'uncertain(낮은 미라벨 장애물)=200' 코드와 겹쳐 요약이 차도를 uncertain 으로 집계 → mapillary_road_v1 road=230 으로 변경, --force B,C,F,G,H 재빌드. 요약(load_map.py:100)은 고정 코드(10/90/200/254) 기준이라 사전 코스트가 다르면 분류가 어긋남 — 사전 기준 집계로 바꾸는 것이 과제.
 - 예시 사전 outdoor_v2 (car=obstacle, building/wall/fence=context) → 웹 빌드 web_172218_cdv2 로 검증 중.
 - 라벨 오염 수정 (2026-09-10): build_voxel_sem_map --edge-px 4 (클래스 경계 4px 안 라벨 보류) + --require-depth 1 (depth 없는 픽셀엔 LiDAR 라벨 안 줌). 옵션 label_edge_px/require_depth (기본 4/true).
   172935 log0-5 outdoor_v2 비교: 차량 위 0~1.2m 오라벨 19,973→10,344 (-48%), 라벨 복셀 -9%(경계·원거리 배경이 unknown 으로), car -13%.
