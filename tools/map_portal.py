@@ -25,7 +25,8 @@ OPTION_SPEC = {   # 웹 폼에서 받는 옵션: (타입, 기본값, 범위)
     "classdict": ("str", "default", None), "label_edge_px": ("int", 4, (0, 12)), "require_depth": ("bool", True, None),
     "geometry": ("str", "keyframe_scans", None),   # keyframe_scans(기본, 트랙 2) | all_scans | pcd(로봇 저장 지도 그대로) | raw_scans(기존 트랙 1)
     "pose_graph": ("bool", False, None), "lidar_extrinsic": ("str", "calib", None), "livox_flip": ("bool", True, None),
-    "depth_fill_range": ("float", 4.0, (0.0, 10.0)), "depth_fill_gap": ("float", 0.15, (0.05, 0.5))}
+    "depth_fill_range": ("float", 4.0, (0.0, 10.0)), "depth_fill_gap": ("float", 0.15, (0.05, 0.5)),
+    "voxel3d": ("bool", True, None)}   # 보행용 3D 확률 복셀 사전맵(build_voxel3d.py) 생성 여부
 GEOMETRIES = ("keyframe_scans", "all_scans", "pcd", "raw_scans")
 def find_robot_map(dp):
     """데이터셋 폴더 안 로봇 저장 지도 (map_*/ 또는 하위 폴더의 <name>.pcd + <name>.txt 짝) → {"pcd","traj","name"} 또는 None"""
@@ -234,6 +235,8 @@ def scan_maps():
                      "mcap_dir": man.get("source", {}).get("mcap_dir", ""), "logs": logs, "n_logs": len(logs), "calib": man.get("source", {}).get("calib", ""),
                      "options": man.get("options", {}), "files": man.get("files", {}), "package_mb": round(size / 1e6, 1), "geometry_source": man.get("geometry_source", "raw scans"),
                      "summary": summ, "rrd": rel("map_package.rrd"), "manifest": f"output/{name}/compiled/map_manifest.json",
+                     "voxel3d": man.get("voxel3d"), "voxel3d_rrd": rel("voxel3d_view.rrd"), "voxel3d_bev": rel("voxel3d_bev.png"), "voxel3d_tiles": (f"output/{name}/compiled/session_voxel3d_tiles/index.json" if os.path.exists(os.path.join(comp, "session_voxel3d_tiles", "index.json")) else None),
+                     "voxel3d_eval": (json.load(open(os.path.join(comp, "voxel3d_eval.json"))) if os.path.exists(os.path.join(comp, "voxel3d_eval.json")) else None),
                      "videos": [f"output/{name}/compiled/{v}" for v in vids], "video_pipeline": rel(next((v for v in vids if "pipeline" in v), "")),
                      "video_rgb": rel(next((v for v in vids if "rgb" in v), "")),
                      "has_log": os.path.exists(build_out), "mtime": os.path.getmtime(man_p)})
@@ -264,16 +267,27 @@ class H(http.server.SimpleHTTPRequestHandler):
             return self.send_json({"classdicts": CD.list_all(), "roles": CD.ROLES, "role_cost": CD.ROLE_GROUND_COST, "ade_labels": ADE_LABELS})
         if p.startswith("/api/maps/") and p.endswith("/pcd"):
             name = os.path.basename(p[len("/api/maps/"):-len("/pcd")]); q = urllib.parse.parse_qs(u.query); src = q.get("source", ["voxels"])[0]
-            if src not in ("voxels", "voxels_occ", "occupancy"): return self.send_json({"error": "source"}, 400)
+            if src not in ("voxels", "voxels_occ", "occupancy", "voxel3d", "voxel3d_tiles"): return self.send_json({"error": "source"}, 400)
             man = os.path.join(OUT, name, "compiled", "map_manifest.json")
             if not os.path.exists(man): return self.send_json({"error": "no map"}, 404)
+            if src == "voxel3d_tiles":                                          # 3D prior 타일 묶음 (zip) — 로봇 적재용
+                idx = os.path.join(OUT, name, "compiled", "session_voxel3d_tiles", "index.json")
+                if not os.path.exists(idx): return self.send_json({"error": "이 지도에는 3D prior(voxel3d) 가 없습니다 (F 단계 옵션 voxel3d)"}, 404)
+                exp = os.path.join(OUT, name, "compiled", "export"); os.makedirs(exp, exist_ok=True); out = os.path.join(exp, f"{name}_voxel3d_tiles.zip")
+                if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(idx):
+                    try:
+                        import export_pcd; export_pcd.export_voxel3d_zip(man, out)
+                    except Exception as e: return self.send_json({"error": f"zip 생성 실패: {e}"}, 500)
+                rel = f"output/{name}/compiled/export/{name}_voxel3d_tiles.zip"
+                return self.send_json({"ok": True, "path": rel, "legend": None, "bytes": os.path.getsize(out)})
             exclude = tuple(x for x in q.get("exclude", [""])[0].split(",") if x); min_nsem = int(q.get("min_nsem", ["0"])[0]); occf = q.get("occ", [""])[0]; occ_filter = None if occf == "" else occf == "1"
             fmt = q.get("format", ["rgb"])[0]
             if fmt not in ("rgb", "robot"): return self.send_json({"error": "format"}, 400)
             import hashlib; tag = hashlib.md5(f"{src}|{','.join(sorted(exclude))}|{min_nsem}|{occ_filter}|{fmt}".encode()).hexdigest()[:8]
             fname = f"{name}.pcd" if q.get("robot_name", ["0"])[0] == "1" else (f"{name}_{src}" + (f"_no-{'-'.join(sorted(exclude))}" if exclude else "") + (f"_n{min_nsem}" if min_nsem else "") + ("" if occ_filter is None else ("_occ" if occ_filter else "_noocc")) + (f"_{fmt}" if fmt != "rgb" else "") + f"_{tag}.pcd")
             exp = os.path.join(OUT, name, "compiled", "export"); os.makedirs(exp, exist_ok=True); out = os.path.join(exp, fname)
-            if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(man):
+            dep = os.path.join(OUT, name, "compiled", "session_voxel3d.npz") if src == "voxel3d" else man
+            if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(dep):
                 try:
                     import export_pcd; export_pcd.export(man, out, src, exclude, min_nsem, occ_filter, fmt)
                 except Exception as e: return self.send_json({"error": f"PCD 생성 실패: {e}"}, 500)

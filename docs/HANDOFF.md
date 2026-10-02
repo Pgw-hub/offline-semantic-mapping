@@ -391,3 +391,26 @@
   | AV1 | 1114 | 4,244만 | 1,967,992 | 9.9 cm | 25.4 / 71.2 cm | 17.8 / 39.9 % |
   ★점은 오히려 0.77배인데 복셀은 2.05배 — 압축본은 같은 표면을 더 넓게 흩뿌린다. LiDAR 기준 10 cm 안에 드는 비율이 28%→18% 로 떨어짐.
   비교물: depthcmp_b1f2_raw/{bev_raw_vs_av1.png, raw_vs_av1.rrd(16MB), compare_raw_vs_av1.json}
+
+## 보행용 3D 확률 복셀 사전맵 voxel3d (2026-09-19)
+- 배경: 사전맵을 보행 컨트롤러의 heightmap 관측(voxel_mapping `getHeight(x,y,maxZ)`)에 쓰려면 로봇 VoxelMap 격자(xy 0.025 / z 0.1 m)의 3D 점유 + 복셀 평균 z 가 필요. 기존 레이어(voxsem 0.1 m, occupancy 0.2 m)로는 부족 → 새 산출물.
+- 결정(사용자): 원천은 키프레임 시각 `/cloud_registered`, OctoMap/voxblox 식 확률 매핑, 해상도 로봇 격자, 로봇 RAM 을 위해 타일.
+- 빌더 `build_voxel3d.py` (F 단계 자동 실행, `options.voxel3d`): 확률 격자 0.1 m 레이캐스팅 log-odds(hit 0.85/miss 0.45, 배치 순차 클램프) + 세부 격자 0.025×0.025×0.1 (count/mean_z/std_z/n_scans/cls/source) + depth 채움(빈 곳만) + 평탄 채움(0.1 m 셀 안 z 퍼짐 ≤4 cm 이면 빈 xy 칸을 평균 z 로) + 10 m 타일 바이너리(20 B/셀). 규격·로봇 적재 설계: `docs/VOXEL3D_PRIOR.md`.
+  `label_map_points.py` 는 depth 채움 점 원좌표 `depth_xyz` 를 voxsem 에 추가 저장 (C 재실행 필요했음 — 0916 두 지도 재실행 완료).
+- 산출물: `compiled/session_voxel3d.npz`, `session_voxel3d_tiles/`, `voxel3d_view.rrd`, `voxel3d_bev.png`, `session_voxel3d_summary.json`; 매니페스트 `voxel3d_prior`/`voxel3d_tiles` + `voxel3d` 요약; 포털 "3D prior (locomotion)" 버튼·통계 행.
+- 수치 (0916): b1f_2 1.42 M 셀 28 MB · 8 타일 · 최대 10.5 MB, 빌드 59 s. nearblock_2 19.1 M 셀 383 MB · 162 타일 · 최대 11.9 MB, 200 s → 로봇은 3×3 타일 ≤ ~110 MB.
+  LiDAR hit 셀의 14 %(b1f2) 가 확률 free 로 제거 — 대부분 라벨 없는 천장 구조물(파이프/조명 사이로 통과) + 로봇 자기 몸(원점 0.7 m 안 1.5만) . 바닥 제거는 0.1 %.
+- hold-out 평가 (`tools/voxel3d_eval.py`, 스캔 1/10 제외, `compiled/voxel3d_eval.json`, b1f_2): getHeight 와 같은 규칙 질의.
+  · 윗면(바닥·계단 등 535 점): |Δh| 중앙 3.5 cm, 5/10 cm 안 60/80 %, 미응답 6 % (지터 ±5 cm 시 5.8 %). 평탄 채움 없으면 미응답 11–14 %.
+  · 유령(사전맵에 있는데 held-out 이 통과): 확률 on 1.5 %(LiDAR) / off 5.8 % (전체 셀 기준 2.4 % vs 10.8 %). 확률 판정이 유령을 4–5배 줄이는 대신 낮은 표면 회수율을 몇 % 잃음(윗면 p90 25 cm vs 12 cm) — 필요하면 `--prob-miss` 를 0.48 쪽으로 완화하거나 hits≥N 복원 규칙 추가.
+  · 주의: '전체/지형' 부분집합의 +8.6 cm 편향은 벽 컬럼에서 max_z 바로 아래 셀이 잡히는 지표 특성(오류 아님). 윗면 부분집합이 보행 관점의 수치.
+- 다음: 로봇 쪽 2-계층 조회(라이브 VoxelMap → NaN 이면 prior VoxelMap) 구현 + navigation 의 SLAM↔IEKF 정렬 재사용 + fitness 게이팅. 서버 쪽은 표본 수가 적은 윗면 평가를 계단 데이터로 보강.
+
+## 레코더 v2 형식 + 0923 시뮬 계단 데이터 (2026-09-23)
+- 0923 데이터부터 mcap 메시지가 ROS 전체 레이아웃(raisin_pod v2: 수신 stamp + header{stamp, frame_id} + 본문, Image raw 32FC1/bgr8, 스키마에 `nanosec`). 옛 형식과 공존하므로 `geometry/raisin_msgs.py` 공용 디코더를 만들고 mcap 을 읽는 모든 스크립트(export_registered_scans, robot_graph, robot_pgo_path, mcap_to_cg, extract_rgb_session, mcap_quality, deskew, export_lidar_scans, build_voxel_sem_map, build_graph, geom_ab_test, map_from_depth_cams)를 교체. 0916(v1) 결과 동일성 확인.
+- 0921 시뮬 데이터 두 세션은 레코더가 다른 브랜치라 `/livox/lidar`·`/cloud_registered`·`/pgo/keyframe_cloud` 채널이 없음 → 사용 불가. 0923 은 정상(97 s, 계단 1.8 m 승강).
+- 0923 특성: sim 시계(헤더 stamp ≈ 25 s 부터, 수신 시각과 다름) → 헤더 stamp 로 매칭. rgb 1280×960 bgr8 vs caminfo 640×480 → mcap_to_cg 에서 축소. rgb/depth 비동기 → 옵션 `pair_ms` 추가(세션 250). 저장 지도 없음 → robot_graph 가 /path/pgo + 오도메트리 매칭으로 `graph/keyframes_tum.txt` 생성, build_map_package 의 robot_map.traj/pcd 선택적. 키프레임 19개(1.5 s) → geometry all_scans. calibration 은 0921 시뮬 것 복사(`/data2/20260923/.../raisin_config/calibration`).
+- 세션 `sessions/session_t2_sim_0923_stairs.yaml`. 평가 `tools/voxel3d_eval.py` 에 계단 컬럼 부분집합 + max_z 보수 규칙(std>2 cm) 비교 추가.
+- 0923 계단 빌드 결과(`output/t2_sim_0923_stairs`): 라벨 59 %(floor/stairs/wall/railing), voxel3d 1.09 M 셀 26 MB(LiDAR 38 만 + 평탄 채움 69 만 + depth 1.7 만), 확률 free 제거 4.2 만.
+  hold-out(1/10 스캔 제외, `compiled/voxel3d_eval.json`): 윗면 3,000점 |Δh| 중앙 0.05 cm(sim 무노이즈), 미응답 2.1 %. **계단 윗면 198점**: mean_z 중앙 0.55 cm p90 3.5 cm, 3 cm 이상 낮게 본(위험 방향) 비율 11.1 % → **max_z 규칙(std>2 cm) 적용 시 2.5 %**, p90 1.66 cm. 평지 윗면은 규칙 영향 없음. 유령 1.0 %.
+  → 로봇 적재 규칙 확정: `std_z > 2 cm` 셀은 `max_z` 사용. 실기 계단 데이터로 노이즈 영향만 재확인 필요. 계단 모델 치수는 미확보(절대 오차 비교 보류).

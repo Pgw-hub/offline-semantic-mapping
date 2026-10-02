@@ -20,7 +20,9 @@
                 트랙1: dataset+sem → voxel/<log>_voxsem.npz → voxel/session_voxsem.npz        [로그별+병합]
   D  objects    ConceptGraphs → dataset/<log>/exps/r_mapping_stride10/                 [로그별, GPU]
   E  graph      객체 병합 → compiled/session_objects.json(+clip), 휴리스틱 엣지, 객체-지형 엣지, (옵션) VLM 엣지
-  F  occupancy  lidar_scans + session_voxsem → compiled/session_occupancy.npz
+  F  occupancy  lidar_scans + session_voxsem → compiled/session_occupancy.npz (0.2 m 코스트맵용)
+                + 보행용 3D 확률 복셀 사전맵 (build_voxel3d.py: OctoMap 식 log-odds + 복셀 평균 z, 로봇 VoxelMap 격자 0.025×0.025×0.1 m) → compiled/session_voxel3d.npz
+                  + session_voxel3d_tiles/(10 m 타일 바이너리, 로봇 적재용) + voxel3d_view.rrd/voxel3d_bev.png. options.voxel3d: false 면 생략
   G  package    map_manifest.json 작성 + 코스트맵(costmap_from_occupancy) 등록
   H  view       compiled/map_package.rrd — 기본 0.1m 점 표현 (options.view_cubes: true 면 view_coarse m 큐브)
   Q  quality    mcap 데이터 품질(토픽별 dt/rate/size, 유실·커버리지 이벤트) + 재생 rerun → compiled/data_quality.{rrd,json}
@@ -47,7 +49,8 @@ class Build:
         self.opt = {"lidar_fusion": True, "mask_bottom_px": 60, "drop_classes": "person", "scene_cloud": 0, "vlm_edges": True, "vlm_max_pairs": 30,
                     "vlm_model": "Qwen/Qwen2.5-VL-32B-Instruct", "occupancy_res": 0.2, "prob_hit": 0.85, "prob_miss": 0.45,
                     "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "view_cubes": False, "view_sub": 1, "video_speed": 15, "video_width": 960, "video_pipeline": True, "quality_img_stride": 15, "classdict": "default", "label_edge_px": 4, "require_depth": True, "map_id": os.path.basename(self.root),
-                    "frame": "SLAM world (/Odometry/base)", "pose_graph": False, "lidar_extrinsic": "calib", "livox_flip": True, "depth_fill_range": 4.0, "depth_fill_gap": 0.15}
+                    "frame": "SLAM world (/Odometry/base)", "pose_graph": False, "lidar_extrinsic": "calib", "livox_flip": True, "depth_fill_range": 4.0, "depth_fill_gap": 0.15,
+                    "voxel3d": {"res_xy": 0.025, "res_z": 0.1, "prob_res": 0.1, "free_range": 8.0, "tile_m": 10.0, "fill_flat": 0.04, "depth": True}}
         self.opt.update(cfg.get("options", {}))
         self.graph = os.path.join(self.root, "graph")
         if self.opt["pose_graph"] and "frame" not in cfg.get("options", {}): self.opt["frame"] = "SLAM world, PGO-corrected (geometry/build_graph.py)"
@@ -182,6 +185,24 @@ class Build:
         self.run([PY, f"{CG}/build_occupancy.py", "--scans", *scans, "--voxsem", os.path.join(self.D["voxel"], "session_voxsem.npz"), "--out", out,
                   "--res", str(self.opt["occupancy_res"]), "--prob-hit", str(self.opt["prob_hit"]), "--prob-miss", str(self.opt["prob_miss"])],
                  env={"CUDA_VISIBLE_DEVICES": ""}, logname="F.log")
+        self.step_F3d()
+    def step_F3d(self):
+        """보행용 3D 확률 복셀 사전맵 (voxel3d). 확률 판정은 prob_hit/prob_miss(occupancy 와 공유)."""
+        v3 = self.opt.get("voxel3d")
+        if not v3: return
+        v3 = dict(self.opt_default_voxel3d, **(v3 if isinstance(v3, dict) else {}))
+        out = os.path.join(self.D["compiled"], "session_voxel3d")
+        scans = [os.path.join(self.ds(l), "lidar_scans") for l in self.logs]
+        if not self.done("F", out + ".npz", lambda: os.path.exists(os.path.join(out + "_tiles", "index.json"))):
+            self.run([PY, f"{CG}/build_voxel3d.py", "--scans", *scans, "--voxsem", os.path.join(self.D["voxel"], "session_voxsem.npz"), "--out", out,
+                      "--res-xy", str(v3["res_xy"]), "--res-z", str(v3["res_z"]), "--prob-res", str(v3["prob_res"]), "--free-range", str(v3["free_range"]), "--tile-m", str(v3["tile_m"]),
+                      "--fill-flat", str(v3["fill_flat"]), "--prob-hit", str(self.opt["prob_hit"]), "--prob-miss", str(self.opt["prob_miss"])] + ([] if v3.get("depth", True) else ["--no-depth"]),
+                     env={"CUDA_VISIBLE_DEVICES": ""}, logname="F_voxel3d.log")
+        rrd = os.path.join(self.D["compiled"], "voxel3d_view.rrd")
+        if not self.done("F", rrd):
+            self.run([PY, f"{CG}/voxel3d_view.py", out + ".npz", rrd, "--voxsem", os.path.join(self.D["voxel"], "session_voxsem.npz"), "--bev", os.path.join(self.D["compiled"], "voxel3d_bev.png")] + (["--sub", "2"] if len(self.logs) > 2 else []),
+                     env={"CUDA_VISIBLE_DEVICES": ""}, logname="F_voxel3d_view.log")
+    opt_default_voxel3d = {"res_xy": 0.025, "res_z": 0.1, "prob_res": 0.1, "free_range": 8.0, "tile_m": 10.0, "fill_flat": 0.04, "depth": True}
     def step_G(self):
         man = os.path.join(self.D["compiled"], "map_manifest.json")
         rel = lambda p: os.path.relpath(p, self.root)
@@ -192,9 +213,16 @@ class Build:
                  "edges_heuristic": ("compiled/session_edges.json", "기하 휴리스틱 엣지 (on top of / next to)"),
                  "edges_object_terrain": ("compiled/voxel_session_relations.json", "객체-지형 관계 (bbox 발자국 아래 지배 지형)"),
                  "edges_vlm": ("compiled/session_edges_vlm.json", "VLM 판정 엣지 (Qwen2.5-VL)")}
+        if self.opt.get("voxel3d") and os.path.exists(os.path.join(self.root, "compiled", "session_voxel3d.npz")):
+            files["voxel3d_prior"] = ("compiled/session_voxel3d.npz", "보행용 3D 확률 복셀 사전맵: 로봇 VoxelMap 격자(0.025×0.025×0.1 m) ijk/mean_z/logodds/cls/source + 확률 격자(0.1 m) 전체")
+            files["voxel3d_tiles"] = ("compiled/session_voxel3d_tiles/index.json", "voxel3d 타일 바이너리(10 m, 20 B/셀) 인덱스 — 로봇은 창 주변 3×3 타일만 적재")
         cdj = os.path.join(self.D["sem"], "classes.json"); cdict = json.load(open(cdj)) if os.path.exists(cdj) else None
-        m = {"map_id": self.opt["map_id"], "frame": self.opt["frame"], "pose_graph": ("graph/graph.json" if self.opt["pose_graph"] else None), "geometry_source": ((f"robot_map:{self.robot_map.get('geometry','keyframe_scans')}:" + os.path.basename(self.robot_map["pcd"])) if self.robot_map else "raw scans"), "voxel_m": 0.1, "grid_axes": "row=x, col=y", "occupancy_res_m": self.opt["occupancy_res"], "classdict": cdict,
+        m = {"map_id": self.opt["map_id"], "frame": self.opt["frame"], "pose_graph": ("graph/graph.json" if self.opt["pose_graph"] else None), "geometry_source": ((f"robot_map:{self.robot_map.get('geometry','keyframe_scans')}:" + os.path.basename(self.robot_map.get("pcd") or "path_pgo")) if self.robot_map else "raw scans"), "voxel_m": 0.1, "grid_axes": "row=x, col=y", "occupancy_res_m": self.opt["occupancy_res"], "classdict": cdict,
              "built": time.strftime("%Y-%m-%d %H:%M"), "source": {"mcap_dir": self.mcap_dir, "logs": self.logs, "calib": self.calib}, "options": self.opt, "files": {}}
+        v3s = os.path.join(self.root, "compiled", "session_voxel3d_summary.json")
+        if os.path.exists(v3s):
+            try: js = json.load(open(v3s)); m["voxel3d"] = {k: js.get(k) for k in ("cells", "cells_lidar", "cells_depth", "cells_flat_fill", "total_mb", "tiles", "tile_mb_max", "removed_prob_free", "removed_dynamic")}; m["voxel3d"]["params"] = {k: js["params"].get(k) for k in ("res_xy", "res_z", "prob_res", "tile_m", "frame")}
+            except Exception as ex: self.say(f"  voxel3d 요약 읽기 실패: {ex}")
         for k, (p, desc) in files.items():
             full = os.path.join(self.root, p)
             if not os.path.exists(full):
