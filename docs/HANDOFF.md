@@ -496,3 +496,6 @@
   ④ 오라클(0.81)을 넘는 이유: 오라클 2D GT 는 LiDAR 점 픽셀에만 있어 커버리지가 한계였고, 모델은 모든 픽셀에 라벨을 주므로 미관측 셀이 줄어듦.
 - 적용: 레지스트리 m2f_swinl_mapillary(_pan) 기본 size 896, mapillary_road_v1 → panoptic, 미세조정 가중치 models/segformer_sim_ft(=B, git 제외), 텍스처 세션 YAML classdict hybrid_road_v1. 오케스트레이터 options.seg_size/seg_tta_flip. --force B 때 사전 가드 생략.
 - ★주의: 미세조정 모델은 이 테스트베드 sim 전용(실로봇 일반화 안 됨). 실로봇은 Mapillary panoptic@896 + AIHub Surface Masking 미세조정이 같은 길.
+- 입력 크기 상한 실측 (2026-10-03, 2D 인도 IoU, 텍스처 sim): semantic 640 0.41 · 896 0.57 · 1024 0.54 · 1536 **0.60** · 2048 0.58 / panoptic 640 0.52 · 896 0.615 · 1024 0.620 · **1280 0.634** · 1536 0.630 · 2048 0.617.
+  ⇒ 1024~1536 에서 평탄, 2048(학습 해상도 근처)은 오히려 소폭 하락 — 640 원본을 3배 넘게 bilinear 로 키우면 흐림이 커져 '크기 맞춤' 이득을 상쇄. 이득은 원거리(20 m+ 0.27→0.36)에 몰림. 처리 시간 929프레임 1024 ≈ 3분 · 1280 ≈ 4분 · 2048 ≈ 8분.
+  panoptic 레지스트리 기본 size 896 → 1280.
