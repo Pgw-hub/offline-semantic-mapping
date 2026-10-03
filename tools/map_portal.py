@@ -268,6 +268,20 @@ class H(http.server.SimpleHTTPRequestHandler):
         if p == "/api/classdicts":
             return self.send_json({"classdicts": CD.list_all(), "roles": CD.ROLES, "role_cost": CD.ROLE_GROUND_COST, "ade_labels": ADE_LABELS,
                                    "models": CD.MODELS, "default_model": CD.DEFAULT_MODEL, "labels": LABELS})
+        if p.startswith("/api/maps/") and p.endswith("/raisin"):           # raisin Load Map 용 zip: <맵이름>/<맵이름>.pcd + semantic/
+            name = os.path.basename(p[len("/api/maps/"):-len("/raisin")]); q = urllib.parse.parse_qs(u.query)
+            man = os.path.join(OUT, name, "compiled", "map_manifest.json")
+            if not os.path.exists(man): return self.send_json({"error": "no map"}, 404)
+            mname = q.get("map_name", [name])[0]; road = int(q.get("road", ["90"])[0])
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", mname): return self.send_json({"error": "맵 이름은 영문/숫자/_/- 만"}, 400)
+            if not (0 <= road <= 100): return self.send_json({"error": "road 0~100"}, 400)
+            exp = os.path.join(OUT, name, "compiled", "export"); os.makedirs(exp, exist_ok=True); out = os.path.join(exp, f"{mname}_raisin_r{road}.zip")
+            dep = os.path.join(OUT, name, "compiled", "session_costmap_occ.npz")
+            if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(dep):
+                try:
+                    import export_pcd; export_pcd.export_raisin_map_zip(man, out, mname, road)
+                except Exception as e: return self.send_json({"error": f"raisin 맵 생성 실패: {e}"}, 500)
+            return self.send_json({"ok": True, "path": f"output/{name}/compiled/export/{mname}_raisin_r{road}.zip", "bytes": os.path.getsize(out)})
         if p.startswith("/api/maps/") and p.endswith("/pcd"):
             name = os.path.basename(p[len("/api/maps/"):-len("/pcd")]); q = urllib.parse.parse_qs(u.query); src = q.get("source", ["voxels"])[0]
             if src not in ("voxels", "voxels_occ", "occupancy", "voxel3d", "voxel3d_tiles"): return self.send_json({"error": "source"}, 400)

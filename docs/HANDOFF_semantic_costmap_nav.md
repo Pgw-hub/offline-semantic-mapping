@@ -35,6 +35,19 @@
 
 정확도(시뮬 테스트베드 설계 기하를 GT 로 셀 단위 비교): 인도 IoU 0.92, 횡단보도 0.92, 차도 0.86, GT 인도 중 차도로 잘못 칠해진 비율 1.3%, 횡단보도 재현 99%.
 
+## 2-1. 권장 방식: 서버 빌드 맵을 그대로 Load Map (2026-10-03 추가)
+서버 포털 맵 상세 페이지의 **Download for raisin** 버튼이 `<맵이름>_raisin_r90.zip` 을 준다. 압축을 `<raisin 워크스페이스>/log/map/` 아래에 풀면:
+```
+log/map/<맵이름>/
+  <맵이름>.pcd              x y z intensity (lidar_slam::Point 필드; intensity = 의미 라벨 id, semantic_pcd_legend.json)
+  semantic/semantic_mask.png + .yaml   이 PCD 와 같은 좌표계의 의미 코스트 격자 (frame_id = <맵이름>)
+  semantic/geofence_block_road.json    1단계 시험용 차도 폴리곤
+  README_semantic.txt
+```
+- lidar_slam `loadMapFromDisk` 는 `<이름>.pcd` 만 필수이고 `_sc.bin`·`_georef.txt` 는 없으면 건너뛴다. 그래서 GUI Load Map 목록에 바로 뜬다.
+- scan context 가 없으므로 전역 위치추정 대신 **초기 자세를 주고 재위치추정**한다. 맵 원점 = 녹화 시작 시 로봇 자세(sim spawn, yaw≈0)라서, sim 을 같은 spawn 에서 띄우면 초기 자세 (0, 0, 0)으로 맞는다.
+- 이 방식이면 PCD 와 의미 격자가 같은 빌드에서 나와 **아래 3절의 좌표계 문제가 생기지 않는다.**
+
 ## 3. 좌표계 — 가장 먼저 확인할 것
 - 격자 좌표는 **녹화 `railab_raibo_20261002_105020` 당시 lidar_slam 의 월드 프레임**이다(`/cloud_registered` 를 그대로 누적). 그 녹화에는 로봇이 저장한 맵(PCD)이 없었다.
 - 로봇의 Load Map 은 lidar_slam 이 저장한 맵(`<ws>/log/map/<name>/<name>.pcd` + `_sc.bin` + `_georef.txt`)을 불러와 재위치추정한다. 재위치추정 중에는 `map_name → id_` TF 가 항등이라 costmap 프레임(`id_`) = 맵 프레임이 된다(아래 4절).

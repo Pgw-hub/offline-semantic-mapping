@@ -88,3 +88,27 @@ if __name__ == "__main__":
     ap.add_argument("--format", default="rgb", choices=["rgb", "robot"], help="robot = x y z intensity(=label id), lidar_slam 이 읽는 필드"); ap.add_argument("--exclude", default="", help="뺄 클래스 (쉼표; other, unknown 포함 가능)"); ap.add_argument("--min-nsem", type=int, default=0); ap.add_argument("--occ-filter", type=int, default=-1, help="1/0 강제, -1 = 소스 기본")
     a = ap.parse_args(); t = time.time(); n = export(a.manifest, a.out, a.source, tuple(x for x in a.exclude.split(",") if x), a.min_nsem, None if a.occ_filter < 0 else bool(a.occ_filter), a.format)
     print(f"{n:,} points → {a.out} ({os.path.getsize(a.out)/1e6:.1f} MB, {time.time()-t:.1f}s)")
+
+
+def export_raisin_map_zip(manifest, out, map_name, road=90):
+    """raisin Load Map 용 묶음: <map_name>/<map_name>.pcd (x y z intensity=라벨 id, lidar_slam 이 읽는 형식) + <map_name>/semantic/ (nav2 KeepoutFilter 마스크) + README.
+    받는 쪽: zip 을 <raisin 워크스페이스>/log/map/ 아래에 풀면 GUI Load Map 목록에 <map_name> 이 뜬다. 의미 격자는 이 PCD 와 같은 좌표계."""
+    import subprocess, tempfile, shutil, zipfile, re
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", map_name): raise ValueError("맵 이름은 영문/숫자/_/- (lidar_slam isValidFileName)")
+    root = os.path.dirname(os.path.dirname(os.path.abspath(manifest)))
+    tmp = tempfile.mkdtemp(prefix="raisin_map_"); d = os.path.join(tmp, map_name); os.makedirs(d)
+    try:
+        export(manifest, os.path.join(d, map_name + ".pcd"), "voxels_occ", ("person", "unknown"), 0, None, "robot")
+        for f in os.listdir(d):
+            if f.endswith("_legend.json"): os.replace(os.path.join(d, f), os.path.join(d, "semantic_pcd_legend.json"))
+        subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "export_nav_semantic.py"), root, d, "--road", str(road), "--map-name", map_name], check=True, stdout=subprocess.DEVNULL)
+        open(os.path.join(d, "README_semantic.txt"), "w").write(
+            f"{map_name} — offline semantic map export\n"
+            f"Put this folder at <raisin workspace>/log/map/{map_name}/ and use raisin_gui Load Map.\n"
+            f"{map_name}.pcd: x y z intensity (intensity = semantic label id, see semantic_pcd_legend.json). No _sc.bin: localize with an initial pose (robot start = map origin).\n"
+            "semantic/semantic_mask.png+yaml: OccupancyGrid values for nav2 KeepoutFilter (sidewalk 4, crosswalk 8, grass 35, road %d, else -1), same frame as the pcd.\n" % road)
+        with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+            for base, _, files in os.walk(d):
+                for f in files: z.write(os.path.join(base, f), os.path.relpath(os.path.join(base, f), tmp))
+    finally: shutil.rmtree(tmp, ignore_errors=True)
+    return out
