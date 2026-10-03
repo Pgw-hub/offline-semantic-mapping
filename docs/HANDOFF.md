@@ -499,3 +499,9 @@
 - 입력 크기 상한 실측 (2026-10-03, 2D 인도 IoU, 텍스처 sim): semantic 640 0.41 · 896 0.57 · 1024 0.54 · 1536 **0.60** · 2048 0.58 / panoptic 640 0.52 · 896 0.615 · 1024 0.620 · **1280 0.634** · 1536 0.630 · 2048 0.617.
   ⇒ 1024~1536 에서 평탄, 2048(학습 해상도 근처)은 오히려 소폭 하락 — 640 원본을 3배 넘게 bilinear 로 키우면 흐림이 커져 '크기 맞춤' 이득을 상쇄. 이득은 원거리(20 m+ 0.27→0.36)에 몰림. 처리 시간 929프레임 1024 ≈ 3분 · 1280 ≈ 4분 · 2048 ≈ 8분.
   panoptic 레지스트리 기본 size 896 → 1280.
+
+## raisin 내비게이션 연동 의뢰 (2026-10-03)
+- raisin_navigation_plugin 에는 StaticLayer·/map 이 없고 KeepoutFilter(마스크 0~100 → 코스트 선형, max 병합, -1 무시)가 있음 → 의미 코스트를 이 마스크로 넣는 방식으로 결정.
+- tools/export_nav_semantic.py <map_root> <out> [--road 90] [--map-name] → semantic/{semantic_mask.png+yaml(mode raw), .npy, geofence_block_road.json, semantic_info.json, topview.png}. 값: 인도 4 · 횡단보도 8 · 잔디 35 · 차도 90, 나머지 -1.
+- 패키지 /data2/semantic_nav_handoff/t3_sim_1002b_tex/ + 의뢰서 /data2/semantic_nav_handoff/HANDOFF_semantic_costmap_nav.md (사본 docs/HANDOFF_semantic_costmap_nav.md). raisin 이 빌드된 다른 컨테이너의 에이전트가 1단계(지오펜스) → 2단계(맵 부가 파일 semantic/ + NavigationNode 마스크 max 병합) 진행.
+- ★좌표계: 이번 sim 녹화는 로봇 저장 맵 없음 → 맵을 저장한 세션 녹화를 받아 같은 프레임으로 재생성하거나 ICP 정합 필요.
