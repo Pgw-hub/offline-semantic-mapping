@@ -17,6 +17,8 @@ ap = argparse.ArgumentParser(); ap.add_argument("root"); ap.add_argument("out");
 ap.add_argument("--sidewalk", type=int, default=4); ap.add_argument("--crosswalk", type=int, default=8); ap.add_argument("--grass", type=int, default=35)
 ap.add_argument("--map-name", default="", help="로봇이 Load Map 할 SLAM 맵 이름 (= frame_id). 비우면 빌드 맵 frame 설명만 기록")
 ap.add_argument("--frame", default="", help="OccupancyGrid header.frame_id (기본 = --map-name)")
+ap.add_argument("--crosswalk-extend", action="store_true", help="(옵션, 기본 끔) 횡단보도 끝~인도 사이 좁은 차도 띠를 횡단보도로 (tools/crosswalk_extend.py). sim 고원식 횡단보도 끝 여백 대응")
+ap.add_argument("--crosswalk-max-ext", type=float, default=1.0, help="연장 최대 거리 m")
 ap.add_argument("--min-poly-area", type=float, default=0.5, help="geofence 폴리곤 최소 면적 m²"); ap.add_argument("--simplify", type=float, default=0.15, help="폴리곤 단순화 허용 오차 m")
 a = ap.parse_args(); root = os.path.abspath(a.root); D = os.path.join(a.out, "semantic"); os.makedirs(D, exist_ok=True)
 z = np.load(os.path.join(root, "compiled", "session_costmap_occ.npz"), allow_pickle=True); cost = z["cost"]; x0, y0, R = float(z["x0"]), float(z["y0"]), float(z["res"])
@@ -25,6 +27,10 @@ def cost_of(name): return int(classes[name]["cost"]) if name in classes else Non
 C_SW, C_CW, C_GR, C_RD = cost_of("sidewalk"), cost_of("crosswalk"), cost_of("grass"), cost_of("road")
 assert C_SW is not None and C_RD is not None, f"사전에 sidewalk/road 클래스가 있어야 함 (사전 {cd.get('name')})"
 # cost grid (row=x, col=y) → OccupancyGrid 배열 (row=y, col=x)
+cw_report = None
+if a.crosswalk_extend and C_CW is not None:                          # 옵션: 횡단보도 연장 후처리
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import crosswalk_extend as CX
+    before = cost; cost, cw_report = CX.extend(cost, R, C_CW, C_SW, C_RD, max_ext=a.crosswalk_max_ext); print(f"crosswalk_extend: {int((cost != before).sum())} cells road→crosswalk")
 m = np.full(cost.shape, -1, np.int8)
 for c_val, v in [(C_SW, a.sidewalk), (C_CW, a.crosswalk), (C_GR, a.grass), (C_RD, a.road)]:
     if c_val is not None: m[cost == c_val] = v
@@ -52,7 +58,7 @@ info = {"created": time.strftime("%Y-%m-%d %H:%M"), "source_map_root": root, "ma
         "extent_m": [round(occ.shape[1] * R, 1), round(occ.shape[0] * R, 1)],
         "value_map": {"sidewalk": [C_SW, a.sidewalk, round(a.sidewalk * 254 / 100)], "crosswalk": [C_CW, a.crosswalk, round(a.crosswalk * 254 / 100)], "grass": [C_GR, a.grass, round(a.grass * 254 / 100)],
                       "road": [C_RD, a.road, round(a.road * 254 / 100)], "_columns": ["build costmap value", "mask value 0-100", "nav2 cost after KeepoutFilter"], "everything_else": -1},
-        "cells": cnt, "geofence_polygons": len(polys)}
+        "cells": cnt, "geofence_polygons": len(polys), "crosswalk_extend": ({"max_ext_m": a.crosswalk_max_ext, "blobs": cw_report} if cw_report is not None else False)}
 json.dump(info, open(os.path.join(D, "semantic_info.json"), "w"), indent=1, ensure_ascii=False)
 col = np.full(occ.shape + (3,), 70, np.uint8)                      # BGR: 인도 흰 · 횡단보도 노랑 · 잔디 초록 · 차도 보라
 col[occ == a.sidewalk] = (255, 255, 255); col[occ == a.crosswalk] = (0, 220, 255); col[occ == a.grass] = (60, 176, 67); col[occ == a.road] = (173, 13, 106); cv2.imwrite(os.path.join(D, "topview.png"), cv2.resize(np.flipud(col), None, fx=3, fy=3, interpolation=cv2.INTER_NEAREST))

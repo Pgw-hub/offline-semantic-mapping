@@ -90,7 +90,7 @@ if __name__ == "__main__":
     print(f"{n:,} points → {a.out} ({os.path.getsize(a.out)/1e6:.1f} MB, {time.time()-t:.1f}s)")
 
 
-def export_raisin_map_zip(manifest, out, map_name, road=90):
+def export_raisin_map_zip(manifest, out, map_name, road=90, cw_extend=False):
     """raisin Load Map 용 묶음: <map_name>/<map_name>.pcd (x y z intensity=라벨 id, lidar_slam 이 읽는 형식) + <map_name>/semantic/ (nav2 KeepoutFilter 마스크) + README.
     받는 쪽: zip 을 <raisin 워크스페이스>/log/map/ 아래에 풀면 GUI Load Map 목록에 <map_name> 이 뜬다. 의미 격자는 이 PCD 와 같은 좌표계."""
     import subprocess, tempfile, shutil, zipfile, re
@@ -101,7 +101,7 @@ def export_raisin_map_zip(manifest, out, map_name, road=90):
         export(manifest, os.path.join(d, map_name + ".pcd"), "voxels_occ", ("person", "unknown"), 0, None, "robot")
         for f in os.listdir(d):
             if f.endswith("_legend.json"): os.replace(os.path.join(d, f), os.path.join(d, "semantic_pcd_legend.json"))
-        subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "export_nav_semantic.py"), root, d, "--road", str(road), "--map-name", map_name], check=True, stdout=subprocess.DEVNULL)
+        subprocess.run([sys.executable, os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "export_nav_semantic.py"), root, d, "--road", str(road), "--map-name", map_name] + (["--crosswalk-extend"] if cw_extend else []), check=True, stdout=subprocess.DEVNULL)
         open(os.path.join(d, "README_semantic.txt"), "w").write(
             f"{map_name} — offline semantic map export\n"
             f"Put this folder at <raisin workspace>/log/map/{map_name}/ and use raisin_gui Load Map.\n"
