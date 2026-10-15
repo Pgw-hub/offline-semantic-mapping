@@ -1,0 +1,35 @@
+# 2026-10-12 실로봇(KR-RRT-2604-008) 310 s 녹화 — 레코더 v2(config_snapshot). 저장 지도 없음 → /path/pgo(28 msgs) + 오도메트리 매칭. calibration 은 snapshot 의 로봇 자체 값(raisin_root/calibration).
+root: t2_real_1012_142913
+mcap_dir: /data2/20261012/KR-RRT-2604-008_20261012_142913
+logs:
+- 0
+- 1
+- 2
+- 3
+- 4
+- 5
+options:
+  map_id: "real KR-RRT-2604-008 20261012_142913 · track 2 all_scans + depth fill · voxel3d prior"
+  robot_map:
+    geometry: all_scans        # /path/pgo 키프레임 42개(7 s 간격) → 전체 /cloud_registered (Δ 보간)
+  lidar_extrinsic: calib
+  livox_flip: true
+  lidar_fusion: false
+  mask_bottom_px: 60
+  drop_classes: person
+  vlm_edges: false
+  occupancy_res: 0.2
+  prob_hit: 0.85
+  prob_miss: 0.45
+  costmap: {h_ground: 2, h_obs: 3, clearance: 1.4, band_min: 0.3}
+  view_cubes: false
+  view_coarse: 0.3
+  video_speed: 15
+  video_pipeline: true
+  classdict: indoor_v1         # RGB 확인 후 조정 (실외면 default)
+  label_edge_px: 4
+  require_depth: true
+  pose_graph: true
+  depth_fill_range: 4.0
+  depth_fill_gap: 0.15
+  aux_lidar: "off"
