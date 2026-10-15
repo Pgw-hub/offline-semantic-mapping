@@ -1,0 +1,315 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Semantic Map 데이터 흐름</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 레이아웃: 위→아래로 흐르는 의존 그래프 한 장. 노드 hover 로 연결선만 남김. */
+:root{
+  --bg:#f6f5f1; --fg:#1f2320; --muted:#5f6660; --rule:#d9d6cd; --panel:#ffffff;
+  --c-in:#e9eef7; --c-in-s:#6b7fa6; --c-mid:#f1efe8; --c-mid-s:#8a8577;
+  --c-mod:#e4efe6; --c-mod-s:#4f7f5a; --c-out:#fbead8; --c-out-s:#b5622a; --c-use:#efe8f5; --c-use-s:#7a5e9a;
+  --edge:#1f2320; --badge:#b5622a;
+  --font-body:"IBM Plex Sans KR",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#191b1a; --fg:#e8e6df; --muted:#a2a69e; --rule:#34383a; --panel:#222524;
+  --c-in:#243040; --c-in-s:#8ea4d0; --c-mid:#2a2b28; --c-mid-s:#8f8a7c; --c-mod:#233327; --c-mod-s:#7fb48b;
+  --c-out:#3a2a1c; --c-out-s:#d98a52; --c-use:#2e2636; --c-use-s:#b092d0; --edge:#e8e6df; --badge:#d98a52; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#191b1a; --fg:#e8e6df; --muted:#a2a69e; --rule:#34383a; --panel:#222524;
+  --c-in:#243040; --c-in-s:#8ea4d0; --c-mid:#2a2b28; --c-mid-s:#8f8a7c; --c-mod:#233327; --c-mod-s:#7fb48b;
+  --c-out:#3a2a1c; --c-out-s:#d98a52; --c-use:#2e2636; --c-use-s:#b092d0; --edge:#e8e6df; --badge:#d98a52; color-scheme:dark }
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.6;margin:0}
+.wrap{max-width:1150px;margin:0 auto;padding-block:28px 64px;padding-inline:16px}
+h1{font-size:1.6rem;font-weight:600;margin:0 0 .3rem;text-wrap:balance}
+.lede{color:var(--muted);margin:0 0 1.2rem;max-width:70ch}
+figure{margin:0} figcaption{color:var(--muted);font-size:.9rem;margin-top:.6rem;max-width:74ch}
+.scroll{overflow-x:auto;border:1px solid var(--rule);border-radius:6px;background:var(--panel);padding:10px}
+svg{display:block;min-width:1040px;max-width:100%;height:auto;font-family:var(--font-body)}
+svg text{fill:currentColor}
+.t{font-size:12px;font-weight:500} .s{font-size:10.5px;fill:var(--muted)}
+.nd rect{stroke-width:1.2}
+.nd-in rect{fill:var(--c-in);stroke:var(--c-in-s)}
+.nd-mid rect{fill:var(--c-mid);stroke:var(--c-mid-s);stroke-dasharray:4 3}
+.nd-mod rect{fill:var(--c-mod);stroke:var(--c-mod-s)}
+.nd-out rect{fill:var(--c-out);stroke:var(--c-out-s);stroke-width:2}
+.nd-use rect{fill:var(--c-use);stroke:var(--c-use-s)}
+.badge rect{fill:var(--badge);stroke:none} .badge text{font-size:9.5px;font-weight:600;fill:#fff}
+.ed{fill:none;stroke:var(--edge);stroke-width:1.1;opacity:.5;color:var(--edge);transition:opacity .15s}
+.ed-dash{stroke-dasharray:3 3} .ed-back{stroke-dasharray:5 3;opacity:.7}
+.el rect{fill:var(--panel);stroke:var(--rule);stroke-width:.8} .el text{font-size:9.5px;fill:var(--muted)}
+svg.focus .ed{opacity:.07} svg.focus .ed.on{opacity:1;stroke-width:2}
+svg.focus .nd{opacity:.3} svg.focus .nd.on{opacity:1}
+svg.focus .el{opacity:.1} svg.focus .el.on{opacity:1}
+.legend{display:flex;flex-wrap:wrap;gap:10px 22px;margin:.8rem 0 0;padding:0;list-style:none;font-size:.88rem;color:var(--muted)}
+.legend li{display:flex;align-items:center;gap:8px}
+.sw{width:22px;height:14px;border-radius:3px;border:1.2px solid;flex:none}
+.sw.in{background:var(--c-in);border-color:var(--c-in-s)} .sw.mid{background:var(--c-mid);border-color:var(--c-mid-s);border-style:dashed}
+.sw.mod{background:var(--c-mod);border-color:var(--c-mod-s)} .sw.out{background:var(--c-out);border-color:var(--c-out-s);border-width:2px}
+.sw.use{background:var(--c-use);border-color:var(--c-use-s)}
+h2{font-size:1.1rem;font-weight:600;margin:2.2rem 0 .5rem}
+ul.notes{margin:0;padding-left:1.1rem;max-width:74ch} ul.notes li{margin:.3rem 0}
+code{font-family:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;font-size:.88em}
+@media (prefers-reduced-motion: reduce){ .ed{transition:none} }
+</style>
+<div class="wrap">
+<h1>Semantic Map 데이터 흐름</h1>
+<p class="lede">offline_semantic_mapping 의 모든 모듈(초록)과 데이터(그 외)를 하나의 의존 그래프로 그렸습니다. 위에서 아래로 흐르고, 화살표는 "이 데이터를 저 모듈이 읽는다" 또는 "저 모듈이 이 데이터를 만든다"입니다. 한 데이터가 여러 모듈로 다시 들어가면 주황 배지에 몇 곳인지 적혀 있습니다. <strong>노드에 마우스를 올리면</strong> 그 노드에 닿는 선만 남습니다.</p>
+<figure>
+<div class="scroll">
+<svg viewBox="0 0 1110 1326" role="img" aria-label="offline_semantic_mapping 의 모든 모듈과 데이터 파일을 하나의 의존 그래프로 그린 그림. 위에서 아래로 흐르며, 재사용되는 데이터는 여러 모듈로 갈라진다.">
+<defs><marker id="arw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+<path class="ed" data-s="odom" data-d="P" d="M105.0 78 C 105.0 97.8, 105.0 102.2, 105.0 122" marker-end="url(#arw)"/>
+<path class="ed" data-s="P" data-d="graph" d="M105.0 164 C 105.0 183.8, 105.0 188.2, 105.0 208" marker-end="url(#arw)"/>
+<path class="ed" data-s="graph" data-d="S" d="M105.0 250 C 105.0 269.8, 310.0 274.2, 310.0 294" marker-end="url(#arw)"/>
+<path class="ed" data-s="graph" data-d="A" d="M105.0 250 C 105.0 269.8, 540.0 274.2, 540.0 294" marker-end="url(#arw)"/>
+<path class="ed" data-s="graph" data-d="C" d="M105.0 250 C 105.0 424.6, 310.0 463.4, 310.0 638" marker-end="url(#arw)"/>
+<path class="ed" data-s="creg" data-d="S" d="M310.0 78 C 310.0 175.2, 310.0 196.8, 310.0 294" marker-end="url(#arw)"/>
+<path class="ed" data-s="calib" data-d="S" d="M470.0 78 C 470.0 175.2, 310.0 196.8, 310.0 294" marker-end="url(#arw)"/>
+<path class="ed" data-s="calib" data-d="A" d="M470.0 78 C 470.0 175.2, 540.0 196.8, 540.0 294" marker-end="url(#arw)"/>
+<path class="ed" data-s="rgbd" data-d="A" d="M640.0 78 C 640.0 175.2, 540.0 196.8, 540.0 294" marker-end="url(#arw)"/>
+<path class="ed" data-s="rgbd" data-d="R" d="M640.0 78 C 640.0 175.2, 740.0 196.8, 740.0 294" marker-end="url(#arw)"/>
+<path class="ed" data-s="S" data-d="scans" d="M310.0 336 C 310.0 355.8, 310.0 360.2, 310.0 380" marker-end="url(#arw)"/>
+<path class="ed" data-s="A" data-d="dataset" d="M540.0 336 C 540.0 355.8, 540.0 360.2, 540.0 380" marker-end="url(#arw)"/>
+<path class="ed" data-s="R" data-d="srgb" d="M740.0 336 C 740.0 355.8, 740.0 360.2, 740.0 380" marker-end="url(#arw)"/>
+<path class="ed" data-s="dataset" data-d="D" d="M540.0 422 C 540.0 441.8, 540.0 446.2, 540.0 466" marker-end="url(#arw)"/>
+<path class="ed ed-dash" data-s="models" data-d="D" d="M1045.0 422 C 1045.0 441.8, 540.0 446.2, 540.0 466" marker-end="url(#arw)"/>
+<path class="ed" data-s="srgb" data-d="B" d="M740.0 422 C 740.0 441.8, 740.0 446.2, 740.0 466" marker-end="url(#arw)"/>
+<path class="ed" data-s="cdict" data-d="B" d="M915.0 422 C 915.0 441.8, 740.0 446.2, 740.0 466" marker-end="url(#arw)"/>
+<path class="ed ed-dash" data-s="models" data-d="B" d="M1045.0 422 C 1045.0 441.8, 740.0 446.2, 740.0 466" marker-end="url(#arw)"/>
+<path class="ed" data-s="D" data-d="exps" d="M540.0 508 C 540.0 527.8, 540.0 532.2, 540.0 552" marker-end="url(#arw)"/>
+<path class="ed" data-s="B" data-d="sem" d="M740.0 508 C 740.0 527.8, 740.0 532.2, 740.0 552" marker-end="url(#arw)"/>
+<path class="ed" data-s="scans" data-d="C" d="M310.0 422 C 310.0 519.2, 310.0 540.8, 310.0 638" marker-end="url(#arw)"/>
+<path class="ed" data-s="dataset" data-d="C" d="M445.0 401.0 C 415.0 401.0, 415.0 431.0, 415.0 451.0 L 415.0 588 C 415.0 618, 310.0 618, 310.0 638" marker-end="url(#arw)"/>
+<path class="ed" data-s="calib" data-d="C" d="M415.0 57.0 C 415.0 57.0, 415.0 87.0, 415.0 107.0 L 415.0 588 C 415.0 618, 310.0 618, 310.0 638" marker-end="url(#arw)"/>
+<path class="ed" data-s="sem" data-d="C" d="M740.0 594 C 740.0 613.8, 310.0 618.2, 310.0 638" marker-end="url(#arw)"/>
+<path class="ed" data-s="dataset" data-d="V" d="M600.0 422 C 600.0 444, 600.0 444, 630.0 444 L 810 444 C 840 444, 840 444, 840 472 L 840 598 C 840 638, 1035.0 598, 1035.0 638" marker-end="url(#arw)"/>
+<path class="ed" data-s="sem" data-d="V" d="M740.0 594 C 740.0 613.8, 1035.0 618.2, 1035.0 638" marker-end="url(#arw)"/>
+<path class="ed" data-s="exps" data-d="V" d="M540.0 594 C 540.0 613.8, 1035.0 618.2, 1035.0 638" marker-end="url(#arw)"/>
+<path class="ed" data-s="V" data-d="mp4" d="M1035.0 680 C 1035.0 699.8, 1035.0 704.2, 1035.0 724" marker-end="url(#arw)"/>
+<path class="ed" data-s="C" data-d="voxsem" d="M310.0 680 C 310.0 699.8, 310.0 704.2, 310.0 724" marker-end="url(#arw)"/>
+<path class="ed" data-s="scans" data-d="F3d" d="M220.0 401.0 C 160.0 401.0, 95.0 690, 95.0 810" marker-end="url(#arw)"/>
+<path class="ed" data-s="scans" data-d="F" d="M220.0 401.0 C 200.0 401.0, 200.0 431.0, 200.0 451.0 L 200.0 760 C 200.0 790, 310.0 790, 310.0 810" marker-end="url(#arw)"/>
+<path class="ed" data-s="voxsem" data-d="F3d" d="M310.0 766 C 310.0 785.8, 95.0 790.2, 95.0 810" marker-end="url(#arw)"/>
+<path class="ed" data-s="voxsem" data-d="F" d="M310.0 766 C 310.0 785.8, 310.0 790.2, 310.0 810" marker-end="url(#arw)"/>
+<path class="ed" data-s="voxsem" data-d="E" d="M310.0 766 C 310.0 785.8, 560.0 790.2, 560.0 810" marker-end="url(#arw)"/>
+<path class="ed" data-s="exps" data-d="E" d="M540.0 594 C 540.0 691.2, 560.0 712.8, 560.0 810" marker-end="url(#arw)"/>
+<path class="ed ed-dash" data-s="models" data-d="E" d="M1045.0 422 C 1045.0 596.6, 560.0 635.4, 560.0 810" marker-end="url(#arw)"/>
+<path class="ed" data-s="F3d" data-d="voxel3d" d="M95.0 852 C 95.0 871.8, 95.0 876.2, 95.0 896" marker-end="url(#arw)"/>
+<path class="ed" data-s="F" data-d="occ" d="M310.0 852 C 310.0 871.8, 310.0 876.2, 310.0 896" marker-end="url(#arw)"/>
+<path class="ed" data-s="E" data-d="objects" d="M560.0 852 C 560.0 871.8, 560.0 876.2, 560.0 896" marker-end="url(#arw)"/>
+<path class="ed" data-s="voxsem" data-d="G" d="M400.0 745.0 C 415.0 745.0, 415.0 775.0, 415.0 795.0 L 415.0 932 C 415.0 962, 400.0 962, 400.0 982" marker-end="url(#arw)"/>
+<path class="ed" data-s="voxel3d" data-d="G" d="M95.0 938 C 95.0 957.8, 400.0 962.2, 400.0 982" marker-end="url(#arw)"/>
+<path class="ed" data-s="occ" data-d="G" d="M310.0 938 C 310.0 957.8, 400.0 962.2, 400.0 982" marker-end="url(#arw)"/>
+<path class="ed" data-s="objects" data-d="G" d="M560.0 938 C 560.0 957.8, 400.0 962.2, 400.0 982" marker-end="url(#arw)"/>
+<path class="ed" data-s="G" data-d="manifest" d="M400.0 1024 C 400.0 1043.8, 400.0 1048.2, 400.0 1068" marker-end="url(#arw)"/>
+<path class="ed" data-s="manifest" data-d="costmap_m" d="M400.0 1110 C 400.0 1129.8, 170.0 1134.2, 170.0 1154" marker-end="url(#arw)"/>
+<path class="ed" data-s="manifest" data-d="H" d="M400.0 1110 C 400.0 1129.8, 400.0 1134.2, 400.0 1154" marker-end="url(#arw)"/>
+<path class="ed" data-s="manifest" data-d="consumers" d="M400.0 1110 C 400.0 1129.8, 760.0 1134.2, 760.0 1154" marker-end="url(#arw)"/>
+<path class="ed" data-s="costmap_m" data-d="costmap" d="M170.0 1196 C 170.0 1215.8, 170.0 1220.2, 170.0 1240" marker-end="url(#arw)"/>
+<path class="ed" data-s="H" data-d="rrd" d="M400.0 1196 C 400.0 1215.8, 400.0 1220.2, 400.0 1240" marker-end="url(#arw)"/>
+<path class="ed ed-back" data-s="costmap" data-d="manifest" d="M70.0 1261.0 C 12 1261.0, 12 1089.0, 300.0 1089.0" marker-end="url(#arw)"/>
+<path class="ed" data-s="rrd" data-d="portal" d="M500.0 1261.0 L 635.0 1261.0" marker-end="url(#arw)"/>
+<path class="ed" data-s="mp4" data-d="portal" d="M1035.0 766 C 1035.0 1066, 1035.0 1261.0, 885.0 1261.0" marker-end="url(#arw)"/>
+<path class="ed" data-s="manifest" data-d="portal" d="M500.0 1089.0 C 565 1089.0, 565 1200, 660.0 1240" marker-end="url(#arw)"/>
+<g class="el" data-s="graph" data-d="S"><rect x="179" y="264" width="57" height="15" rx="3"/><text x="208" y="275" text-anchor="middle">Δ(t) 보정</text></g>
+<g class="el" data-s="graph" data-d="A"><rect x="300" y="264" width="44" height="15" rx="3"/><text x="322" y="275" text-anchor="middle">자세 보간</text></g>
+<g class="el" data-s="graph" data-d="C"><rect x="179" y="436" width="57" height="15" rx="3"/><text x="208" y="447" text-anchor="middle">키프레임 목록</text></g>
+<g class="el" data-s="scans" data-d="C"><rect x="266" y="522" width="89" height="15" rx="3"/><text x="310" y="533" text-anchor="middle">기하 (키프레임 스캔)</text></g>
+<g class="el" data-s="dataset" data-d="C"><rect x="278" y="608" width="204" height="15" rx="3"/><text x="380" y="619" text-anchor="middle">traj · depth(z-buffer) · calib</text></g>
+<g class="el" data-s="sem" data-d="C"><rect x="513" y="608" width="25" height="15" rx="3"/><text x="525" y="619" text-anchor="middle">라벨</text></g>
+<g class="el" data-s="scans" data-d="F"><rect x="128" y="692" width="44" height="15" rx="3"/><text x="150" y="703" text-anchor="middle">레이캐스팅</text></g>
+<g class="el" data-s="voxsem" data-d="F3d"><rect x="155" y="780" width="95" height="15" rx="3"/><text x="202" y="791" text-anchor="middle">클래스·depth_xyz</text></g>
+<g class="el" data-s="voxsem" data-d="F"><rect x="278" y="780" width="63" height="15" rx="3"/><text x="310" y="791" text-anchor="middle">동적 복셀 판정</text></g>
+<g class="el" data-s="voxsem" data-d="E"><rect x="403" y="780" width="63" height="15" rx="3"/><text x="435" y="791" text-anchor="middle">객체-지형 엣지</text></g>
+<g class="el" data-s="models" data-d="E"><rect x="765" y="712" width="70" height="15" rx="3"/><text x="800" y="723" text-anchor="middle">Qwen (옵션)</text></g>
+<g class="el" data-s="costmap" data-d="manifest"><rect x="66" y="1122" width="108" height="15" rx="3"/><text x="120" y="1133" text-anchor="middle">costmap_2d 로 등록</text></g>
+<g class="nd nd-in" data-id="odom"><rect x="10" y="36" width="190" height="42" rx="5"/>
+<text class="t" x="19" y="53">mcap  /Odometry/base · /path/pgo</text>
+<text class="s" x="19" y="68">+ 로봇 저장 궤적 &lt;name&gt;.txt</text>
+</g>
+<g class="nd nd-in" data-id="creg"><rect x="220" y="36" width="180" height="42" rx="5"/>
+<text class="t" x="229" y="53">mcap  /cloud_registered</text>
+<text class="s" x="229" y="68">SLAM 정합 점군 (실시간 프레임)</text>
+</g>
+<g class="nd nd-in" data-id="calib"><rect x="415" y="36" width="110" height="42" rx="5"/>
+<text class="t" x="424" y="53">calibration/</text>
+<text class="s" x="424" y="68">LiDAR·카메라 파라미터</text>
+</g>
+<g class="nd nd-in" data-id="rgbd"><rect x="555" y="36" width="170" height="42" rx="5"/>
+<text class="t" x="564" y="61">mcap  d455 rgb · depth</text>
+</g>
+<g class="nd nd-mod" data-id="P"><rect x="10" y="122" width="190" height="42" rx="5"/>
+<text class="t" x="19" y="139">P · robot_graph.py</text>
+<text class="s" x="19" y="154">로봇 PGO 자세 → graph/</text>
+</g>
+<g class="nd nd-mid" data-id="graph"><rect x="10" y="208" width="190" height="42" rx="5"/>
+<text class="t" x="19" y="225">graph/graph.json</text>
+<text class="s" x="19" y="240">T_odom ↔ T_corr, 키프레임 시각</text>
+<g class="badge"><rect x="154" y="199" width="46" height="16" rx="8"/><text x="177" y="211" text-anchor="middle">→ 3곳</text></g>
+</g>
+<g class="nd nd-mod" data-id="S"><rect x="220" y="294" width="180" height="42" rx="5"/>
+<text class="t" x="229" y="311">S · export_registered_scans.py</text>
+<text class="s" x="229" y="326">Δ(t) 로 최종 프레임 보정</text>
+</g>
+<g class="nd nd-mod" data-id="A"><rect x="445" y="294" width="190" height="42" rx="5"/>
+<text class="t" x="454" y="311">A · mcap_to_cg.py</text>
+<text class="s" x="454" y="326">rgb/depth 짝짓기, 카메라 자세</text>
+</g>
+<g class="nd nd-mod" data-id="R"><rect x="655" y="294" width="170" height="42" rx="5"/>
+<text class="t" x="664" y="311">R · extract_rgb_session.py</text>
+<text class="s" x="664" y="326">LiDAR 시각 10 Hz RGB</text>
+</g>
+<g class="nd nd-mid" data-id="scans"><rect x="220" y="380" width="180" height="42" rx="5"/>
+<text class="t" x="229" y="397">dataset/&lt;log&gt;/lidar_scans/</text>
+<text class="s" x="229" y="412">스캔별 xyz(world) + 센서 원점</text>
+<g class="badge"><rect x="354" y="371" width="46" height="16" rx="8"/><text x="377" y="383" text-anchor="middle">→ 3곳</text></g>
+</g>
+<g class="nd nd-mid" data-id="dataset"><rect x="445" y="380" width="190" height="42" rx="5"/>
+<text class="t" x="454" y="397">dataset/&lt;log&gt;/</text>
+<text class="s" x="454" y="412">frame·depth·traj.txt·stamps</text>
+<g class="badge"><rect x="589" y="371" width="46" height="16" rx="8"/><text x="612" y="383" text-anchor="middle">→ 3곳</text></g>
+</g>
+<g class="nd nd-mid" data-id="srgb"><rect x="655" y="380" width="170" height="42" rx="5"/>
+<text class="t" x="664" y="397">sem/rgb/ + rgb_index</text>
+<text class="s" x="664" y="412">세션 RGB</text>
+</g>
+<g class="nd nd-in" data-id="cdict"><rect x="855" y="380" width="120" height="42" rx="5"/>
+<text class="t" x="864" y="397">classdicts/&lt;name&gt;.json</text>
+<text class="s" x="864" y="412">클래스·role·cost</text>
+</g>
+<g class="nd nd-in" data-id="models"><rect x="985" y="380" width="120" height="42" rx="5"/>
+<text class="t" x="994" y="397">모델 가중치</text>
+<text class="s" x="994" y="412">SegFormer · YOLO/SAM/CLIP · Qwen</text>
+</g>
+<g class="nd nd-mod" data-id="D"><rect x="445" y="466" width="190" height="42" rx="5"/>
+<text class="t" x="454" y="483">D · ConceptGraphs</text>
+<text class="s" x="454" y="498">YOLO·SAM·CLIP  [GPU]</text>
+</g>
+<g class="nd nd-mod" data-id="B"><rect x="655" y="466" width="170" height="42" rx="5"/>
+<text class="t" x="664" y="483">B · precompute_semantic.py</text>
+<text class="s" x="664" y="498">SegFormer-B4  [GPU]</text>
+</g>
+<g class="nd nd-mid" data-id="exps"><rect x="445" y="552" width="190" height="42" rx="5"/>
+<text class="t" x="454" y="569">dataset/&lt;log&gt;/exps/</text>
+<text class="s" x="454" y="584">로그별 객체 bbox·점군·CLIP</text>
+<g class="badge"><rect x="589" y="543" width="46" height="16" rx="8"/><text x="612" y="555" text-anchor="middle">→ 2곳</text></g>
+</g>
+<g class="nd nd-mid" data-id="sem"><rect x="655" y="552" width="170" height="42" rx="5"/>
+<text class="t" x="664" y="569">sem/sem/ + classes.json</text>
+<text class="s" x="664" y="584">픽셀별 N채널 확률</text>
+<g class="badge"><rect x="779" y="543" width="46" height="16" rx="8"/><text x="802" y="555" text-anchor="middle">→ 2곳</text></g>
+</g>
+<g class="nd nd-mod" data-id="C"><rect x="220" y="638" width="180" height="42" rx="5"/>
+<text class="t" x="229" y="655">C · scans_to_pcd + label_map_points</text>
+<text class="s" x="229" y="670">점에 라벨 투영, depth 채움</text>
+</g>
+<g class="nd nd-mod" data-id="V"><rect x="965" y="638" width="140" height="42" rx="5"/>
+<text class="t" x="974" y="655">V · make_*_video.py</text>
+<text class="s" x="974" y="670">배속·3분할 영상</text>
+</g>
+<g class="nd nd-out" data-id="voxsem"><rect x="220" y="724" width="180" height="42" rx="5"/>
+<text class="t" x="229" y="741">voxel/session_voxsem.npz</text>
+<text class="s" x="229" y="756">0.1 m semantic 복셀 (지형)</text>
+<g class="badge"><rect x="354" y="715" width="46" height="16" rx="8"/><text x="377" y="727" text-anchor="middle">→ 4곳</text></g>
+</g>
+<g class="nd nd-out" data-id="mp4"><rect x="965" y="724" width="140" height="42" rx="5"/>
+<text class="t" x="974" y="749">session_*_x15.mp4</text>
+</g>
+<g class="nd nd-mod" data-id="F3d"><rect x="10" y="810" width="170" height="42" rx="5"/>
+<text class="t" x="19" y="827">F3d · build_voxel3d.py</text>
+<text class="s" x="19" y="842">확률 점유 + mean_z, 타일</text>
+</g>
+<g class="nd nd-mod" data-id="F"><rect x="220" y="810" width="180" height="42" rx="5"/>
+<text class="t" x="229" y="827">F · build_occupancy.py</text>
+<text class="s" x="229" y="842">레이캐스팅 hit/miss log-odds</text>
+</g>
+<g class="nd nd-mod" data-id="E"><rect x="455" y="810" width="210" height="42" rx="5"/>
+<text class="t" x="464" y="827">E · map_compiler merge·edges / voxel_rerun_v2</text>
+<text class="s" x="464" y="842">객체 병합, 엣지 (옵션 VLM)</text>
+</g>
+<g class="nd nd-out" data-id="voxel3d"><rect x="10" y="896" width="170" height="42" rx="5"/>
+<text class="t" x="19" y="913">session_voxel3d.npz + _tiles/</text>
+<text class="s" x="19" y="928">보행용 3D 사전맵</text>
+</g>
+<g class="nd nd-out" data-id="occ"><rect x="220" y="896" width="180" height="42" rx="5"/>
+<text class="t" x="229" y="913">session_occupancy.npz</text>
+<text class="s" x="229" y="928">0.2 m 확률 occupancy</text>
+</g>
+<g class="nd nd-out" data-id="objects"><rect x="455" y="896" width="210" height="42" rx="5"/>
+<text class="t" x="464" y="913">session_objects.json · session_edges*.json</text>
+<text class="s" x="464" y="928">+ voxel_session_relations.json  (scene graph)</text>
+</g>
+<g class="nd nd-mod" data-id="G"><rect x="300" y="982" width="200" height="42" rx="5"/>
+<text class="t" x="309" y="999">G · step_G  (매니페스트 작성)</text>
+<text class="s" x="309" y="1014">파일 목록·프레임·옵션 + sem/classes.json</text>
+</g>
+<g class="nd nd-out" data-id="manifest"><rect x="300" y="1068" width="200" height="42" rx="5"/>
+<text class="t" x="309" y="1085">compiled/map_manifest.json</text>
+<text class="s" x="309" y="1100">맵 패키지 진입점</text>
+<g class="badge"><rect x="454" y="1059" width="46" height="16" rx="8"/><text x="477" y="1071" text-anchor="middle">→ 4곳</text></g>
+</g>
+<g class="nd nd-mod" data-id="costmap_m"><rect x="70" y="1154" width="200" height="42" rx="5"/>
+<text class="t" x="79" y="1171">G · costmap_from_occupancy.py</text>
+<text class="s" x="79" y="1186">지면 hits≥H, 밴드 장애물, role/cost</text>
+</g>
+<g class="nd nd-mod" data-id="H"><rect x="300" y="1154" width="200" height="42" rx="5"/>
+<text class="t" x="309" y="1171">H · load_map.py</text>
+<text class="s" x="309" y="1186">패키지 전체 로드 → 시각화·요약</text>
+</g>
+<g class="nd nd-use" data-id="consumers"><rect x="635" y="1154" width="250" height="42" rx="5"/>
+<text class="t" x="644" y="1171">소비자 (매니페스트만 읽음)</text>
+<text class="s" x="644" y="1186">map_compiler · localize(:9093) · verify_requests · export_pcd</text>
+</g>
+<g class="nd nd-out" data-id="costmap"><rect x="70" y="1240" width="200" height="42" rx="5"/>
+<text class="t" x="79" y="1257">session_costmap_occ.npz</text>
+<text class="s" x="79" y="1272">nav2 등급 코스트맵</text>
+</g>
+<g class="nd nd-out" data-id="rrd"><rect x="300" y="1240" width="200" height="42" rx="5"/>
+<text class="t" x="309" y="1265">map_package.rrd · summary.json · bev.png</text>
+</g>
+<g class="nd nd-use" data-id="portal"><rect x="635" y="1240" width="250" height="42" rx="5"/>
+<text class="t" x="644" y="1257">tools/map_portal.py  (웹 포털 :9092)</text>
+<text class="s" x="644" y="1272">카드·상세·빌드 큐·다운로드</text>
+</g>
+</svg>
+</div>
+<ul class="legend">
+<li><span class="sw in"></span>외부 입력</li>
+<li><span class="sw mod"></span>모듈 (단계 글자 · 스크립트)</li>
+<li><span class="sw mid"></span>중간 데이터 (패키지에 안 들어감)</li>
+<li><span class="sw out"></span>패키지 산출물 (매니페스트 등록)</li>
+<li><span class="sw use"></span>패키지를 읽는 쪽</li>
+<li><span style="width:22px;border-top:1.5px dashed var(--muted);flex:none"></span>모델 가중치 / 되돌아 등록</li>
+</ul>
+<figcaption>Q(mcap 품질 점검)는 mcap 만 읽고 포털에만 표시되는 독립 가지라 생략했습니다. 트랙 1(로봇 저장 지도 없이 서버가 PGO 를 직접 하는 옛 방식)은 P·S·C 자리의 스크립트만 다르고 그래프 모양은 같습니다.</figcaption>
+</figure>
+
+<h2>그림에서 보이는 재사용 지점</h2>
+<ul class="notes">
+<li><strong>graph/ 는 세 번 쓰입니다.</strong> S 가 스캔을 최종 프레임으로 옮길 때, A 가 카메라 프레임 자세를 보간할 때, C 가 "키프레임 시각" 목록을 고를 때. 자세 하나를 모든 레이어가 공유하므로 지도 안에서 기하가 어긋나지 않습니다.</li>
+<li><strong>lidar_scans/ 는 세 번 쓰입니다.</strong> C 의 기하 점(키프레임 스캔), F 의 레이캐스팅, F3d 의 3D 사전맵. 같은 점군을 해상도와 목적만 바꿔 세 레이어로 만듭니다.</li>
+<li><strong>session_voxsem.npz 는 출력이면서 네 모듈의 입력입니다.</strong> F·F3d 는 동적 복셀 제거와 클래스 부여에, E 는 객체 아래 지형을 보는 데, G 는 패키지에 넣는 데 씁니다.</li>
+<li><strong>dataset/ 은 네 모듈이 읽습니다.</strong> D(객체 검출)뿐 아니라 C(카메라 자세·depth 가림 판정), V(영상)도 같은 프레임 파일을 씁니다.</li>
+<li><strong>map_manifest.json 은 끝이 아니라 허브입니다.</strong> 코스트맵·시각화·소비자·포털이 전부 이것만 읽고, 코스트맵은 만들어진 뒤 다시 매니페스트에 등록됩니다(왼쪽으로 되돌아가는 점선).</li>
+<li><strong>GPU 가 필요한 모듈은 B, D 와 옵션 E(VLM) 뿐</strong>입니다. 나머지는 CPU 기하 계산이라 산출물이 있으면 건너뛰고 재개할 수 있습니다.</li>
+</ul>
+</div>
+<script>
+(function(){
+  var svg=document.querySelector('svg'); if(!svg) return;
+  var eds=[].slice.call(svg.querySelectorAll('.ed')), els=[].slice.call(svg.querySelectorAll('.el')), nds=[].slice.call(svg.querySelectorAll('.nd'));
+  function clear(){svg.classList.remove('focus'); eds.concat(els,nds).forEach(function(e){e.classList.remove('on')})}
+  nds.forEach(function(n){
+    var id=n.getAttribute('data-id');
+    n.addEventListener('mouseenter',function(){
+      clear(); svg.classList.add('focus'); n.classList.add('on');
+      var near={}; near[id]=1;
+      eds.concat(els).forEach(function(e){ if(e.getAttribute('data-s')===id||e.getAttribute('data-d')===id){e.classList.add('on'); near[e.getAttribute('data-s')]=1; near[e.getAttribute('data-d')]=1;} });
+      nds.forEach(function(m){ if(near[m.getAttribute('data-id')]) m.classList.add('on'); });
+    });
+    n.addEventListener('mouseleave',clear);
+  });
+})();
+</script>
+
+</body></html>

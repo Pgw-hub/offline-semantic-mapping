@@ -505,3 +505,37 @@
 - tools/export_nav_semantic.py <map_root> <out> [--road 90] [--map-name] → semantic/{semantic_mask.png+yaml(mode raw), .npy, geofence_block_road.json, semantic_info.json, topview.png}. 값: 인도 4 · 횡단보도 8 · 잔디 35 · 차도 90, 나머지 -1.
 - 패키지 /data2/semantic_nav_handoff/t3_sim_1002b_tex/ + 의뢰서 /data2/semantic_nav_handoff/HANDOFF_semantic_costmap_nav.md (사본 docs/HANDOFF_semantic_costmap_nav.md). raisin 이 빌드된 다른 컨테이너의 에이전트가 1단계(지오펜스) → 2단계(맵 부가 파일 semantic/ + NavigationNode 마스크 max 병합) 진행.
 - ★좌표계: 이번 sim 녹화는 로봇 저장 맵 없음 → 맵을 저장한 세션 녹화를 받아 같은 프레임으로 재생성하거나 ICP 정합 필요.
+
+## 1009 시뮬 5분 녹화 빌드 (2026-10-09)
+- `/data2/20261009/railab_raibo_20261009_110835` (레코더 v2, 로그 5개 298 s, 키프레임 41). 세션 `session_t2_sim_1009_110835.yaml`(0923 복사, all_scans, pair_ms 250, calibration 0921 복사). 전체 빌드 530 s.
+- 결과 `output/t2_sim_1009_110835`: 라벨 83 %(0923 59 % → 사진 988장으로 커버리지 상승), voxel3d 1.36 M 셀 33 MB · 타일 10. depth 채움은 498 셀뿐(LiDAR 가 거의 다 덮음).
+- hold-out: 윗면 29,513점 |Δh| 0.11 cm, 계단 윗면 3 cm 이상 낮게 본 비율 3.6 % → max_z 규칙 2.4 %, 유령 0.17 %. 0923(계단 198점 11 %→2.5 %)보다 계단 코 오차가 작음 — 반복 통과로 LiDAR 셀이 촘촘해져 평균이 덜 섞인 것으로 보임.
+- 주의: sim 헤더 시계가 실시간의 1/3 로 흐름(오도메트리 991개가 헤더 99 s). 헤더 stamp 로만 매칭하므로 결과엔 영향 없음.
+- **보조 LiDAR(lidar_1) 채움 (2026-10-09)**: 1009 데이터는 LiDAR 2대(`/livox/lidar`, `/livox/lidar_1` 앞쪽 35° 하향). lidar_slam `aux_lidar` 가 `/cloud_registered` 에 합친 비율이 47 %(로그별 4~85 %, stamp 는 동일하므로 처리 순서 경합으로 추정). `export_registered_scans.py` 에 `--aux-topic/--aux-mode auto` 추가: registered 점 수가 main 의 1.3배 미만이면 tf_static(base→livox_lidar_1:lidar, (0.25,0,0.21) pitch 35°) + /Odometry/base 로 lidar_1 스캔을 0.05 m 복셀 후 추가. 검증: tf 로 옮긴 lidar_1 → registered 최근접 3 cm. 세션 옵션 `aux_lidar: auto|always|off`. `mcap_quality` 재생에 `playback/robot/lidar_1` 추가.
+  재빌드 후: LiDAR 세부 셀 70→95 만, 평탄 채움 66→58 만, 윗면 |Δh| 0.46 cm, 계단 윗면 0.92 cm, 유령 0.24 %. iso025 변형도 재생성(504 만 셀, 121 MB).
+- **정정 (2026-10-10)**: 위 "lidar_1 합친 비율 47 %" 는 점 수 기준의 과소평가. 앞바닥(lidar_0 사각) 점으로 다시 재면 `/cloud_registered` 의 81 % 스캔에 lidar_1 이 들어 있고, 그중 절반은 전체 밀도(+1만 점), 절반은 낮은 밀도(+900 점, 앞바닥은 40 % 수준)로 들어감. 완전히 빠진 스캔은 19 %. 로컬 lidar_slam 소스(main c7675572)에는 aux_lidar 코드가 없어 메커니즘은 미확인.
+  파이프라인의 lidar_1 원시 채움은 crop_box 가 없어 계단에서 앞다리 self-hit(lidar_1 스캔의 10 %, base 기준 앞 0.4~0.6 m·왼 0.3 m)가 기둥으로 들어감 → 기본값 `aux_lidar: off` 로 되돌림(코드는 유지, 쓰려면 발자국 crop 추가 필요). 1009 지도는 순수 `/cloud_registered` 로 재빌드.
+
+## 1012 실로봇 빌드 (2026-10-12)
+- `/data2/20261012/KR-RRT-2604-008_20261012_142913` (레코더 v2, 310 s, 23 GB, 로그 6개, LiDAR 1대). 실내 사무실 + 계단. 저장 지도 없음 → /path/pgo 누적 42 키프레임 + 오도메트리 매칭. calibration 은 config_snapshot/raisin_root/calibration(로봇 자체, source urdf; 0916 값과 1 mm 차). 세션 `session_t2_real_1012_142913.yaml` (all_scans, indoor_v1, aux off).
+- 소요: Q 33 s · P 2 s · A 94 s · S 3 s · R 139 s · B 271 s · C 150 s · **D 2,134 s** · E 5 s · F 142 s · G/H 1 s · V 38 s = **약 51 분** (D 가 75 %).
+- 결과: 라벨 52 %, 복셀 11.8 만, 객체 122, voxel3d 1.40 M 셀 33.6 MB·타일 10. LiDAR hit 셀의 19 % 가 확률 free 로 제거(사람 통행 많은 사무실), person 셀 5,082 제거. 스캔 104개 센서 프레임 글리치 제외.
+
+## 1014 실로봇 도로 현장 빌드 (2026-10-14)
+- `/data2/20261014/KR-RRT-2604-008_20261014_{105348,105958,110144,112237}` (레코더 v2, 로봇 자체 calibration). 현장 = 시뮬 도로 테스트베드의 실제 장소(보도블록 인도·횡단보도·차도) + 컨테이너 앞 체커플레이트 경사로/계단.
+- 도로 지도 `t3_real_1014_road` (105348, 321 s, PGO 229 노드): classdict `mapillary_road_v1`(M2F Swin-L Mapillary panoptic@896), `require_depth: lidar`. 라벨 93 %, 복셀 125 만, voxel3d 975 만 셀 234 MB·76 타일. BEV 에서 인도·횡단보도·차도가 시뮬 테스트베드와 같은 배치로 분리됨. 소요 50 분(B 19 min: M2F 3,211장 · C 12 min · D 11 min · F 4.5 min).
+- 베이스라인 3개(`t2_real_1014_{105958,110144,112237}`, 94/51/79 s): 110144·112237 은 /path/pgo 없음 → `geometry/odom_traj.py`(Δ=0). 같은 사전 적용. 라벨 2~3 % (카메라는 플레이트/문만 보고 LiDAR 는 넓은 실외를 찍어 분모가 큼; 기하 베이스라인 용도엔 무관). 소요 17/6/9 분.
+- 1014 hold-out(스캔 1/10 제외, 윗면 |Δh| 중앙 / 미응답 / 유령): road 1.76 cm / 8.2 % / 2.0 % · 110144 0.44 cm / 1.9 % / 1.4 % · 112237 0.48 cm / 11 % / 1.9 % · 105958 4.85 cm / **46 %** / 1.9 % (윗면 표본 376점뿐; 1.9×5.9 m 안에서 18 m 이동·정지 68 %, 실외 지면을 LiDAR 가 성기게 찍어 2.5 cm 컬럼 빈칸 多 — 오류가 아니라 커버리지). 실기 LiDAR 노이즈로 시뮬(0.1 cm)보다 중앙 오차 0.4~1.8 cm.
+- 추가 `t3_real_1014_165753` (16:57, 206 s, 실내 복도/문, PGO 331 노드): indoor_v1. 라벨 35 %, 복셀 8.2 만, 객체 48, voxel3d 113 만 셀 27 MB·7 타일. 소요 20 분(앞 단계 2 min + B 4 · C 1.5 · D 11 · F 1.5 min).
+- 2026-10-14: F 단계가 voxel3d 변형 `iso025`(0.025 정육면체 세부 격자, 확률 격자 0.1 m 동일)를 기본 생성(`options.voxel3d.variants`, 산출 `session_voxel3d_iso025*`, 뷰 `voxel3d_iso025_view.rrd` 상자 표본 60만). step_F 는 occupancy 가 있어도 F3d 를 호출하도록 수정. 165753: iso025 370 만 셀 88.8 MB(최대 타일 42 MB).
+- 2026-10-15 1012 계단 검사: `voxel3d_slice_view.py`(타임라인=슬라이스 슬라이더, 축별 슬래브 엔티티) 추가, `compiled/voxel3d_stairs_slice_view.rrd`. 진단: 로봇이 계단을 오르지 않음(base z 0.08~0.30 m 유지) → 아래 4~5단(27 cm/18~20 cm)은 정확, 그 위는 바닥에서 올려다본 스침 각이라 디딤판이 가려져 코·챌판만 남아 경사로처럼 보임(디딤판 12 cm, 단 8/12 cm 교대). 패스 간 z 차는 ±3 cm 로 작음. 계단 prior 를 쓰려면 올라가며 녹화해야 함. 두 번째 사선 = 윗 계단 밑면(천장).
+- 2026-10-15 165753 품질 vs 로봇 저장 지도(`output/t3_real_1014_165753/20261014170110.pcd`, 같은 세션 최종 PGO, 36.9 만 점·간격 7 cm, 자체 두께 r0.3 4.4 cm): `compiled/map_vs_robot.json`. 강체 오프셋 0.2~0.8 cm·yaw 0.0° (같은 프레임). robot→ours 중앙: all_scans 0.1 m 3.7 cm · voxel3d LiDAR 1.9 · iso025 LiDAR 1.4 cm, 두께 r0.3 4.9/4.0/3.8 cm(LiDAR) vs 채움 포함 5.2/5.4 cm → 평탄 채움이 표면을 두껍게 함. 10 cm 안 98.2 %(확률 free 제거분 1.8 %).
+  계단(6단, 상승 방향 (−0.30,0.95), 단 ~19–20 cm·디딤판 ~27 cm): 로봇 지도와 우리 LiDAR 셀이 단면에서 겹침(`stairs_profile_vs_robot.png`, `stairs_top_vs_robot.png`). 로봇은 오르지 않았으나(원점 z ≤0.34) 계단이 짧고 정면에서 봐서 1012 와 달리 윗단까지 정상. 평탄 채움은 챌판마다 옆으로 4~5 cm 선반 생성 → 두께 조건 필요(미적용).
+- 2026-10-15 `tools/voxel3d_drop_fill.py <compiled> [--base iso025]` → 평탄 채움(source 3) 제거 변형 `session_voxel3d[_iso025]_nofill.npz/_tiles` (포털 Download 에 자동 노출). 165753: 기본 113만→71만 셀 17 MB, iso025 370만→141만 33.7 MB.
+- **2026-10-15 기본 해상도 변경(사용자 요청)**: voxel3d 세부 격자 기본 0.025×0.025×**0.025** m (`build_voxel3d.py --res-z` 기본, 파이프라인 options.voxel3d.res_z). 기본 산출물 `session_voxel3d.npz` 가 곧 정육면체라 iso025 변형은 기본 생성 안 함. 로봇 VoxelMap 격자(z 0.1)가 필요하면 `options.voxel3d.variants: [z01]`. 이전 빌드 지도들은 그대로(기본=z 0.1, iso025 변형 별도).
+- **2026-10-15 평탄 채움 기본 off**(`build_voxel3d.py --fill-flat` 기본 0, 파이프라인 fill_flat 0.0). 165753 만 새 기본값으로 F 재빌드(52 s): 140.6 만 셀(LiDAR 135 만 + depth 5.5 만) 33.7 MB·7 타일, 뷰 `voxel3d_view.rrd` 상자 전부(box_max 150 만, 347 MB). 이전 z0.1/iso025/nofill 산출물은 `compiled/_old_voxel3d_z01/`. 다른 지도는 그대로(일괄 재빌드는 사용자 요청으로 중단, 1009 는 원복).
+- 2026-10-15 `voxel3d_view.py --boxes` 출력 분리: `<out>`(voxel3d_view.rrd) = 세부 셀 상자만(클래스별 토글) + 타일 + BEV, `<out 의 _view→_points_view>` = 점(클래스/높이색)·depth·제거셀·free·0.1 m 확률 격자 상자. 165753: 상자 313 MB / 점 34 MB. 포털은 voxel3d_points_view.rrd 를 'points' 링크로 자동 노출.
+- 2026-10-15 사용자 결정: 상자(box) 시각화 불필요 → 파이프라인에서 `--boxes` 제거(뷰는 점 표현만, 단일 voxel3d_view.rrd). voxel3d_view.py 의 --boxes 옵션 코드는 남아 있으나 기본 미사용. 165753 뷰 재생성.
+- 2026-10-15 voxel3d_view.py --ref-pcd: 로봇 저장 SLAM 지도를 robot_slam_map/{height,red} 로 추가 + 탭 2개. 165753 만 적용(20261014170110.pcd).
+- 2026-10-15 함정: map_portal.py 는 시작 시 map_portal.html 을 메모리에 읽음(HTML=open(...).read()) → html 수정 후 반드시 포털 재시작.
+- 2026-10-15 tools/voxel3d_build_replay.py: 빌드 과정 재생 rrd(타임라인 build_step: 스캔·광선, 0.1 m 확률 격자 점유/뒤집힌 칸, 새 2.5 cm 칸 누적, 끝 4단계 최종판정→클래스→depth→타일). 165753 79 MB.
