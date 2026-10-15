@@ -32,7 +32,7 @@ def write_pcd(path, xyz, rgb=None, label=None, fmt="rgb"):
     return n
 
 
-def export(manifest, out, source="voxels", exclude=(), min_nsem=0, occ_filter=None, fmt="rgb"):
+def export(manifest, out, source="voxels", exclude=(), min_nsem=0, occ_filter=None, fmt="rgb", variant=""):
     """exclude: 클래스 이름 + 'other' + 'unknown' 중 뺄 것. occ_filter: None(소스 기본) / True / False — occupancy free·동적 복셀 제거 여부"""
     mp = MapPackage(manifest); names = mp.classes; lab = mp.labels(); n_cls = len(names)
     exclude = tuple(exclude)
@@ -47,7 +47,7 @@ def export(manifest, out, source="voxels", exclude=(), min_nsem=0, occ_filter=No
     elif source == "occupancy":
         O = mp.occ; occm = O["state"] == 1; xyz = ((O["ijk"] + 0.5) * O["res"])[occm]; rgb = None; label = None
     elif source == "voxel3d":                                                    # 보행용 3D 확률 복셀 사전맵 → 셀마다 점 하나 (x, y, mean_z)
-        v3p = os.path.join(os.path.dirname(os.path.dirname(manifest)), "compiled", "session_voxel3d.npz")
+        v3p = os.path.join(os.path.dirname(os.path.dirname(manifest)), "compiled", f"session_voxel3d{('_' + variant) if variant else ''}.npz")   # variant: iso025 등 (build_voxel3d --out 접미사)
         if not os.path.exists(v3p): raise FileNotFoundError("session_voxel3d.npz 없음 (F 단계 voxel3d 미생성)")
         v = np.load(v3p); rx = float(v["res_xy"]); I = v["ijk"]; c3 = v["cls"].astype(np.int64)
         label = np.where(c3 == 254, n_cls, np.where(c3 == 255, n_cls + 1, c3))
@@ -62,20 +62,20 @@ def export(manifest, out, source="voxels", exclude=(), min_nsem=0, occ_filter=No
     legend = {"source": source, "points": int(n), "frame": mp.man.get("frame"), "label_ids": {**{i: c for i, c in enumerate(names)}, n_cls: "other", n_cls + 1: "unknown"},
               "classdict": mp.classdict.get("name"), "excluded": list(exclude), "min_nsem": min_nsem, "occupancy_filter": (source == "voxels_occ") if occ_filter is None else bool(occ_filter),
               "format": fmt, "rgb": "packed uint32 (r<<16|g<<8|b) stored as float bits (PCL convention)" if fmt == "rgb" else "없음 (robot 포맷: intensity = label id)"}
-    if source == "voxel3d": legend["note"] = "z = 셀 안 점 평균(mean_z). 세부 격자 0.025×0.025×0.1 m 셀마다 점 1개; 원본 필드(max_z, logodds, count, source)는 voxel3d_tiles zip 참조"
+    if source == "voxel3d": legend["note"] = "z = 셀 안 점 평균(mean_z). 세부 격자 셀마다 점 1개; 원본 필드(max_z, logodds, count, source)는 voxel3d_tiles zip 참조"; legend["voxel3d_variant"] = variant or "default"; legend["res_xy_m"] = float(rx); legend["res_z_m"] = float(v["res_z"])
     json.dump(legend, open(os.path.splitext(out)[0] + "_legend.json", "w"), ensure_ascii=False, indent=1)
     return n
 
 
-def export_voxel3d_zip(manifest, out):
+def export_voxel3d_zip(manifest, out, variant=""):
     """로봇 적재용 타일 묶음: session_voxel3d_tiles/(index.json + t_*.bin) + 요약 + 규격 문서 → zip"""
     import zipfile
-    root = os.path.dirname(os.path.dirname(manifest)); td = os.path.join(root, "compiled", "session_voxel3d_tiles")
+    root = os.path.dirname(os.path.dirname(manifest)); suf = ("_" + variant) if variant else ""; td = os.path.join(root, "compiled", f"session_voxel3d{suf}_tiles")
     if not os.path.exists(os.path.join(td, "index.json")): raise FileNotFoundError("session_voxel3d_tiles/index.json 없음")
     n = 0
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED, compresslevel=6) as z:
         for f in sorted(os.listdir(td)): z.write(os.path.join(td, f), f"voxel3d_tiles/{f}"); n += 1
-        summ = os.path.join(root, "compiled", "session_voxel3d_summary.json")
+        summ = os.path.join(root, "compiled", f"session_voxel3d{suf}_summary.json")
         if os.path.exists(summ): z.write(summ, "voxel3d_tiles/summary.json")
         spec = os.path.join(os.path.dirname(os.path.abspath(__file__)), "docs", "VOXEL3D_PRIOR.md")
         if os.path.exists(spec): z.write(spec, "voxel3d_tiles/SPEC.md")

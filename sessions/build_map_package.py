@@ -22,7 +22,7 @@
   E  graph      객체 병합 → compiled/session_objects.json(+clip), 휴리스틱 엣지, 객체-지형 엣지, (옵션) VLM 엣지
   F  occupancy  lidar_scans + session_voxsem → compiled/session_occupancy.npz (0.2 m 코스트맵용)
                 + 보행용 3D 확률 복셀 사전맵 (build_voxel3d.py: OctoMap 식 log-odds + 복셀 평균 z, 로봇 VoxelMap 격자 0.025×0.025×0.1 m) → compiled/session_voxel3d.npz
-                  + session_voxel3d_tiles/(10 m 타일 바이너리, 로봇 적재용) + voxel3d_view.rrd/voxel3d_bev.png. options.voxel3d: false 면 생략
+                  + session_voxel3d_tiles/(10 m 타일 바이너리, 로봇 적재용) + voxel3d_view.rrd/voxel3d_bev.png (기본 0.025 정육면체, 2026-10-15~) + 선택 변형 z01(로봇 VoxelMap 격자 0.025×0.025×0.1, options.voxel3d.variants). options.voxel3d: false 면 생략
   G  package    map_manifest.json 작성 + 코스트맵(costmap_from_occupancy) 등록
   H  view       compiled/map_package.rrd — 기본 0.1m 점 표현 (options.view_cubes: true 면 view_coarse m 큐브)
   Q  quality    mcap 데이터 품질(토픽별 dt/rate/size, 유실·커버리지 이벤트) + 재생 rerun → compiled/data_quality.{rrd,json}
@@ -66,7 +66,7 @@ class Build:
                     "vlm_model": "Qwen/Qwen2.5-VL-32B-Instruct", "occupancy_res": 0.2, "prob_hit": 0.85, "prob_miss": 0.45,
                     "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "view_cubes": False, "view_sub": 1, "video_speed": 15, "video_width": 960, "video_pipeline": True, "quality_img_stride": 15, "classdict": "default", "label_edge_px": 4, "require_depth": True, "map_id": os.path.basename(self.root),
                     "frame": "SLAM world (/Odometry/base)", "pose_graph": False, "lidar_extrinsic": "calib", "livox_flip": True, "depth_fill_range": 4.0, "depth_fill_gap": 0.15,
-                    "voxel3d": {"res_xy": 0.025, "res_z": 0.1, "prob_res": 0.1, "free_range": 8.0, "tile_m": 10.0, "fill_flat": 0.04, "depth": True}}
+                    "voxel3d": {"res_xy": 0.025, "res_z": 0.025, "prob_res": 0.1, "free_range": 8.0, "tile_m": 10.0, "fill_flat": 0.0, "depth": True, "variants": []}}
         self.opt.update(cfg.get("options", {}))
         self.graph = os.path.join(self.root, "graph")
         if self.opt["pose_graph"] and "frame" not in cfg.get("options", {}): self.opt["frame"] = "SLAM world, PGO-corrected (geometry/build_graph.py)"
@@ -152,7 +152,7 @@ class Build:
         for log in self.logs:
             out = os.path.join(self.ds(log), "lidar_scans")
             if self.done("S", out, lambda: len(glob.glob(os.path.join(out, "*.npz"))) > 100): continue
-            if self.robot_map: self.run([PY, f"{TOOLS}/export_registered_scans.py", self.mcap(log), self.calib, out] + self.pg(), logname=f"S_{log}.log")   # /cloud_registered → 최종 PGO 프레임
+            if self.robot_map: self.run([PY, f"{TOOLS}/export_registered_scans.py", self.mcap(log), self.calib, out, "--aux-mode", {False: "off", True: "auto"}.get(self.opt.get("aux_lidar", "off"), str(self.opt.get("aux_lidar", "off")))] + self.pg(), logname=f"S_{log}.log")   # /cloud_registered → 최종 PGO 프레임 (+ 보조 LiDAR 채움)
             else: self.run([PY, f"{TOOLS}/export_lidar_scans.py", self.mcap(log), self.calib, out] + self.pg(), logname=f"S_{log}.log")
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # R (rgb) — semantic 추론에 넣을 RGB 를 세션 단위로 뽑는다 (LiDAR 스캔 시각 기준 10 Hz).
@@ -276,12 +276,12 @@ class Build:
     # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_F(self):
         out = os.path.join(self.D["compiled"], "session_occupancy")
-        if self.done("F", out + ".npz"): return
-        scans = [os.path.join(self.ds(l), "lidar_scans") for l in self.logs]
-        self.run([PY, f"{CG}/build_occupancy.py", "--scans", *scans, "--voxsem", os.path.join(self.D["voxel"], "session_voxsem.npz"), "--out", out,
-                  "--res", str(self.opt["occupancy_res"]), "--prob-hit", str(self.opt["prob_hit"]), "--prob-miss", str(self.opt["prob_miss"])],
-                 env={"CUDA_VISIBLE_DEVICES": ""}, logname="F.log")
-        self.step_F3d()
+        if not self.done("F", out + ".npz"):
+            scans = [os.path.join(self.ds(l), "lidar_scans") for l in self.logs]
+            self.run([PY, f"{CG}/build_occupancy.py", "--scans", *scans, "--voxsem", os.path.join(self.D["voxel"], "session_voxsem.npz"), "--out", out,
+                      "--res", str(self.opt["occupancy_res"]), "--prob-hit", str(self.opt["prob_hit"]), "--prob-miss", str(self.opt["prob_miss"])],
+                     env={"CUDA_VISIBLE_DEVICES": ""}, logname="F.log")
+        self.step_F3d()                                                   # occupancy 가 이미 있어도 voxel3d/변형은 각자 done 검사
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # F3d (voxel3d) — 보행 컨트롤러용 "3D 확률 복셀 사전맵". F 와 목적이 다르다: F 는 nav 코스트맵용 0.2 m, 이것은 로봇
     #   voxel_mapping 의 VoxelMap 격자(0.025×0.025×0.1 m) 로 getHeight(x,y) 가 바로 읽을 표면 높이(mean_z)를 준다.
@@ -307,7 +307,21 @@ class Build:
         if not self.done("F", rrd):
             self.run([PY, f"{CG}/voxel3d_view.py", out + ".npz", rrd, "--voxsem", os.path.join(self.D["voxel"], "session_voxsem.npz"), "--bev", os.path.join(self.D["compiled"], "voxel3d_bev.png")] + (["--sub", "2"] if len(self.logs) > 2 else []),
                      env={"CUDA_VISIBLE_DEVICES": ""}, logname="F_voxel3d_view.log")
-    opt_default_voxel3d = {"res_xy": 0.025, "res_z": 0.1, "prob_res": 0.1, "free_range": 8.0, "tile_m": 10.0, "fill_flat": 0.04, "depth": True}
+        # 변형: iso025 = 0.025 m 정육면체 세부 격자 (확률 격자는 동일 0.1 m). 산출 session_voxel3d_<variant>.npz/_tiles/, 뷰 voxel3d_<variant>_view.rrd (포털이 자동 인식)
+        for var in v3.get("variants", []):
+            spec = {"iso025": {"res_xy": 0.025, "res_z": 0.025}, "z01": {"res_xy": 0.025, "res_z": 0.1}}.get(var)
+            if spec is None: self.say(f"  voxel3d 변형 {var}: 정의 없음 → 생략"); continue
+            vout = os.path.join(self.D["compiled"], f"session_voxel3d_{var}")
+            if not self.done("F", vout + ".npz", lambda: os.path.exists(os.path.join(vout + "_tiles", "index.json"))):
+                self.run([PY, f"{CG}/build_voxel3d.py", "--scans", *scans, "--voxsem", os.path.join(self.D["voxel"], "session_voxsem.npz"), "--out", vout,
+                          "--res-xy", str(spec["res_xy"]), "--res-z", str(spec["res_z"]), "--prob-res", str(v3["prob_res"]), "--free-range", str(v3["free_range"]), "--tile-m", str(v3["tile_m"]),
+                          "--fill-flat", str(v3["fill_flat"]), "--prob-hit", str(self.opt["prob_hit"]), "--prob-miss", str(self.opt["prob_miss"])] + ([] if v3.get("depth", True) else ["--no-depth"]),
+                         env={"CUDA_VISIBLE_DEVICES": ""}, logname=f"F_voxel3d_{var}.log")
+            vrrd = os.path.join(self.D["compiled"], f"voxel3d_{var}_view.rrd")
+            if not self.done("F", vrrd):
+                self.run([PY, f"{CG}/voxel3d_view.py", vout + ".npz", vrrd, "--voxsem", os.path.join(self.D["voxel"], "session_voxsem.npz"), "--bev", os.path.join(self.D["compiled"], f"voxel3d_{var}_bev.png"), "--sub", "4"],
+                         env={"CUDA_VISIBLE_DEVICES": ""}, logname=f"F_voxel3d_{var}_view.log")
+    opt_default_voxel3d = {"res_xy": 0.025, "res_z": 0.025, "prob_res": 0.1, "free_range": 8.0, "tile_m": 10.0, "fill_flat": 0.0, "depth": True, "variants": []}
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # G (package) — 지금까지의 산출물을 "맵 패키지" 하나로 묶는 매니페스트를 쓴다. 이후 소비자(load_map, verify_requests,
     #   localize, export_pcd, 포털)는 재계산 없이 이 JSON 만 읽는다.

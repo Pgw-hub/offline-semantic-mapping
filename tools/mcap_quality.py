@@ -108,7 +108,9 @@ traj = []
 for li, f in zip(a.logs, files):
     ci = di = si = 0
     with open(f, "rb") as fh:
-        for sch, ch, msg in make_reader(fh).iter_messages(topics=["d455_front/rgb", "d455_front/depth", "/livox/lidar", "/Odometry/base"]):
+        aux_tf = RM.tf_static(f, "livox_lidar_1:lidar") if RM.has_topic(f, "/livox/lidar_1") else None
+        if aux_tf is not None: rr.log("playback/robot/lidar_1", rr.Transform3D(translation=aux_tf[0], mat3x3=aux_tf[1]), timeless=True)
+        for sch, ch, msg in make_reader(fh).iter_messages(topics=["d455_front/rgb", "d455_front/depth", "/livox/lidar", "/livox/lidar_1", "/Odometry/base"]):
             d = msg.data; rr.set_time_seconds("mcap_time", sec(msg.log_time))
             if ch.topic == "d455_front/rgb":
                 ci += 1
@@ -121,6 +123,10 @@ for li, f in zip(a.logs, files):
                 if di % a.img_stride: continue
                 dep = RM.depth_image_mm(d, sch)[1]
                 rr.log("playback/depth", rr.DepthImage(dep, meter=1000.0))
+            elif ch.topic == "/livox/lidar_1" and aux_tf is not None:          # 보조 LiDAR (앞쪽 경사 장착) — 센서 프레임 그대로, Transform3D 로 배치
+                if si % a.lidar_stride: continue
+                xyz1 = RM.lidar_scan(d, sch)[1][::4]
+                rr.log("playback/robot/lidar_1/points", rr.Points3D(xyz1, colors=[[80, 220, 120]], radii=0.03))
             elif ch.topic == "/livox/lidar":
                 si += 1
                 if si % a.lidar_stride: continue

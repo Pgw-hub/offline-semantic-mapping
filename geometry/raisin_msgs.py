@@ -153,3 +153,22 @@ def lidar_scan(d, sch=None, flip=None):
             break
     refl = P["intensity"].astype(np.float32) if "intensity" in names else (P["reflectivity"].astype(np.float32) if "reflectivity" in names else None)
     return h["ns"], xyz, ot, refl
+
+
+# ---------------- tf_static ----------------
+def tf_static(mcap_path, child_suffix, topic_suffix="/tf_static"):
+    """mcap 의 <nick>/tf_static 에서 child frame 이 child_suffix 로 끝나는 변환 → (t(3,), R(3,3), parent, child) 또는 None"""
+    from mcap.reader import make_reader
+    with open(mcap_path, "rb") as fh:
+        r = make_reader(fh); s = r.get_summary(); topics = [ch.topic for ch in s.channels.values() if ch.topic.endswith(topic_suffix)]
+        if not topics: return None
+        for sch, ch, m in r.iter_messages(topics=topics):
+            c = _Cur(m.data, 8); ns, parent = c.header(); child = c.s(); t = np.array(c.u("<3d")); x, y, z, w = c.u("<4d")
+            if child.endswith(child_suffix):
+                R = np.array([[1-2*(y*y+z*z), 2*(x*y-z*w), 2*(x*z+y*w)], [2*(x*y+z*w), 1-2*(x*x+z*z), 2*(y*z-x*w)], [2*(x*z-y*w), 2*(y*z+x*w), 1-2*(x*x+y*y)]])
+                return t, R, parent, child
+    return None
+def has_topic(mcap_path, topic):
+    from mcap.reader import make_reader
+    with open(mcap_path, "rb") as fh:
+        s = make_reader(fh).get_summary(); return any(ch.topic == topic for ch in s.channels.values())
