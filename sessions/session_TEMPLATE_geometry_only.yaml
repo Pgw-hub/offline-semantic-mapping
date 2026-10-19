@@ -1,0 +1,24 @@
+# 템플릿: 카메라 없이 LiDAR 만으로 보행 맵(voxel3d 타일)을 만드는 기하 전용 빌드 (2026-10-15).
+# 쓰는 법: 이 파일을 복사해 root/mcap_dir/logs 를 채우고, 컨테이너 offline_3d_semantic_map 안에서
+#   python sessions/build_map_package.py sessions/<복사본>.yaml
+# 도는 단계: Q(품질) P(자세) S(스캔) F(보행 voxel3d) G(매니페스트) H(요약). 카메라 단계(A,R,B,C,D,E,V)는 자동 생략.
+# 결과: output/<root>/compiled/session_voxel3d_tiles/ (포털 '3D prior 타일' 다운로드 → raisin log/map/<SLAM 맵 이름>/voxel3d_tiles 로)
+# 필요한 녹화 토픽: /cloud_registered, /Odometry/base, /path/pgo (+ /livox/lidar, /livox/imu 권장). d455 는 없어도 된다.
+# 필요한 파일: mcap 폴더의 config_snapshot/raisin_root/calibration (레코더 v2 가 자동으로 남김; LiDAR 외부파라미터로 스캔 원점 계산)
+# 지도 좌표계: lidar_slam 이 저장한 지도로 로컬라이즈해서 쓰려면 저장 지도의 키프레임 궤적(<name>.txt)을 robot_map.traj 로 준다.
+#             없으면 /path/pgo 마지막 메시지 기준 프레임(= 그 세션 SLAM 프레임)이 된다.
+root: CHANGE_ME_geo
+mcap_dir: /data2/CHANGE_ME/CHANGE_ME_session
+logs: [0, 1, 2]
+options:
+  map_id: "CHANGE_ME · geometry only (no camera)"
+  geometry_only: true
+  robot_map:
+    geometry: all_scans
+    # traj: /path/to/<map_name>.txt     # lidar_slam 저장 지도의 키프레임 궤적 (있으면 그 지도 프레임으로)
+  lidar_extrinsic: calib          # 실기체 기본 (extrinsics.py 판정). 시뮬은 slam
+  livox_flip: true                # 실기체 raw LiDAR 리더 규약. 시뮬은 false
+  aux_lidar: "off"
+  prob_hit: 0.85
+  prob_miss: 0.45
+  voxel3d: {res_xy: 0.025, res_z: 0.025, prob_res: 0.1, free_range: 8.0, tile_m: 10.0, fill_flat: 0.0}

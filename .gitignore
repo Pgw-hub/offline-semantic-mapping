@@ -22,3 +22,4 @@ output/*/localize/
 refer/
 models/
 gt/robotplus_outdoor_testbed/train_data/
+tools/bonxai/bonxai_occupancy

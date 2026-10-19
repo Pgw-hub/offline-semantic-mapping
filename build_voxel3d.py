@@ -22,7 +22,8 @@ import numpy as np
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import classdict as CD
 
 ap = argparse.ArgumentParser()
-ap.add_argument("--scans", nargs="+", required=True); ap.add_argument("--voxsem", required=True); ap.add_argument("--out", required=True)
+ap.add_argument("--scans", nargs="+", required=True); ap.add_argument("--out", required=True)
+ap.add_argument("--voxsem", default=None, help="세션 semantic 복셀 (C 단계). 없으면 기하 전용: 클래스 전부 255(unlabeled), depth 채움·동적 클래스 제거 없음")
 ap.add_argument("--res-xy", type=float, default=0.025); ap.add_argument("--res-z", type=float, default=0.025); ap.add_argument("--prob-res", type=float, default=0.1)
 ap.add_argument("--max-range", type=float, default=30.0, help="hit 으로 쓸 최대 거리"); ap.add_argument("--free-range", type=float, default=8.0, help="free 레이 최대 길이")
 ap.add_argument("--prob-hit", type=float, default=0.85); ap.add_argument("--prob-miss", type=float, default=0.45)
@@ -34,6 +35,8 @@ ap.add_argument("--fill-flat", type=float, default=0.0, help="평탄 채움: 확
 ap.add_argument("--tile-m", type=float, default=10.0); ap.add_argument("--no-tiles", action="store_true")
 ap.add_argument("--skip-every", type=int, default=0); ap.add_argument("--skip-phase", type=int, default=0)
 ap.add_argument("--batch", type=int, default=40)
+ap.add_argument("--occupancy", choices=["own", "bonxai"], default="own", help="확률 격자(prob_res) 점유 판정: own = 이 스크립트의 레이캐스팅 · bonxai = Bonxai ProbabilisticMap (tools/bonxai). 세부 격자 통계·채움·타일은 같다")
+ap.add_argument("--bonxai-bin", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "bonxai", "bonxai_occupancy"))
 a = ap.parse_args()
 
 RX, RZ, RP = a.res_xy, a.res_z, a.prob_res; OFF = 1 << 20; MASK = (1 << 21) - 1
@@ -70,49 +73,78 @@ if a.skip_every > 1: files = [f for i, f in enumerate(files) if i % a.skip_every
 print(f"스캔 {len(files)} · 세부 {RX}×{RX}×{RZ} m · 확률 {RP} m · hit {a.prob_hit} miss {a.prob_miss} · free ≤ {a.free_range} m")
 lh = np.log(a.prob_hit / (1 - a.prob_hit)); lm = np.log(a.prob_miss / (1 - a.prob_miss))
 t0 = time.time(); acc_c = acc_f = None; bc, bf = [], []; n_pts_tot = 0
+bx_f = None
+if a.occupancy == "bonxai":
+    import struct, subprocess, tempfile
+    bx_dir = tempfile.mkdtemp(prefix="voxel3d_bonxai_"); bx_scans = os.path.join(bx_dir, "scans.bin"); bx_f = open(bx_scans, "wb")
 steps = (np.arange(int(np.ceil(a.free_range / (RP * 0.5)))) + 0.5) * RP * 0.5          # 레이 표본 간격 0.5·prob_res (대각선 셀 누락 방지)
 for si, f in enumerate(files):
     d = np.load(f); P = d["xyz"].astype(np.float64); org = d["origin"].astype(np.float64)
     vec = P - org; rng = np.linalg.norm(vec, axis=1); ok = (rng > 0.05) & (rng <= a.max_range); P, vec, rng = P[ok], vec[ok], rng[ok]; n_pts_tot += len(P)
-    # 확률 격자: hit 셀(스캔당 1회) + 통과 셀(끝점 셀 제외)
-    hk = np.unique(coarse_key(P)); L = np.minimum(rng, a.free_range); dirs = vec / rng[:, None]
-    valid = steps[None, :] < L[:, None]; S = org[None, None, :] + dirs[:, None, :] * steps[None, :, None]
-    mk = np.unique(coarse_key(S.reshape(-1, 3))[valid.ravel()]); mk = mk[~np.isin(mk, hk, assume_unique=True)]
-    bc.append((np.concatenate([hk, mk]), np.r_[np.ones(len(hk)), np.zeros(len(mk))], np.r_[np.zeros(len(hk)), np.ones(len(mk))]))
+    if bx_f is not None:                                                                    # Bonxai 가 점유 판정: 스캔을 넘기기만 한다
+        bx_f.write(struct.pack("<I3f", len(P), *org)); bx_f.write(P.astype("<f4").tobytes())
+    else:
+        # 확률 격자: hit 셀(스캔당 1회) + 통과 셀(끝점 셀 제외)
+        hk = np.unique(coarse_key(P)); L = np.minimum(rng, a.free_range); dirs = vec / rng[:, None]
+        valid = steps[None, :] < L[:, None]; S = org[None, None, :] + dirs[:, None, :] * steps[None, :, None]
+        mk = np.unique(coarse_key(S.reshape(-1, 3))[valid.ravel()]); mk = mk[~np.isin(mk, hk, assume_unique=True)]
+        bc.append((np.concatenate([hk, mk]), np.r_[np.ones(len(hk)), np.zeros(len(mk))], np.r_[np.zeros(len(hk)), np.ones(len(mk))]))
     # 세부 격자: count / Σz / Σz² / 스캔 수(스캔당 1)
     fi = fine_idx(P); fk = key3(fi); uk, inv_ = np.unique(fk, return_inverse=True); cnt, sz, sz2 = [np.bincount(inv_, weights=c, minlength=len(uk)) for c in (np.ones(len(fk)), P[:, 2], P[:, 2] ** 2)]
     mxz = np.full(len(uk), -np.inf); np.maximum.at(mxz, inv_, P[:, 2])                       # 셀 안 최대 z (계단 코처럼 두 표면이 섞인 셀에서 보수적 높이)
     bf.append((uk, cnt, sz, sz2, np.ones(len(uk)), mxz))
     if (si + 1) % a.batch == 0 or si == len(files) - 1:
-        K = np.concatenate([b[0] for b in bc]); u, c = reduce_sum(K, [np.concatenate([b[1] for b in bc]), np.concatenate([b[2] for b in bc])]); acc_c = merge_prob(acc_c, u, c[0], c[1], lh, lm)
+        if bc:
+            K = np.concatenate([b[0] for b in bc]); u, c = reduce_sum(K, [np.concatenate([b[1] for b in bc]), np.concatenate([b[2] for b in bc])]); acc_c = merge_prob(acc_c, u, c[0], c[1], lh, lm)
         K = np.concatenate([b[0] for b in bf]); u, inv_ = np.unique(K, return_inverse=True); c = [np.bincount(inv_, weights=np.concatenate([b[j] for b in bf]), minlength=len(u)) for j in range(1, 5)]
         mx = np.full(len(u), -np.inf); np.maximum.at(mx, inv_, np.concatenate([b[5] for b in bf])); acc_f = merge(acc_f, u, c, mx)
         bc, bf = [], []
-        if (si + 1) % (a.batch * 10) == 0 or si == len(files) - 1: print(f"  {si+1}/{len(files)} · 확률 셀 {len(acc_c[0]):,} · 세부 셀 {len(acc_f[0]):,} · {time.time()-t0:.0f}s", flush=True)
+        if (si + 1) % (a.batch * 10) == 0 or si == len(files) - 1: print(f"  {si+1}/{len(files)} · 확률 셀 {len(acc_c[0]) if acc_c else 0:,} · 세부 셀 {len(acc_f[0]):,} · {time.time()-t0:.0f}s", flush=True)
 
-ck, c_hits, c_miss, c_lo = acc_c; fk, (f_cnt, f_sz, f_sz2, f_ns), f_mx = acc_f; c_lo = c_lo.astype(np.float32)
-# 세부 셀 → 부모 확률 셀 log-odds
-fI = unkey(fk); fc = fine_center(fI); pk = coarse_key(fc); pos = np.searchsorted(ck, pk); pos = np.minimum(pos, len(ck) - 1); assert (ck[pos] == pk).all(), "부모 셀 누락"
-f_lo = c_lo[pos]; f_miss = c_miss[pos]
+bonxai_stats = None
+if bx_f is not None:
+    bx_f.close(); src_cpp = os.path.join(os.path.dirname(a.bonxai_bin), "bonxai_occupancy.cpp")
+    if not os.path.exists(a.bonxai_bin) or (os.path.exists(src_cpp) and os.path.getmtime(src_cpp) > os.path.getmtime(a.bonxai_bin)):
+        subprocess.run(["bash", os.path.join(os.path.dirname(a.bonxai_bin), "build.sh")], check=True)
+    bx_out = os.path.join(bx_dir, "occ.bin")
+    r = subprocess.run([a.bonxai_bin, bx_scans, str(RP), str(a.max_range), str(a.free_range), str(a.prob_hit), str(a.prob_miss), bx_out], check=True, capture_output=True, text=True)
+    bonxai_stats = json.loads(r.stdout.strip().splitlines()[-1]); print(f"Bonxai 점유 판정: {bonxai_stats}")
+    raw = open(bx_out, "rb").read(); n_occ = int(np.frombuffer(raw[:8], "<u8")[0]); rec_ = np.frombuffer(raw[8:], np.dtype([("ijk", "<i4", 3), ("lo", "<f4")]), n_occ)
+    ck = key3(rec_["ijk"]); order_ = np.argsort(ck); ck = ck[order_]; c_lo = rec_["lo"][order_].astype(np.float32)
+    c_hits = np.ones(len(ck)); c_miss = np.zeros(len(ck))                                   # Bonxai 는 점유 셀만 넘긴다 (hit/miss 횟수 없음)
+    import shutil; shutil.rmtree(bx_dir, ignore_errors=True)
+else:
+    ck, c_hits, c_miss, c_lo = acc_c; c_lo = c_lo.astype(np.float32)
+fk, (f_cnt, f_sz, f_sz2, f_ns), f_mx = acc_f
+# 세부 셀 → 부모 확률 셀 log-odds (Bonxai 는 점유 셀만 있으므로 없는 부모 = 점유 아님)
+fI = unkey(fk); fc = fine_center(fI); pk = coarse_key(fc); pos = np.searchsorted(ck, pk); pos = np.minimum(pos, len(ck) - 1); p_found = ck[pos] == pk
+if a.occupancy == "own": assert p_found.all(), "부모 셀 누락"
+f_lo = np.where(p_found, c_lo[pos], -2.0).astype(np.float32); f_miss = np.where(p_found, c_miss[pos], 0)
 mean_z = f_sz / f_cnt; std_z = np.sqrt(np.maximum(f_sz2 / f_cnt - mean_z ** 2, 0))
 occ = (f_lo > 0) if not a.no_prob else np.ones(len(fk), bool); occ &= f_ns >= a.min_scans
 n_lidar_all = len(fk); n_prob_removed = int((~occ).sum())
 
-# 클래스 (voxsem 0.1 m)
-v = np.load(a.voxsem, allow_pickle=True); V = float(v["vox"]); classes = [str(c) for c in v["classes"]]; NC = len(classes); cd = CD.from_voxsem(v)
-sem = v["sem_mean"].astype(np.float32); has = v["n_sem"] > 0; lab = np.where(has, sem.argmax(1), 255); lab = np.where(has & (sem.max(1) < 0.3), 254, lab).astype(np.uint8)
-vk = key3(v["ijk"]); order = np.argsort(vk); vk, lab_s = vk[order], lab[order]
-def class_of(Pc):
-    k = key3(np.floor(Pc / V)); p = np.minimum(np.searchsorted(vk, k), len(vk) - 1); f = vk[p] == k; out = np.full(len(k), 255, np.uint8); out[f] = lab_s[p[f]]; return out
+# 클래스 (voxsem 0.1 m). 기하 전용(--voxsem 없음)이면 전부 255 — 기하와 의미는 독립 단계라 나중에 의미만 다시 입힐 수 있다
+if a.voxsem:
+    v = np.load(a.voxsem, allow_pickle=True); V = float(v["vox"]); classes = [str(c) for c in v["classes"]]; NC = len(classes); cd = CD.from_voxsem(v)
+    sem = v["sem_mean"].astype(np.float32); has = v["n_sem"] > 0; lab = np.where(has, sem.argmax(1), 255); lab = np.where(has & (sem.max(1) < 0.3), 254, lab).astype(np.uint8)
+    vk = key3(v["ijk"]); order = np.argsort(vk); vk, lab_s = vk[order], lab[order]
+    def class_of(Pc):
+        k = key3(np.floor(Pc / V)); p = np.minimum(np.searchsorted(vk, k), len(vk) - 1); f = vk[p] == k; out = np.full(len(k), 255, np.uint8); out[f] = lab_s[p[f]]; return out
+    dyn_ids = CD.ids_with_role(cd, "dynamic")
+else:
+    v = None; classes = []; NC = 0; dyn_ids = []
+    def class_of(Pc): return np.full(len(Pc), 255, np.uint8)
+    print("기하 전용 (--voxsem 없음): 클래스 전부 unlabeled, depth 채움 없음")
 f_cls = class_of(fc)
-dyn_ids = CD.ids_with_role(cd, "dynamic"); is_dyn = np.isin(f_cls, dyn_ids)
+is_dyn = np.isin(f_cls, dyn_ids)
 n_dyn_removed = int((occ & is_dyn).sum()) if not a.keep_dynamic else 0
 if not a.keep_dynamic: occ &= ~is_dyn
 removed_ijk = fI[~occ].astype(np.int32); removed_why = np.where(is_dyn[~occ], 2, 1).astype(np.uint8)   # 1 확률(free) 2 동적 클래스
 
 # depth 채움 점
 dep_n = dep_added = 0; D = None
-if not a.no_depth and "depth_xyz" in v.files and len(v["depth_xyz"]):
+if v is not None and not a.no_depth and "depth_xyz" in v.files and len(v["depth_xyz"]):
     Pd = v["depth_xyz"].astype(np.float64); dep_n = len(Pd)
     dk = coarse_key(Pd); p = np.minimum(np.searchsorted(ck, dk), len(ck) - 1); found = ck[p] == dk
     lidar_hit = found & (c_hits[p] > 0); too_free = found & (c_miss[p] > a.depth_max_miss)
@@ -157,8 +189,8 @@ for ti, (s, e) in enumerate(zip(tstart, np.r_[tstart[1:], len(tkey)])):
     txi, tyi = int(ut[ti] // (2 * OFF) - OFF), int(ut[ti] % (2 * OFF) - OFF)
     tiles.append({"tx": txi, "ty": tyi, "x0": txi * a.tile_m, "y0": tyi * a.tile_m, "start": int(s), "n": int(e - s), "z_min": round(float(mz[s:e].min()), 2), "z_max": round(float(mz[s:e].max()), 2)})
 params = {"frame": "robot lidar_slam saved map frame (final PGO) — /cloud_registered at keyframe times", "res_xy": RX, "res_z": RZ, "prob_res": RP, "prob_hit": a.prob_hit, "prob_miss": a.prob_miss,
-          "free_range": a.free_range, "max_range": a.max_range, "min_scans": a.min_scans, "prob": not a.no_prob, "depth": not a.no_depth, "depth_max_miss": a.depth_max_miss, "drop_dynamic": not a.keep_dynamic,
-          "tile_m": a.tile_m, "tile_cells": tile_cells, "n_scans": len(files), "n_points": int(n_pts_tot), "skip_every": a.skip_every, "skip_phase": a.skip_phase, "classes": classes,
+          "free_range": a.free_range, "max_range": a.max_range, "min_scans": a.min_scans, "prob": not a.no_prob, "depth": (not a.no_depth) and bool(a.voxsem), "depth_max_miss": a.depth_max_miss, "drop_dynamic": not a.keep_dynamic,
+          "tile_m": a.tile_m, "tile_cells": tile_cells, "semantic": bool(a.voxsem), "occupancy": a.occupancy, "bonxai": bonxai_stats, "n_scans": len(files), "n_points": int(n_pts_tot), "skip_every": a.skip_every, "skip_phase": a.skip_phase, "classes": classes,
           "class_codes": {"254": "other(low confidence)", "255": "unlabeled"}, "source_codes": {"1": "lidar(cloud_registered)", "2": "depth fill", "3": "flat fill (interpolated within 0.1 m cell)"}, "fill_flat": a.fill_flat}
 np.savez_compressed(a.out + ".npz", ijk=I.astype(np.int32), mean_z=mz.astype(np.float32), max_z=mxz_all.astype(np.float32), std_z=sd.astype(np.float16), count=np.minimum(cnt, 65535).astype(np.uint16), n_scans=np.minimum(ns, 65535).astype(np.uint16),
                     logodds=lo.astype(np.float16), cls=cls.astype(np.uint8), source=src, tile=tile_id, res_xy=RX, res_z=RZ, prob_res=RP, classes=np.array(classes),
@@ -178,7 +210,7 @@ if not a.no_tiles:
 # 요약
 byc = {classes[c] if c < NC else ("other" if c == 254 else "unlabeled"): int(n) for c, n in zip(*np.unique(cls, return_counts=True))}
 summ = {"cells": int(len(I)), "cells_lidar": int((src == 1).sum()), "cells_depth": int((src == 2).sum()), "cells_flat_fill": int((src == 3).sum()), "lidar_cells_before_filter": int(n_lidar_all), "removed_prob_free": n_prob_removed, "removed_dynamic": n_dyn_removed,
-        "depth_points": int(dep_n), "coarse_cells": int(len(ck)), "coarse_occupied": int((c_lo > 0).sum()), "coarse_free": int((c_lo < 0).sum()), "bytes_per_cell": REC.itemsize, "total_mb": round(len(I) * REC.itemsize / 1e6, 1),
+        "depth_points": int(dep_n), "coarse_cells": int(bonxai_stats["cells"]) if bonxai_stats else int(len(ck)), "coarse_occupied": int((c_lo > 0).sum()), "coarse_free": int(bonxai_stats["free"]) if bonxai_stats else int((c_lo < 0).sum()), "bytes_per_cell": REC.itemsize, "total_mb": round(len(I) * REC.itemsize / 1e6, 1),
         "tiles": len(tiles), "tile_cells_max": max(t["n"] for t in tiles), "tile_mb_max": round(max(t["n"] for t in tiles) * REC.itemsize / 1e6, 1), "by_class": byc, "std_z_med_cm": round(float(np.median(sd)) * 100, 2), "seconds": round(time.time() - t0)}
 json.dump({**summ, "params": params}, open(a.out + "_summary.json", "w"), indent=1, ensure_ascii=False)
 print(f"\n세부 셀 {summ['cells']:,} (LiDAR {summ['cells_lidar']:,} + depth {summ['cells_depth']:,} + 평탄채움 {summ['cells_flat_fill']:,}) · LiDAR hit 셀 {n_lidar_all:,} 중 확률 free 로 제거 {n_prob_removed:,} · 동적 제거 {n_dyn_removed:,}")

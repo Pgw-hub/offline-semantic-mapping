@@ -1,0 +1,16 @@
+# 기하 전용(geometry_only) 검증: t2_sim_1009_110835 를 카메라 없이 다시 빌드 → 기존 session_voxel3d 와 셀·높이 일치 확인 (2026-10-15)
+root: geo_check_t2_sim_1009
+mcap_dir: /data2/20261009/railab_raibo_20261009_110835
+logs: [0, 1, 2, 3, 4]
+options:
+  map_id: "sim dungok 2F 20261009_110835 · geometry only (no camera) check"
+  geometry_only: true
+  robot_map:
+    geometry: all_scans
+  lidar_extrinsic: slam
+  livox_flip: false
+  prob_hit: 0.85
+  prob_miss: 0.45
+  pose_graph: true
+  aux_lidar: "off"
+  voxel3d: {res_xy: 0.025, res_z: 0.1, prob_res: 0.1, free_range: 8.0, tile_m: 10.0, fill_flat: 0.04, depth: false, variants: [bonxai]}   # 기존 session_voxel3d 와 같은 격자·평탄 채움 + Bonxai 변형

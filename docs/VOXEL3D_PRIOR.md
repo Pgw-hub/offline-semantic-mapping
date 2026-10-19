@@ -67,3 +67,16 @@ python build_voxel3d.py --scans output/<map>/dataset/log_*/lidar_scans --voxsem 
 python voxel3d_view.py output/<map>/compiled/session_voxel3d.npz output/<map>/compiled/voxel3d_view.rrd --voxsem ... --bev ...
 ```
 (컨테이너 `offline_3d_semantic_map`. 파이프라인은 `options.voxel3d` 로 켜고 끔.)
+
+## 기하 전용 빌드와 Bonxai 점유 판정 (2026-10-15)
+- **기하 전용** (`options.geometry_only: true`, 템플릿 `sessions/session_TEMPLATE_geometry_only.yaml`): 카메라 없이 Q·P·S·F·G·H 만 돈다.
+  `build_voxel3d.py` 는 `--voxsem` 없이 실행되어 클래스가 전부 255(unlabeled), depth 채움·동적 클래스 제거가 없다. 0.2 m 코스트맵(라벨 필요)은 만들지 않는다.
+  검증: t2_sim_1009_110835 를 기하 전용으로 다시 빌드 → 기존(카메라) 빌드와 셀 1,361,949 개·mean_z·max_z·logodds 가 정확히 같고 depth 채움 498 셀만 빠짐.
+- **Bonxai 점유 판정** (`build_voxel3d.py --occupancy bonxai`, 세션 옵션 `voxel3d.variants: [bonxai]` → `session_voxel3d_bonxai_tiles/`):
+  확률 격자(prob_res)의 점유 판정만 Bonxai ProbabilisticMap(`third_party/bonxai`, 커밋 8ba04b2, MPL-2.0)이 하고, 세부 격자 높이 통계·평탄 채움·클래스·타일은 같은 코드.
+  범위 규칙은 자체 판정과 같다: 적중 ≤ max_range(30 m), 빈 공간 레이캐스팅 ≤ free_range(8 m) — 8 m 넘는 점은 8 m 지점까지만 레이(addMissPoint), 끝점 셀은 레이 없이 적중만.
+  실행 파일 `tools/bonxai/bonxai_occupancy` 는 처음 쓸 때 `tools/bonxai/build.sh` 로 자동 빌드 (Eigen 3 헤더 필요: 컨테이너에 `libeigen3-dev`).
+  비교 (t2_sim_1009_110835, 990 스캔): 보행 영역 2.5 cm 칸 커버리지 자체 90.3 % / Bonxai 90.1 %, 두 맵 모두 있는 칸의 바닥 높이 차 중앙 0.00 cm(3 cm 초과 0.3 %),
+  점유 판정 시간 자체 약 200 s / Bonxai 13 s. 옛 벤치(nearblock)의 지면 침식은 빈 공간 레이를 30 m 전체로 그은 탓이었다.
+  주의: Bonxai 는 점유 셀만 넘기므로(hit/miss 횟수 없음) depth 채움의 "LiDAR 가 여러 번 비었다고 본 칸은 채우지 않음(depth_max_miss)" 조건이 bonxai 변형에서는 적용되지 않는다.
+  카메라 세션에서는 bonxai 변형의 depth 채움 셀이 자체 판정보다 많을 수 있다 (기하 전용 빌드에는 depth 채움이 없어 무관).
