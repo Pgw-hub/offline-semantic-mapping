@@ -1,0 +1,23 @@
+# 2026-10-16 14:18 핸드헬드 리그(Mid-360 + D455, URDF 모듈 livox_d455_rig) 172 s, /path/pgo 28 msgs(증분) — 레코더 v2.
+# 기하 전용: 카메라 캘리브레이션이 LiDAR 와 ~3° 어긋나 보여(docs/HANDOFF.md 2026-10-16) 의미 단계는 재캘리브레이션 뒤로.
+# 0–3.8 s 센서 프레임 클라우드·166 s 이후 위치추정 모드(Odometry frame '1015_1') 는 export_registered_scans 가 자동 제외.
+root: t2_handheld_1016_141825
+mcap_dir: /data2/20261016/railab_raibo_20261016_141825
+calib: /data2/20261016/railab_raibo_20261016_141825/config_snapshot/raisin_root/calibration
+logs:
+- 0
+- 1
+- 2
+options:
+  map_id: "handheld 20261016_141825 · geometry only · track 2 all_scans · voxel3d prior"
+  geometry_only: true
+  robot_map:
+    geometry: all_scans
+  lidar_extrinsic: calib
+  livox_flip: false
+  lidar_fusion: false
+  pose_graph: true
+  aux_lidar: "off"
+  prob_hit: 0.85
+  prob_miss: 0.45
+  video_speed: 0

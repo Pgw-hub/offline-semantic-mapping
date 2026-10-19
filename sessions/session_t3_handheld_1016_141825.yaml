@@ -1,0 +1,35 @@
+# 2026-10-16 14:18 핸드헬드 리그(Mid-360 + D455, URDF 모듈 livox_d455_rig) 172 s — 전체(시맨틱 포함) 빌드. 기하 전용판은 session_t2_handheld_1016_141825.yaml.
+# 카메라는 녹화된 캘리브레이션 그대로 (LiDAR 와 ~3° 어긋남 의심, docs/HANDOFF.md 2026-10-16). depth 는 640×360 원시(color 정렬 아님).
+# 0–3.8 s 센서 프레임 클라우드·166 s 이후 위치추정 모드(Odometry frame '1015_1') 는 export_registered_scans 가 자동 제외.
+root: t3_handheld_1016_141825
+mcap_dir: /data2/20261016/railab_raibo_20261016_141825
+calib: /data2/20261016/railab_raibo_20261016_141825/config_snapshot/raisin_root/calibration
+logs:
+- 0
+- 1
+- 2
+options:
+  map_id: "handheld 20261016_141825 · SegFormer indoor_v1 · track 2 all_scans · voxel3d prior (calib as recorded)"
+  robot_map:
+    geometry: all_scans
+  lidar_extrinsic: calib
+  livox_flip: false
+  lidar_fusion: false
+  mask_bottom_px: 0
+  drop_classes: person
+  vlm_edges: false
+  occupancy_res: 0.2
+  prob_hit: 0.85
+  prob_miss: 0.45
+  costmap: {h_ground: 2, h_obs: 3, clearance: 1.4, band_min: 0.3}
+  view_cubes: false
+  view_coarse: 0.3
+  video_speed: 15
+  video_pipeline: true
+  classdict: indoor_v1
+  label_edge_px: 4
+  require_depth: 1
+  pose_graph: true
+  depth_fill_range: 4.0
+  depth_fill_gap: 0.15
+  aux_lidar: "off"

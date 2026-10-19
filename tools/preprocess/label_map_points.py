@@ -68,15 +68,16 @@ for ds in a.datasets:
             zbp = zb[v[nd] // a.zbuf_px, u[nd] // a.zbuf_px]
             vis[nd] = (zl[nd] < zbp + a.zbuf_tol + 0.05 * zl[nd]) & (zl[nd] < a.zbuf_range)
         elif a.require_depth == 0: vis |= nd                                                       # 가림 판정 없이 허용
-        vis[vis] &= ~edge[v[vis], u[vis]]
+        Hs, Ws = sem.shape[:2]; us = np.minimum(u * Ws // Wc, Ws - 1); vs = np.minimum(v * Hs // Hc, Hs - 1)   # 세그 결과 해상도가 카메라와 다를 수 있음 (긴 변 640)
+        vis[vis] &= ~edge[vs[vis], us[vis]]
         pi = cand[vis]; uu, vv = u[vis], v[vis]
-        sem_sum[pi] += sem[vv, uu].astype(np.float32) / 255.0; n_sem[pi] += 1; rgb_sum[pi] += rgb[vv, uu]
+        sem_sum[pi] += sem[vs[vis], us[vis]].astype(np.float32) / 255.0; n_sem[pi] += 1; rgb_sum[pi] += rgb[vv, uu]
         np.minimum.at(first, pi, fi + li * 600); n_vis_tot += int(vis.sum()); n_frames += 1
         if a.depth_fill_range > 0 and fi % a.depth_frame_stride == 0:                    # ---- depth 카메라 점으로 LiDAR 빈 곳 채우기
             zc = dep[vv_g, uu_g]; okd = (zc > 0.3) & (zc < a.depth_fill_range)
             # 경계(flying pixel): 4-이웃 중 depth 차가 depth_edge 이상인 픽셀 제외
             dz = np.zeros_like(dep); dz[:, 1:] = np.maximum(dz[:, 1:], np.abs(dep[:, 1:] - dep[:, :-1])); dz[1:, :] = np.maximum(dz[1:, :], np.abs(dep[1:, :] - dep[:-1, :]))
-            okd &= dz[vv_g, uu_g] < a.depth_edge; okd &= ~edge[vv_g, uu_g]; okd &= vv_g < Hc - a.mask_bottom
+            okd &= dz[vv_g, uu_g] < a.depth_edge; okd &= ~edge[np.minimum(vv_g * Hs // Hc, Hs - 1), np.minimum(uu_g * Ws // Wc, Ws - 1)]; okd &= vv_g < Hc - a.mask_bottom
             zc, uc, vc = zc[okd], uu_g[okd], vv_g[okd]
             if len(zc):
                 # LiDAR z-buffer (시야 안 LiDAR 지도 점 전부, 픽셀 stride 격자, 3×3 이웃 최소): 같은 방향에 LiDAR 표면이 있으면 depth 점은 그 표면의 복제(정렬 오차) 일 확률이 높음
@@ -93,7 +94,7 @@ for ds in a.datasets:
                 n_df_cand += len(pw); n_df_kept += int(far.sum())
                 if far.any():
                     K_ = np.floor(pw[far] / a.vox).astype(np.int64); o_ = 1 << 20; DF["key"].append(((K_[:, 0] + o_) << 42) | ((K_[:, 1] + o_) << 21) | (K_[:, 2] + o_))
-                    DF["sem"].append(sem[vc[far], uc[far]].astype(np.float32) / 255.0); DF["rgb"].append(rgb[vc[far], uc[far]].astype(np.float32)); DF["fr"].append(np.full(int(far.sum()), fi + li * 600, np.int64)); DF["xyz"].append(pw[far].astype(np.float32))   # 3D prior(voxel3d) 용 원점 좌표
+                    DF["sem"].append(sem[np.minimum(vc[far] * Hs // Hc, Hs - 1), np.minimum(uc[far] * Ws // Wc, Ws - 1)].astype(np.float32) / 255.0); DF["rgb"].append(rgb[vc[far], uc[far]].astype(np.float32)); DF["fr"].append(np.full(int(far.sum()), fi + li * 600, np.int64)); DF["xyz"].append(pw[far].astype(np.float32))   # 3D prior(voxel3d) 용 원점 좌표
         if fi % 200 == 0: print(f"  frame {fi}/{len(sel)} 보이는 지도 점 {int(vis.sum()):,}")
 if sem_sum is None: sys.exit("semantic 프레임 없음")
 NCH = sem_sum.shape[1]; CLASSES = CLASSES or [str(i) for i in range(NCH)]

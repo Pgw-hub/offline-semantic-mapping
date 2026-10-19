@@ -102,6 +102,8 @@ for i, os_, th in overrides: print(f"override: {names_[i]} ≥{th} → {[names_[
 if any(not g for _, g in groups): print("경고: 라벨이 하나도 매칭되지 않은 클래스가 있음 (채널은 0 으로 채움)")
 json.dump(cd, open(D + "/classes.json", "w", encoding="utf-8"), ensure_ascii=False, indent=1)     # 복셀 빌더가 읽음
 files = sorted(glob.glob(D + "/rgb/*.png"))
+if files:                                                              # 출력 해상도 = 긴 변 640, 입력 RGB 비율 유지 (4:3 → 640x480, 16:9 → 640x360)
+    from PIL import Image as _PI; _w, _h = _PI.open(files[0]).size; W = 640; H = int(round(W * _h / _w)); print(f"입력 {_w}x{_h} → 출력 {W}x{H}")
 if a.skip_existing:
     files = [f for f in files if not os.path.exists(D + "/sem/%s.npz" % os.path.basename(f)[:-4])]
 print("프레임:", len(files), "device:", dev); t0 = time.time(); ema_prev = None

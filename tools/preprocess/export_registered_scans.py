@@ -22,13 +22,14 @@ a = ap.parse_args(); os.makedirs(a.out, exist_ok=True); t_bl = lidar_t_bl(a.cali
 use_aux = a.aux_mode != "off" and RM.has_topic(a.mcap, a.aux_topic); T_b_aux = RM.tf_static(a.mcap, a.aux_frame) if use_aux else None
 if use_aux and T_b_aux is None: print(f"보조 LiDAR {a.aux_topic}: tf_static 에 {a.aux_frame} 없음 → 생략"); use_aux = False
 if use_aux: print(f"보조 LiDAR {a.aux_topic}: base→{T_b_aux[3].split('/')[-1]} t={np.round(T_b_aux[0],3).tolist()} · 모드 {a.aux_mode}")
-ns, pos, q, scans = [], [], [], []; aux = {}; main_n = {}
+ns, pos, q, scans = [], [], [], []; aux = {}; main_n = {}; odom_fr = []
 with open(a.mcap, "rb") as f:
     for sch, ch, msg in make_reader(f).iter_messages(topics=["/Odometry/base", "/cloud_registered"] + (["/livox/lidar", a.aux_topic] if use_aux else [])):
         if ch.topic == "/cloud_registered":
             h, P = RM.pc2(msg.data, sch); scans.append((h["ns"], xyz_of(P).astype(np.float32), h["frame"]))
         elif ch.topic == "/Odometry/base":
             ns_, p_, q_ = RM.odom(msg.data, sch); ns.append(ns_); pos.append(p_); q.append([q_[3], q_[0], q_[1], q_[2]])
+            if RM.is_v2(sch): c_ = RM._Cur(msg.data, 8); odom_fr.append((ns_, c_.header()[1]))
         elif ch.topic == a.aux_topic:
             ns_, xyz_, _, _ = RM.lidar_scan(msg.data, sch); aux[ns_] = xyz_
         else:
@@ -46,9 +47,19 @@ if a.pose_graph:
 import collections; fc = collections.Counter(f for _, _, f in scans); world_frame = fc.most_common(1)[0][0]
 skipped = [(ts / 1e9, f) for ts, _, f in scans if f != world_frame]
 if skipped: print(f"frame_id 불일치 스캔 {len(skipped)}개 제외 (world='{world_frame}'): " + ", ".join(f"{t:.2f}s:{f}" for t, f in skipped[:8]))
+# 오도메트리 frame_id 검사: 녹화 중 위치추정 모드로 바뀌면(예: 저장 맵 '1015_1' 로드) /Odometry/base 의 frame_id 가 맵 이름으로 바뀌고,
+# 그 뒤 /cloud_registered 는 frame_id 는 그대로인데 좌표가 그 맵 기준이 된다 → 오도메트리 frame 이 주 frame 이 아닌 시각의 스캔은 제외
+odom_bad = []
+if odom_fr:
+    ofc = collections.Counter(f for _, f in odom_fr); odom_main = ofc.most_common(1)[0][0]; ofr_ns = np.array([t for t, _ in odom_fr], np.int64); ofr_ok = np.array([f == odom_main for _, f in odom_fr])
+    if not ofr_ok.all(): print(f"/Odometry/base frame_id 불일치 {int((~ofr_ok).sum())}개 (주 frame '{odom_main}', 다른 frame {sorted(set(f for _, f in odom_fr if f != odom_main))}) → 그 구간 스캔 제외")
+def odom_frame_ok(ts):
+    if not odom_fr: return True
+    i = int(np.searchsorted(ofr_ns, ts, side="right")) - 1; return bool(ofr_ok[max(i, 0)])
 n_ok = 0
 for i, (ts, P, fr) in enumerate(scans):
     if fr != world_frame: continue
+    if not odom_frame_ok(ts): odom_bad.append(ts); continue
     if use_aux:                                                              # lidar_slam 이 합치지 못한 스캔에 보조 LiDAR 점 추가 (실시간 오도메트리 프레임 = registered 와 같은 프레임)
         ka = nearest(aux, ts); km = nearest(main_n, ts)
         merged = (km is not None) and (len(P) >= 1.3 * main_n[km])
@@ -72,4 +83,4 @@ for i, (ts, P, fr) in enumerate(scans):
     origin = (T[:3, :3] @ t_bl + T[:3, 3]).astype(np.float32)
     r = np.linalg.norm(P - origin, axis=1); P = P[(r > 0.3) & (r < a.max_range)]
     np.savez(os.path.join(a.out, "%06d.npz" % i), xyz=P, origin=origin, stamp_ns=np.int64(ts)); n_ok += 1
-print(f"스캔 {n_ok}/{len(scans)} 저장 → {a.out}" + (f" · 보조 LiDAR: SLAM 이 합친 스캔 {n_aux_merged} · 파이프라인이 채운 스캔 {n_aux_added} · 못 채움 {globals().get('n_aux_skip', 0)} {globals().get('aux_skip_why', {})}" if use_aux else ""))
+print(f"스캔 {n_ok}/{len(scans)} 저장 → {a.out}" + (f" · 오도메트리 frame 전환으로 제외 {len(odom_bad)}" if odom_bad else "") + (f" · 보조 LiDAR: SLAM 이 합친 스캔 {n_aux_merged} · 파이프라인이 채운 스캔 {n_aux_added} · 못 채움 {globals().get('n_aux_skip', 0)} {globals().get('aux_skip_why', {})}" if use_aux else ""))

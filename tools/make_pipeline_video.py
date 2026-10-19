@@ -32,6 +32,8 @@ def panel_title(img, text):
     return np.vstack([bar, img])
 
 def seg_overlay(rgb, sem):
+    if sem.shape[:2] != rgb.shape[:2]:                        # 세그 결과는 긴 변 640·입력 비율 유지 (16:9 면 640x360) → 패널 크기로 맞춤
+        sem = np.stack([cv2.resize(sem[..., c], (rgb.shape[1], rgb.shape[0]), interpolation=cv2.INTER_LINEAR) for c in range(sem.shape[-1])], -1)
     p = sem.astype(np.float32) / 255.0                       # (H,W,N)
     color = (p[..., :, None] * COL[None, None]).sum(2)       # 확률 가중 색 (H,W,3)
     alpha = np.clip(p.sum(-1, keepdims=True), 0, 1) * 0.65

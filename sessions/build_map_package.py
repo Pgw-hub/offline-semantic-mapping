@@ -238,13 +238,19 @@ class Build:
     def step_D(self):
         env = {"YOLO_CONFIG_DIR": "/root/.yolo", "CG_MASK_BOTTOM_PX": str(self.opt["mask_bottom_px"]), "CG_DROP_CLASSES": self.opt["drop_classes"],
                "CG_LOG_SCENE_CLOUD": str(self.opt["scene_cloud"])}
+        # 카메라 설정은 세션 캘리브레이션에서 (CG 기본 raibo.yaml 은 옛 로봇 640x480 fx 384.8 고정 → 다른 카메라·해상도면 마스크 크기 불일치로 죽음)
+        dcfg = os.path.join(self.D["dataset"], "cg_dataconfig.yaml")
+        if not self.dry:
+            ci = yaml.safe_load(open(os.path.join(self.calib, "d455_front_color_caminfo.yaml")))["camera_info"]; K = ci["K"]
+            yaml.safe_dump({"dataset_name": "replica", "camera_params": {"image_height": int(ci["height"]), "image_width": int(ci["width"]), "fx": float(K[0]), "fy": float(K[4]),
+                            "cx": float(K[2]), "cy": float(K[5]), "png_depth_scale": 1000.0, "crop_edge": 0}}, open(dcfg, "w"), sort_keys=False)
         for log in self.logs:
             exp = os.path.join(self.ds(log), "exps", "r_mapping_stride10")
             if self.done("D", exp, lambda: bool(glob.glob(os.path.join(exp, "obj_json_*.json"))) and bool(glob.glob(os.path.join(exp, "pcd_*.pkl.gz")))): continue
             if os.path.isdir(os.path.join(self.ds(log), "exps")) and not self.dry:
                 shutil.rmtree(os.path.join(self.ds(log), "exps"))          # 불완전 detections 재사용 방지
             env["CG_HEADLESS_RRD"] = os.path.join(self.ds(log), f"rerun_{log}.rrd")
-            self.run([PY, "slam/rerun_realtime_mapping.py", f"scene_id={log}", f"dataset_root={self.D['dataset']}"], cwd=CGREPO, env=env, logname=f"D_{log}.log")
+            self.run([PY, "slam/rerun_realtime_mapping.py", f"scene_id={log}", f"dataset_root={self.D['dataset']}", f"dataset_config={dcfg}"], cwd=CGREPO, env=env, logname=f"D_{log}.log")
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # E (graph) — D 의 로그별 객체를 세션 하나의 "3D scene graph" 로 묶는다. 노드 = 객체, 엣지 = 관계.
     #   ① map_compiler.py merge : 로그 간 같은 객체 병합 → compiled/session_objects.json (+ _clip.npz, CLIP 1024D)

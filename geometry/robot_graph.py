@@ -23,19 +23,28 @@ def wrap(a): return np.angle(np.exp(1j * a))
 def read(mcap_dir, logs):
     files = sorted(glob.glob(os.path.join(mcap_dir, "log_*.mcap")))
     if logs is not None: files = [f for f in files if int(os.path.basename(f)[4:7]) in logs]
-    per_log, last_path, acc = {}, None, {}                    # acc: v2 증분 발행 /path/pgo 누적 (stamp → pose, 같은 stamp 는 최신 메시지)
+    per_log, last_path, acc = {}, None, {}; frames_all = []                    # acc: v2 증분 발행 /path/pgo 누적 (stamp → pose, 같은 stamp 는 최신 메시지)
     for f in files:
-        name = os.path.basename(f)[:-5]; ns, pos, qx = [], [], []
+        name = os.path.basename(f)[:-5]; ns, pos, qx, fr = [], [], [], []
         for sch, ch, m in make_reader(open(f, "rb")).iter_messages(topics=["/Odometry/base", "/path/pgo"]):
             d = m.data
             if ch.topic == "/Odometry/base":
-                ns_, v = RM.odom13(d, sch); ns.append(ns_); pos.append(v[:3]); qx.append(v[3:7])
+                ns_, v = RM.odom13(d, sch); ns.append(ns_); pos.append(v[:3]); qx.append(v[3:7]); fr.append(RM._Cur(d, 8).header()[1] if RM.is_v2(sch) else "")
             else:
                 P, pns = RM.path_poses(d, sch)
                 if last_path is None or len(P) >= len(last_path): last_path = P.copy()
                 if pns is not None:
                     for t_, p_ in zip(pns, P): acc[int(t_)] = p_.copy()
-        per_log[name] = (np.array(ns, np.int64), np.array(pos), np.array(qx))
+        per_log[name] = (np.array(ns, np.int64), np.array(pos), np.array(qx)); frames_all.extend(fr)
+    # 녹화 중 위치추정 모드로 바뀌면(저장 맵 로드) /Odometry/base frame_id 가 맵 이름으로 바뀌고 좌표계가 달라진다 → 주 frame 이 아닌 샘플은 버림 (그 구간은 자세 없음 = 스캔·카메라 프레임 제외)
+    import collections
+    fc = collections.Counter(frames_all); main = fc.most_common(1)[0][0] if fc else ""
+    if len(fc) > 1:
+        print(f"/Odometry/base frame_id 여러 개 {dict(fc)} → 주 frame '{main}' 외 샘플 제외")
+        k0 = 0
+        for name in list(per_log):
+            n_, p_, q_ = per_log[name]; keep = np.array([f == main for f in frames_all[k0:k0 + len(n_)]], bool); k0 += len(n_)
+            per_log[name] = (n_[keep], p_[keep], q_[keep])
     ns = np.concatenate([v[0] for v in per_log.values()]); pos = np.concatenate([v[1] for v in per_log.values()]); qx = np.concatenate([v[2] for v in per_log.values()])
     o = np.argsort(ns); T = np.array([T_of(p, q) for p, q in zip(pos[o], qx[o])])
     return per_log, ns[o], T, last_path, acc
