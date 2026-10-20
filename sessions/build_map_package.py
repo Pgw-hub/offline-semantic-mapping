@@ -73,7 +73,7 @@ class Build:
                     "vlm_model": "Qwen/Qwen2.5-VL-32B-Instruct", "occupancy_res": 0.2, "prob_hit": 0.85, "prob_miss": 0.45,
                     "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "view_cubes": False, "view_sub": 1, "video_speed": 15, "video_width": 960, "video_pipeline": True, "quality_img_stride": 15, "classdict": "default", "label_edge_px": 4, "require_depth": True, "map_id": os.path.basename(self.root),
                     "frame": "SLAM world (/Odometry/base)", "pose_graph": False, "lidar_extrinsic": "calib", "livox_flip": True, "depth_fill_range": 4.0, "depth_fill_gap": 0.15,
-                    "voxel3d": {"res_xy": 0.025, "res_z": 0.025, "prob_res": 0.1, "free_range": 8.0, "tile_m": 10.0, "fill_flat": 0.0, "depth": True, "variants": []}}
+                    "voxel3d": {"res_xy": 0.025, "res_z": 0.025, "prob_res": 0.025, "free_range": 8.0, "tile_m": 10.0, "fill_flat": 0.0, "depth": True, "variants": []}}
         self.opt.update(cfg.get("options", {}))
         self.graph = os.path.join(self.root, "graph")
         self.geo_only = bool(self.opt.get("geometry_only"))                     # 카메라 없는 기하 전용 빌드 (보행 맵만)
@@ -341,7 +341,7 @@ class Build:
             if not self.done("F", vrrd):
                 self.run([PY, f"{CG}/voxel3d_view.py", vout + ".npz", vrrd, *self.voxsem_args(), "--bev", os.path.join(self.D["compiled"], f"voxel3d_{var}_bev.png"), "--sub", "4"],
                          env={"CUDA_VISIBLE_DEVICES": ""}, logname=f"F_voxel3d_{var}_view.log")
-    opt_default_voxel3d = {"res_xy": 0.025, "res_z": 0.025, "prob_res": 0.1, "free_range": 8.0, "tile_m": 10.0, "fill_flat": 0.0, "depth": True, "variants": []}
+    opt_default_voxel3d = {"res_xy": 0.025, "res_z": 0.025, "prob_res": 0.025, "free_range": 8.0, "tile_m": 10.0, "fill_flat": 0.0, "depth": True, "variants": []}
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # G (package) — 지금까지의 산출물을 "맵 패키지" 하나로 묶는 매니페스트를 쓴다. 이후 소비자(load_map, verify_requests,
     #   localize, export_pcd, 포털)는 재계산 없이 이 JSON 만 읽는다.

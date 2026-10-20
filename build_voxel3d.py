@@ -4,7 +4,7 @@
 입력: 키프레임 시각 /cloud_registered 스캔(export_registered_scans.py → lidar_scans/*.npz: xyz, origin, stamp_ns; 최종 PGO 지도 프레임)
       + 세션 semantic 복셀 session_voxsem.npz (0.1 m 클래스, depth_xyz = depth 채움 점)
 두 격자:
-  · 확률 격자(prob_res, 정육면체, 기본 0.1 m): 스캔마다 원점→끝점 레이캐스팅. 끝점 셀 hit, 통과 셀 miss (스캔당 셀 1회, OctoMap insertPointCloud 와 동일).
+  · 확률 격자(prob_res, 정육면체, 기본 0.025 m — 2026-10-20~, 이전 0.1): 스캔마다 원점→끝점 레이캐스팅. 끝점 셀 hit, 통과 셀 miss (스캔당 셀 1회, OctoMap insertPointCloud 와 동일).
     log-odds 를 배치(batch 스캔≈4 s)마다 순차 갱신·클램프 [-2, 3.5] (OctoMap 근사: 최근 상태가 이긴다). 점유 = log-odds > 0.  → 한두 번 스친 사람·튀는 점은 miss 가 쌓여 지워진다.
   · 세부 격자(res_xy × res_xy × res_z, 기본 0.025×0.025×0.1 = 로봇 voxel_mapping 격자): hit 점마다 count / mean z / z 표준편차 / 관측 스캔 수.
     세부 셀의 점유 판정은 부모 확률 셀의 log-odds 로 한다 (얇은 표면이 세부 격자에서 miss 에 침식되는 것을 막고, 노이즈 제거는 확률 격자가 담당).
@@ -14,7 +14,7 @@
   <out>.npz           ijk(int32, 세부 격자 인덱스) · mean_z(f32, 절대 z) · max_z(f32, 셀 안 최대 z; 계단 코 보수 규칙용) · std_z · count · n_scans · logodds(f16, 부모) · cls(u8) · source(u8: 1 LiDAR 2 depth 3 평탄채움) · tile(int32)
                       coarse_ijk / coarse_logodds / coarse_hits / coarse_misses (확률 격자 전체: free 공간 포함) · removed_* (제거된 셀, 검수용) · params(json)
   <out>_tiles/        index.json + t_<tx>_<ty>.bin — tile_m(기본 10 m) 타일별 struct 배열(24 B/셀). 로봇은 자기 창(10 m)을 덮는 3×3 타일만 RAM 에 올리면 된다.
-사용: python build_voxel3d.py --scans dirA [dirB] --voxsem session_voxsem.npz --out compiled/session_voxel3d [--res-xy 0.025 --res-z 0.1 --prob-res 0.1]
+사용: python build_voxel3d.py --scans dirA [dirB] --voxsem session_voxsem.npz --out compiled/session_voxel3d [--res-xy 0.025 --res-z 0.025 --prob-res 0.025]
       [--free-range 8] [--skip-every N --skip-phase k]  ← 평가용 hold-out (i % N == k 스캔 제외)   [--no-prob] ← 확률 판정 끄기(모든 hit 유지; 비교용)
 """
 import argparse, glob, json, os, sys, time
@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__))); import classdict
 ap = argparse.ArgumentParser()
 ap.add_argument("--scans", nargs="+", required=True); ap.add_argument("--out", required=True)
 ap.add_argument("--voxsem", default=None, help="세션 semantic 복셀 (C 단계). 없으면 기하 전용: 클래스 전부 255(unlabeled), depth 채움·동적 클래스 제거 없음")
-ap.add_argument("--res-xy", type=float, default=0.025); ap.add_argument("--res-z", type=float, default=0.025); ap.add_argument("--prob-res", type=float, default=0.1)
+ap.add_argument("--res-xy", type=float, default=0.025); ap.add_argument("--res-z", type=float, default=0.025); ap.add_argument("--prob-res", type=float, default=0.025)
 ap.add_argument("--max-range", type=float, default=30.0, help="hit 으로 쓸 최대 거리"); ap.add_argument("--free-range", type=float, default=8.0, help="free 레이 최대 길이")
 ap.add_argument("--prob-hit", type=float, default=0.85); ap.add_argument("--prob-miss", type=float, default=0.45)
 ap.add_argument("--min-scans", type=int, default=1, help="세부 셀 최소 관측 스캔 수")
@@ -35,6 +35,7 @@ ap.add_argument("--fill-flat", type=float, default=0.0, help="평탄 채움: 확
 ap.add_argument("--tile-m", type=float, default=10.0); ap.add_argument("--no-tiles", action="store_true")
 ap.add_argument("--skip-every", type=int, default=0); ap.add_argument("--skip-phase", type=int, default=0)
 ap.add_argument("--batch", type=int, default=40)
+ap.add_argument("--crop", default=None, help="저장할 영역만 남김 (레이캐스팅은 전체 스캔으로): 'cx,cy,axx,axy,t0,t1,l0,l1[,z0,z1]' — 중심(cx,cy)·축(axx,axy) 기준 회전 사각형 t∈[t0,t1](축 방향)·l∈[l0,l1](왼쪽 수직), 선택 z∈[z0,z1] (world z)")
 ap.add_argument("--occupancy", choices=["own", "bonxai"], default="own", help="확률 격자(prob_res) 점유 판정: own = 이 스크립트의 레이캐스팅 · bonxai = Bonxai ProbabilisticMap (tools/bonxai). 세부 격자 통계·채움·타일은 같다")
 ap.add_argument("--bonxai-bin", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "tools", "bonxai", "bonxai_occupancy"))
 a = ap.parse_args()
@@ -159,11 +160,11 @@ if v is not None and not a.no_depth and "depth_xyz" in v.files and len(v["depth_
 
 # 최종 배열
 I = fI[occ]; cnt = f_cnt[occ]; mz = mean_z[occ]; sd = std_z[occ]; ns = f_ns[occ]; lo = f_lo[occ]; cls = f_cls[occ]; src = np.ones(len(I), np.uint8); mxz_all = f_mx[occ]
-# 평탄 채움: 같은 (확률 셀 xy, iz) 그룹의 LiDAR 세부 셀 z 퍼짐이 작으면(국소 평면) 4×4 xy 발자국의 빈 세부 셀을 그룹 평균 z 로 채움 (source 3).
+# 평탄 채움: 같은 (0.1 m 칸 xy — 확률 격자가 그보다 크면 확률 칸, iz) 그룹의 LiDAR 세부 셀 z 퍼짐이 작으면(국소 평면) 4×4 xy 발자국의 빈 세부 셀을 그룹 평균 z 로 채움 (source 3).
 #   LiDAR 점 밀도가 2.5 cm 격자보다 성겨서 생기는 바닥 빈칸을 메운다. 벽·모서리(z 퍼짐 큼)는 채우지 않는다.
 n_fill = 0
 if a.fill_flat > 0:
-    nxy = int(round(RP / RX)); g = np.stack([np.floor_divide(I[:, 0], nxy), np.floor_divide(I[:, 1], nxy), I[:, 2]], -1); gk = key3(g)
+    nxy = max(2, int(round(max(RP, 0.1) / RX))); g = np.stack([np.floor_divide(I[:, 0], nxy), np.floor_divide(I[:, 1], nxy), I[:, 2]], -1); gk = key3(g)
     ug, inv = np.unique(gk, return_inverse=True); gn = np.bincount(inv); gmin = np.full(len(ug), np.inf); np.minimum.at(gmin, inv, mz); gmax = np.full(len(ug), -np.inf); np.maximum.at(gmax, inv, mz)
     gmean = np.bincount(inv, weights=mz) / gn; glo = np.bincount(inv, weights=lo) / gn
     flat = (gn >= 2) & (gn < nxy * nxy) & ((gmax - gmin) <= a.fill_flat)
@@ -179,6 +180,18 @@ if a.fill_flat > 0:
         lo = np.concatenate([lo, glo[gi]]); cls = np.concatenate([cls, fcls]); src = np.concatenate([src, np.full(n_fill, 3, np.uint8)]); mxz_all = np.concatenate([mxz_all, gmax[gi]])
 if D is not None:
     I = np.concatenate([I, D[0]]); cnt = np.concatenate([cnt, D[1]]); mz = np.concatenate([mz, D[2]]); sd = np.concatenate([sd, D[3]]); ns = np.concatenate([ns, D[4]]); lo = np.concatenate([lo, D[5]]); cls = np.concatenate([cls, D[6]]); src = np.concatenate([src, np.full(len(D[0]), 2, np.uint8)]); mxz_all = np.concatenate([mxz_all, D[7]])
+# 영역 자르기 (--crop): 세부 셀·확률 격자·제거 셀 모두 같은 회전 사각형으로
+def crop_mask(xy, z=None):
+    v = [float(q) for q in a.crop.split(",")]; c_ = np.array(v[:2]); ax_ = np.array(v[2:4]) / np.linalg.norm(v[2:4]); la_ = np.array([-ax_[1], ax_[0]])
+    t_ = (xy - c_) @ ax_; l_ = (xy - c_) @ la_; m_ = (t_ >= v[4]) & (t_ <= v[5]) & (l_ >= v[6]) & (l_ <= v[7])
+    if len(v) >= 10 and z is not None: m_ &= (z >= v[8]) & (z <= v[9])
+    return m_
+if a.crop:
+    m = crop_mask((I[:, :2] + 0.5) * RX, mz); n0 = len(I)
+    I, cnt, mz, sd, ns, lo, cls, src, mxz_all = I[m], cnt[m], mz[m], sd[m], ns[m], lo[m], cls[m], src[m], mxz_all[m]
+    cI = unkey(ck); mc = crop_mask((cI[:, :2] + 0.5) * RP, (cI[:, 2] + 0.5) * RP); ck, c_lo, c_hits, c_miss = ck[mc], c_lo[mc], c_hits[mc], c_miss[mc]
+    mr = crop_mask((removed_ijk[:, :2] + 0.5) * RX, (removed_ijk[:, 2] + 0.5) * RZ); removed_ijk, removed_why = removed_ijk[mr], removed_why[mr]
+    print(f"영역 자르기 {a.crop}: 세부 셀 {n0:,} → {len(I):,}")
 # 타일
 tile_cells = int(round(a.tile_m / RX)); tx = np.floor_divide(I[:, 0], tile_cells); ty = np.floor_divide(I[:, 1], tile_cells)
 tkey = (tx + OFF) * (2 * OFF) + (ty + OFF); order = np.lexsort((I[:, 2], I[:, 1], I[:, 0], tkey))
@@ -191,7 +204,7 @@ for ti, (s, e) in enumerate(zip(tstart, np.r_[tstart[1:], len(tkey)])):
 params = {"frame": "robot lidar_slam saved map frame (final PGO) — /cloud_registered at keyframe times", "res_xy": RX, "res_z": RZ, "prob_res": RP, "prob_hit": a.prob_hit, "prob_miss": a.prob_miss,
           "free_range": a.free_range, "max_range": a.max_range, "min_scans": a.min_scans, "prob": not a.no_prob, "depth": (not a.no_depth) and bool(a.voxsem), "depth_max_miss": a.depth_max_miss, "drop_dynamic": not a.keep_dynamic,
           "tile_m": a.tile_m, "tile_cells": tile_cells, "semantic": bool(a.voxsem), "occupancy": a.occupancy, "bonxai": bonxai_stats, "n_scans": len(files), "n_points": int(n_pts_tot), "skip_every": a.skip_every, "skip_phase": a.skip_phase, "classes": classes,
-          "class_codes": {"254": "other(low confidence)", "255": "unlabeled"}, "source_codes": {"1": "lidar(cloud_registered)", "2": "depth fill", "3": "flat fill (interpolated within 0.1 m cell)"}, "fill_flat": a.fill_flat}
+          "class_codes": {"254": "other(low confidence)", "255": "unlabeled"}, "source_codes": {"1": "lidar(cloud_registered)", "2": "depth fill", "3": "flat fill (interpolated within 0.1 m cell)"}, "fill_flat": a.fill_flat, "crop": a.crop}
 np.savez_compressed(a.out + ".npz", ijk=I.astype(np.int32), mean_z=mz.astype(np.float32), max_z=mxz_all.astype(np.float32), std_z=sd.astype(np.float16), count=np.minimum(cnt, 65535).astype(np.uint16), n_scans=np.minimum(ns, 65535).astype(np.uint16),
                     logodds=lo.astype(np.float16), cls=cls.astype(np.uint8), source=src, tile=tile_id, res_xy=RX, res_z=RZ, prob_res=RP, classes=np.array(classes),
                     coarse_ijk=unkey(ck).astype(np.int32), coarse_logodds=c_lo.astype(np.float16), coarse_hits=np.minimum(c_hits, 65535).astype(np.uint16), coarse_misses=np.minimum(c_miss, 65535).astype(np.uint16),
