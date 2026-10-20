@@ -26,6 +26,7 @@
                   + session_voxel3d_tiles/(10 m 타일 바이너리, 로봇 적재용) + voxel3d_view.rrd/voxel3d_bev.png (기본 0.025 정육면체, 2026-10-15~) + 선택 변형 z01(로봇 VoxelMap 격자 0.025×0.025×0.1, options.voxel3d.variants). options.voxel3d: false 면 생략
   G  package    map_manifest.json 작성 + 코스트맵(costmap_from_occupancy) 등록
   H  view       compiled/map_package.rrd — 기본 0.1m 점 표현 (options.view_cubes: true 면 view_coarse m 큐브)
+                + compiled/potree/ Potree 웹 뷰어 (tools/potree/potree_export.py; options.potree: false 면 생략)
   Q  quality    mcap 데이터 품질(토픽별 dt/rate/size, 유실·커버리지 이벤트) + 재생 rerun → compiled/data_quality.{rrd,json}
   V  video      RGB 배속 영상 compiled/session_rgb_x<speed>.mp4 + 3분할(RGB|검출|세그) session_pipeline_x<speed>.mp4 (options.video_speed 0 이면 생략)
 기하 전용 (options.geometry_only: true): 카메라 없이 LiDAR 만으로 보행 맵(voxel3d 타일)을 만든다. Q,P,S,F,G,H 만 돌고(A,R,B,C,D,E,V 생략),
@@ -397,7 +398,11 @@ class Build:
     #   ② compiled/summary.json + bev.png : 셀 수·객체 수·크기 등 통계와 상단 뷰 썸네일 — 웹 포털 카드가 읽는다. 항상 갱신.
     # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_H(self):
-        if self.geo_only: return self.step_H_geometry()
+        if self.geo_only: self.step_H_geometry()
+        else: self.step_H_package()
+        self.step_H_potree()
+
+    def step_H_package(self):
         man = os.path.join(self.D["compiled"], "map_manifest.json"); rrd = os.path.join(self.D["compiled"], "map_package.rrd")
         if not self.done("H", rrd):
             cmd = [PY, f"{CG}/load_map.py", man, "--rrd", rrd, "--sub", str(self.opt.get("view_sub", 1))]
@@ -426,6 +431,20 @@ class Build:
             js = json.load(open(v3s)); summ["voxel3d"] = {k: js.get(k) for k in ("cells", "cells_lidar", "cells_flat_fill", "total_mb", "tiles", "tile_mb_max", "removed_prob_free")}
         if os.path.exists(os.path.join(comp, "voxel3d_bev.png")): shutil.copyfile(os.path.join(comp, "voxel3d_bev.png"), os.path.join(comp, "bev.png"))
         json.dump(summ, open(os.path.join(comp, "summary.json"), "w"), ensure_ascii=False, indent=1); self.say("  summary.json 갱신 (기하 전용)")
+
+    # ③ compiled/potree/ : Potree 웹 뷰어 (보행 맵 voxel3d·변형 + 정합된 원시 LiDAR 점) — 포털 'Potree' 버튼. options.potree: false 면 생략.
+    #    보행 맵이 뷰어보다 새로우면 다시 만든다. 실패해도 빌드는 계속 (뷰어는 검수용).
+    def step_H_potree(self):
+        if not self.opt.get("potree", True) or self.dry: return
+        comp = self.D["compiled"]; idx = os.path.join(comp, "potree", "index.html")
+        srcs = [f for f in glob.glob(os.path.join(comp, "session_voxel3d*.npz")) if not f.endswith("_summary.npz")]
+        if not srcs: self.say("  Potree: voxel3d 없음 → 생략"); return
+        stale = not os.path.exists(idx) or max(os.path.getmtime(f) for f in srcs) > os.path.getmtime(idx)
+        if not stale and "H" not in self.force: self.say(f"  건너뜀 (있음): {idx}"); return
+        try:
+            self.run([PY, f"{REPO}/tools/potree/potree_export.py", self.root, "--force"], env={"CUDA_VISIBLE_DEVICES": ""}, logname="H_potree.log")
+        except Exception as ex:
+            self.say(f"  Potree 생성 실패(빌드는 계속): {ex}")
 
     def chown_outputs(self):
         """컨테이너(root)가 만든 산출물을 output 폴더 소유자(호스트 사용자)에게 넘김"""

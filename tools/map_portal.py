@@ -237,7 +237,7 @@ def scan_maps():
                      "mcap_dir": man.get("source", {}).get("mcap_dir", ""), "logs": logs, "n_logs": len(logs), "calib": man.get("source", {}).get("calib", ""),
                      "options": man.get("options", {}), "files": man.get("files", {}), "package_mb": round(size / 1e6, 1), "geometry_source": man.get("geometry_source", "raw scans"),
                      "summary": summ, "rrd": rel("map_package.rrd"), "manifest": f"output/{name}/compiled/map_manifest.json",
-                     "voxel3d": man.get("voxel3d"), "voxel3d_rrd": rel("voxel3d_view.rrd"),
+                     "voxel3d": man.get("voxel3d"), "voxel3d_rrd": rel("voxel3d_view.rrd"), "potree": (f"output/{name}/compiled/potree/index.html" if os.path.exists(os.path.join(comp, "potree", "index.html")) else None),   # tools/potree/potree_export.py
                      "voxel3d_variants": sorted({os.path.basename(f)[len("session_voxel3d_"):-len(".npz")] for f in glob.glob(os.path.join(comp, "session_voxel3d_*.npz")) if not os.path.basename(f).startswith("eval_") and not f.endswith("_summary.npz")}),   # 예: ["iso025"]
                      "voxel3d_variant_rrds": {os.path.basename(f)[len("voxel3d_"):-len("_view.rrd")]: f"output/{name}/compiled/{os.path.basename(f)}" for f in glob.glob(os.path.join(comp, "voxel3d_*_view.rrd"))}, "voxel3d_bev": rel("voxel3d_bev.png"), "voxel3d_tiles": (f"output/{name}/compiled/session_voxel3d_tiles/index.json" if os.path.exists(os.path.join(comp, "session_voxel3d_tiles", "index.json")) else None),
                      "voxel3d_eval": (json.load(open(os.path.join(comp, "voxel3d_eval.json"))) if os.path.exists(os.path.join(comp, "voxel3d_eval.json")) else None),
@@ -319,7 +319,25 @@ class H(http.server.SimpleHTTPRequestHandler):
             if not os.path.exists(f): return self.send_json({"error": "no log"}, 404)
             lines = open(f, errors="replace").read().splitlines()[-200:]
             return self.send_json({"name": name, "lines": lines})
-        return super().do_GET()
+        return self.serve_static()
+    def serve_static(self):
+        """정적 파일 + HTTP Range(206). Potree 2.0 뷰어는 octree.bin 을 노드마다 바이트 범위로 읽는다 (기본 핸들러는 Range 를 무시하고 전체를 보냄)."""
+        rng = self.headers.get("Range"); path = self.translate_path(self.path)
+        m = re.match(r"bytes=(\d*)-(\d*)$", rng.strip()) if rng else None
+        if not m or not os.path.isfile(path) or (m.group(1) == "" and m.group(2) == ""): return super().do_GET()
+        size = os.path.getsize(path)
+        if m.group(1) == "": start, end = max(0, size - int(m.group(2))), size - 1
+        else: start, end = int(m.group(1)), min(int(m.group(2)) if m.group(2) else size - 1, size - 1)
+        if start > end or start >= size:
+            self.send_response(416); self.send_header("Content-Range", f"bytes */{size}"); self.end_headers(); return
+        self.send_response(206); self.send_header("Content-Type", self.guess_type(path)); self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Range", f"bytes {start}-{end}/{size}"); self.send_header("Content-Length", str(end - start + 1)); self.end_headers()
+        with open(path, "rb") as f:
+            f.seek(start); left = end - start + 1
+            while left > 0:
+                chunk = f.read(min(1 << 20, left))
+                if not chunk: break
+                self.wfile.write(chunk); left -= len(chunk)
     def do_POST(self):
         u = urllib.parse.urlparse(self.path); p = u.path
         if TOKEN and self.headers.get("X-Portal-Token", "") != TOKEN: return self.send_json({"error": "토큰 필요"}, 401)
