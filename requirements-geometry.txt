@@ -1,0 +1,16 @@
+# 기하 전용 빌드 (options.geometry_only: true) — GPU·ConceptGraphs·모델 없이 LiDAR 만으로 보행용 voxel map(locomotion map) 을 만든다.
+# 노트북 등 외부 PC: python3 -m venv .venv && .venv/bin/pip install -r requirements-geometry.txt
+# 실행: .venv/bin/python sessions/build_map_package.py <session.yaml>   (단계 Q,P,S,F,G,H 만 돈다)
+# 버전은 서버 컨테이너(offline-3d-semantic-map) 기준. rerun-sdk 는 .rrd 를 열 뷰어와 같은 버전이어야 한다.
+numpy>=1.24,<2      # open3d 휠과 맞춤 (컨테이너 1.26.4)
+PyYAML>=6.0
+mcap>=1.1
+zstandard
+lz4
+rerun-sdk==0.16.1
+pyarrow>=14,<26     # rerun 0.16 이 끌어오는 pyarrow 26 은 numpy 2 필요 → 컨테이너와 같은 25 이하
+opencv-python-headless>=4.8
+open3d>=0.18,<0.21
+# 선택: 트랙 1(robot_map 없음, 서버가 PGO) 일 때만 필요
+# gtsam==4.2.2
+# 선택: Potree 뷰어 생성은 PotreeConverter 2.1.1 실행 파일이 tools/potree/PotreeConverter/build/ 에 있어야 한다 (없으면 그 단계만 건너뜀)

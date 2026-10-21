@@ -6,6 +6,7 @@
 - 그 외 경로                저장소 파일 서빙 (CORS) — rerun 뷰어가 .rrd 를 여기서 받는다 (rrd_http.py 대체)
 사용: python tools/map_portal.py [저장소 루트=이 파일의 상위] [포트=9092]
 """
+import os as _os, sys as _sys; _sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..")))  # 저장소 루트 (패키지 import)
 import http.server, functools, glob, json, os, re, subprocess, sys, threading, time, urllib.parse
 
 ROOT = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -58,7 +59,7 @@ def public_url():
             if m: url = m[-1]
     except Exception: pass
     _pub.update(t=time.time(), v=url); return url
-sys.path.insert(0, ROOT); import classdict as CD
+sys.path.insert(0, ROOT); from common import classdict as CD
 LABELS = {space: CD.labels_for(space) for space in {m["labels"] for m in CD.MODELS.values()}}   # 라벨 공간별 목록 (편집기 검색용): classdicts/<space>_labels.json
 ADE_LABELS = LABELS.get("ade20k", [])
 
@@ -281,7 +282,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             dep = os.path.join(OUT, name, "compiled", "session_costmap_occ.npz")
             if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(dep):
                 try:
-                    import export_pcd; export_pcd.export_raisin_map_zip(man, out, mname, road, cwx)
+                    from package import export_pcd; export_pcd.export_raisin_map_zip(man, out, mname, road, cwx)
                 except Exception as e: return self.send_json({"error": f"raisin 맵 생성 실패: {e}"}, 500)
             return self.send_json({"ok": True, "path": f"output/{name}/compiled/export/{os.path.basename(out)}", "bytes": os.path.getsize(out)})
         if p.startswith("/api/maps/") and p.endswith("/pcd"):
@@ -296,7 +297,7 @@ class H(http.server.SimpleHTTPRequestHandler):
                 exp = os.path.join(OUT, name, "compiled", "export"); os.makedirs(exp, exist_ok=True); out = os.path.join(exp, f"{name}_voxel3d{vsuf}_tiles.zip")
                 if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(idx):
                     try:
-                        import export_pcd; export_pcd.export_voxel3d_zip(man, out, variant)
+                        from package import export_pcd; export_pcd.export_voxel3d_zip(man, out, variant)
                     except Exception as e: return self.send_json({"error": f"zip 생성 실패: {e}"}, 500)
                 rel = f"output/{name}/compiled/export/{name}_voxel3d{vsuf}_tiles.zip"
                 return self.send_json({"ok": True, "path": rel, "legend": None, "bytes": os.path.getsize(out)})
@@ -310,7 +311,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             if src == "voxel3d" and not os.path.exists(dep): return self.send_json({"error": f"voxel3d 변형 '{variant or 'default'}' 파일이 없습니다"}, 404)
             if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(dep):
                 try:
-                    import export_pcd; export_pcd.export(man, out, src, exclude, min_nsem, occ_filter, fmt, variant)
+                    from package import export_pcd; export_pcd.export(man, out, src, exclude, min_nsem, occ_filter, fmt, variant)
                 except Exception as e: return self.send_json({"error": f"PCD 생성 실패: {e}"}, 500)
             rel = f"output/{name}/compiled/export/{fname}"
             return self.send_json({"ok": True, "path": rel, "legend": rel[:-4] + "_legend.json", "bytes": os.path.getsize(out)})

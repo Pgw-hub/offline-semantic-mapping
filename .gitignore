@@ -1,6 +1,6 @@
 # 데이터·모델·산출물 (수 GB~) 은 제외, 코드와 문서만 추적
 data/
-voxel/
+/voxel/
 compiled/
 hf_cache/
 concept-graphs/
@@ -22,7 +22,7 @@ output/*/localize/
 refer/
 models/
 gt/robotplus_outdoor_testbed/train_data/
-tools/bonxai/bonxai_occupancy
+locomotion_map/bonxai/bonxai_occupancy
 tools/potree/PotreeConverter/
 tools/potree/viewer/build/
 tools/potree/viewer/libs/
