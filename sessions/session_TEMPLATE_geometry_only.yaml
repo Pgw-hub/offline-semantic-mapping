@@ -21,4 +21,4 @@ options:
   aux_lidar: "off"
   prob_hit: 0.85
   prob_miss: 0.45
-  voxel3d: {res_xy: 0.025, res_z: 0.025, prob_res: 0.025, free_range: 8.0, tile_m: 10.0, fill_flat: 0.0}
+  voxel3d: {res_xy: 0.025, res_z: 0.025, prob_res: 0.025, max_range: 5.0, free_range: 5.0, tile_m: 10.0, fill_flat: 0.0}

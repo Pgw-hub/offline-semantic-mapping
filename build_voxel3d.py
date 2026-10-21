@@ -15,7 +15,7 @@
                       coarse_ijk / coarse_logodds / coarse_hits / coarse_misses (확률 격자 전체: free 공간 포함) · removed_* (제거된 셀, 검수용) · params(json)
   <out>_tiles/        index.json + t_<tx>_<ty>.bin — tile_m(기본 10 m) 타일별 struct 배열(24 B/셀). 로봇은 자기 창(10 m)을 덮는 3×3 타일만 RAM 에 올리면 된다.
 사용: python build_voxel3d.py --scans dirA [dirB] --voxsem session_voxsem.npz --out compiled/session_voxel3d [--res-xy 0.025 --res-z 0.025 --prob-res 0.025]
-      [--free-range 8] [--skip-every N --skip-phase k]  ← 평가용 hold-out (i % N == k 스캔 제외)   [--no-prob] ← 확률 판정 끄기(모든 hit 유지; 비교용)
+      [--max-range 5 --free-range 5] [--skip-every N --skip-phase k]  ← 평가용 hold-out (i % N == k 스캔 제외)   [--no-prob] ← 확률 판정 끄기(모든 hit 유지; 비교용)
 """
 import argparse, glob, json, os, sys, time
 import numpy as np
@@ -25,7 +25,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--scans", nargs="+", required=True); ap.add_argument("--out", required=True)
 ap.add_argument("--voxsem", default=None, help="세션 semantic 복셀 (C 단계). 없으면 기하 전용: 클래스 전부 255(unlabeled), depth 채움·동적 클래스 제거 없음")
 ap.add_argument("--res-xy", type=float, default=0.025); ap.add_argument("--res-z", type=float, default=0.025); ap.add_argument("--prob-res", type=float, default=0.025)
-ap.add_argument("--max-range", type=float, default=30.0, help="hit 으로 쓸 최대 거리"); ap.add_argument("--free-range", type=float, default=8.0, help="free 레이 최대 길이")
+ap.add_argument("--max-range", type=float, default=5.0, help="hit 으로 쓸 최대 거리 (2026-10-20~ 기본 5 m: 먼 거리 스치는 빔의 혼합 픽셀 제외, 이전 30)"); ap.add_argument("--free-range", type=float, default=5.0, help="free 레이 최대 길이 (기본 5 m, 이전 8)")
 ap.add_argument("--prob-hit", type=float, default=0.85); ap.add_argument("--prob-miss", type=float, default=0.45)
 ap.add_argument("--min-scans", type=int, default=1, help="세부 셀 최소 관측 스캔 수")
 ap.add_argument("--no-prob", action="store_true", help="확률 판정 끄기 (hit 이 있는 셀 전부 점유; 비교용)")
