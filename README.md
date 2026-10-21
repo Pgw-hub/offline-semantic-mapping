@@ -48,6 +48,7 @@ offline_semantic_mapping/
 │   ├── package/               패키지 · 뷰어 · 영상
 │   ├── apps/                  패키지를 쓰는 응용 (코스트맵, 내비 내보내기, 위치추정)
 │   ├── common/                공용 (클래스 사전 · 세그 모델 레지스트리)
+│   ├── recording/             녹화 커버리지 모니터 (녹화 중 · 후 '어디가 비었나')
 │   └── dev/                   실험 · 평가 · 비교 도구 (빌드에는 안 쓰임)
 ├── sessions/             세션 yaml (빌드 설정)
 ├── tools/                맵 포털 웹 서버 · systemd 서비스 · Potree 뷰어/변환기
@@ -58,7 +59,7 @@ offline_semantic_mapping/
 ├── third_party/bonxai/   Bonxai (확률 점유 비교용 C++ 라이브러리)
 ├── models/               로컬 미세조정 체크포인트 (git 제외)
 ├── output/               빌드 결과 (git 제외)
-└── requirements-*.txt    컨테이너 밖 설치용 (geometry: 기하 전용, semantic: + SegFormer)
+└── requirements-*.txt    컨테이너 밖 설치용 (geometry: 기하 전용, semantic: + SegFormer, recording: 커버리지 모니터만)
 ```
 
 ### `scripts/pipeline/` — 빌드 단계
@@ -135,6 +136,31 @@ ConceptGraphs 객체 검출(D) 자체는 외부 설치본(`/data2/cg/concept-gra
 | `export_nav_semantic.py`, `crosswalk_extend.py` | 로봇 내비용 semantic 레이어 내보내기 · 횡단보도 확장 |
 | `localize.py`, `localize_server.py` | 맵 위 초기 위치추정 (CLI · 대화형 서버, `tools/start_localize_server.sh`) |
 | `verify_requests.py`, `robot_usecase_demo.py`, `policy_adherence.py` | 패키지만으로 로봇 요청 검증 · semantic 내비 유스케이스 데모 · 산책로 준수 정책 비교 |
+
+### `scripts/recording/` — 녹화 커버리지 모니터
+
+`coverage_monitor.py` 는 mcap 을 읽으면서 맵 빌더와 같은 기준으로 **어디가 매핑됐고 어디가 비었는지** 를 rerun 으로 보여준다. 녹화 중(`--live`, 레코더가 쓰는 파일을 뒤따라 읽음)에도, 녹화가 끝난 뒤에도 쓸 수 있다.
+
+- 위쪽 3D 두 화면은 같은 LiDAR 맵 위에 색만 다르게 칠한다.
+  - LiDAR 커버리지: 센서 5 m 이내에서 3번 이상 본 곳 초록, 그보다 적게 본 곳 노랑.
+  - 카메라 커버리지: semantic 라벨이 붙을 곳 파랑, 안 붙을 곳 보라.
+  - 둘 다 카메라 프러스텀 · RGB 영상 · 이동 경로를 같이 보여준다.
+- 아래쪽에는 위에서 본 2D 지도 2개(현재 카메라 화각 부채꼴 포함), 상태 그래프, 경고를 둔다.
+  - 상태: SLAM 지연, 레코더 유실, IO 압력, CPU.
+  - 경고: 토픽 끊김, 저장 맵 위치추정 모드 전환.
+- 판정 기준은 빌드 결과와 맞춰 검증했다 (`dev/coverage_vs_build.py`). LiDAR 는 칸 단위 99.8–100 %, 카메라는 86–93 % 일치.
+- 녹화 장비 부담은 녹화 시간 대비 CPU 코어 하나의 약 10 %. nice · ionice 로 돌고, 레코더 유실이나 큐가 늘면 depth 처리를 멈춘다.
+
+```bash
+python3 -m venv ~/.venvs/coverage && ~/.venvs/coverage/bin/pip install -r requirements-recording.txt   # 처음 한 번
+~/.venvs/coverage/bin/python scripts/recording/coverage_monitor.py <세션 폴더>               # 녹화 끝난 데이터 (rerun 창)
+~/.venvs/coverage/bin/python scripts/recording/coverage_monitor.py <녹화 중 세션 폴더> --live  # 녹화 중 (Ctrl+C 로 끝)
+#   --sim : 시뮬 녹화 · --mask-bottom 60 : 로봇 몸체가 화면 아래에 보이는 세션
+#   --view connect : 떠 있는 `rerun --serve` 로 보내 브라우저(http://<PC>:9091/?url=ws://<PC>:9877)로 보기
+#   --view save    : <out>/coverage.rrd 로 저장
+```
+
+`<세션 폴더>` 는 `log_000.mcap …` 과 `config_snapshot/raisin_root/calibration`(또는 `raisin_config/calibration`)이 있는 폴더다. 결과 `coverage_summary.json` · `coverage_bev.png` · `coverage_camera.png` · `coverage_grid.npz` 는 `output/_coverage/<세션 이름>/` 에 생긴다.
 
 ### `scripts/dev/` — 실험 · 평가 (빌드에는 안 쓰임)
 

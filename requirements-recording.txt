@@ -1,0 +1,10 @@
+# 녹화 커버리지 모니터(scripts/recording/coverage_monitor.py) 만 돌릴 때 — GPU · Docker 불필요, 녹화 PC 나 아무 PC 에서.
+# 버전은 requirements-geometry.txt 와 같음 (open3d 는 모니터가 안 써서 뺌)
+numpy>=1.24,<2
+PyYAML>=6.0
+mcap>=1.1
+zstandard
+lz4
+rerun-sdk==0.16.1
+pyarrow>=14,<26
+opencv-python-headless>=4.8
