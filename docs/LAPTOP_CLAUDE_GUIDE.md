@@ -49,9 +49,19 @@ cd offline-semantic-mapping
 docker build -f docker/laptop/Dockerfile -t offline-map-laptop .     # 약 15 GB, 10–20 분
 docker run --rm --gpus all offline-map-laptop python -c "import torch, open3d; print(torch.cuda.is_available(), torch.cuda.get_device_name(0), open3d.__version__)"
 # 기대값: True NVIDIA GeForce RTX 5070 Laptop GPU 0.19.0
+docker run --rm offline-map-laptop bash -c 'ls -l $POTREE_CONVERTER'      # Potree 변환기 (이미지 안에서 빌드됨)
 ```
 
-이미지는 서버에서 받는 것이 아니라 여기서 직접 빌드한다 (레지스트리에 없다).
+이미지는 서버에서 받는 것이 아니라 여기서 직접 빌드한다 (레지스트리에 없다). Potree 변환기(PotreeConverter 2.1.1)도 이미지 빌드 때 같이 컴파일된다.
+
+### 2.3 결과를 노트북에서 보기 위한 준비 (포털 · Potree 뷰어)
+
+```bash
+tools/potree/fetch_viewer.sh                                            # Potree 1.8.2 웹 뷰어 파일 (65 MB, git 에 없음)
+python3 -m venv ~/.venvs/rerun && ~/.venvs/rerun/bin/pip install -r requirements-geometry.txt   # 포털 · rerun 뷰어용 (rerun 0.16.1)
+```
+
+`tools/start_portal.sh` 가 `~/.venvs/rerun` 경로를 그대로 쓰므로 venv 는 이 위치에 만든다.
 
 ## 3. 세션 yaml 만들기
 
@@ -155,7 +165,8 @@ docker/laptop/run.sh sessions/<세션>.yaml                # 실제 빌드
 | 증상 | 원인 · 조치 |
 |---|---|
 | 단계 B 에서 `CUDA out of memory` | 세그멘테이션 batch 8 은 GPU 약 7 GB 를 쓴다. yaml `options` 에 `seg_batch: 4` (또는 2, 약 2.4 GB) 를 넣고 `--steps B --force B` 후 이어서 빌드. 결과는 batch 8 과 세그 픽셀 약 1 % 다르고 맵 차이는 0.01 % 수준이라 써도 된다. 바꿨으면 사용자에게 보고한다. |
-| 단계 H 로그에 `Potree 생성 실패(빌드는 계속)` · `PotreeConverter 없음` | 정상. `tools/potree/` (Potree 변환기 · 뷰어)는 git 에 없어서 노트북에서는 Potree 를 만들지 않는다. 서버에서 만든다 (6 참고). |
+| 단계 H 로그에 `Potree 생성 실패(빌드는 계속)` · `PotreeConverter 없음` | 이미지가 변환기를 넣기 전(2026-10-21 이전) 버전. `git pull` 후 2.2 의 `docker build` 를 다시 하고 `--steps H --force H` 로 Potree 만 다시 만든다. |
+| 포털의 Potree 화면이 비어 있음 | 뷰어 파일이 없음. `tools/potree/fetch_viewer.sh` 실행 (2.3). |
 | `mcap_dir 가 없습니다` | yaml 의 `mcap_dir` 가 노트북 경로가 아님. 서버 경로(`/data2/...`)를 그대로 복사하지 않았는지 확인. |
 | calibration 관련 파일 없음 | `<mcap_dir>/config_snapshot/raisin_root/calibration` 이 없는 녹화. 사용자에게 알린다 (yaml 에 `calib:` 로 다른 경로를 줄 수는 있다). |
 | `docker: permission denied` | 사용자가 docker 그룹에 없음. 사용자에게 묻는다. |
@@ -174,11 +185,20 @@ ls output/<결과 이름>/compiled/
 cat output/<결과 이름>/compiled/session_voxel3d_summary.json   # 셀 수 · 타일 수
 ```
 
-- 기하 전용: `map_manifest.json`, `session_voxel3d.npz`, `session_voxel3d_tiles/`, `voxel3d_bev.png`, `voxel3d_view.rrd`, `data_quality.json`
+- 기하 전용: `map_manifest.json`, `session_voxel3d.npz`, `session_voxel3d_tiles/`, `voxel3d_bev.png`, `voxel3d_view.rrd`, `data_quality.json`, `potree/`
 - semantic 맵까지: 위 + `robot_map_semantic.pcd`, `session_occupancy.npz`, `session_costmap_occ.npz`, `bev.png`, `map_package.rrd`
 - `voxel3d_bev.png`, `bev.png` 를 열어 사용자에게 보여주고(Read 로 이미지 확인 가능), 맵이 비었거나 벽이 두 겹이면 보고한다.
 
 사용자에게 요약해 줄 것: 빌드 종류, 걸린 시간, 스캔 수, voxel3d 셀 수와 타일 수, semantic 이면 라벨 비율, `seg_batch` 를 바꿨는지, 이상한 점.
+
+노트북에서 직접 보기 (2.3 준비가 되어 있어야 함):
+
+```bash
+tools/start_portal.sh          # 포털 http://localhost:9092 + rerun 웹 뷰어 :9091
+```
+
+포털 맵 카드에서 **Potree**(보행용 맵 · 원본 스캔 점, 확대 · 단면 · 측정), **3D prior (locomotion)** · **Map in rerun** 을 연다.
+포털의 빌드 버튼은 서버 컨테이너용이라 노트북에서는 쓰지 않는다 (빌드는 항상 `docker/laptop/run.sh`).
 
 ### 6.2 서버로 보내기
 
@@ -190,13 +210,7 @@ cat output/<결과 이름>/compiled/session_voxel3d_summary.json   # 셀 수 · 
 rsync -av output/<결과 이름>/compiled/ <사용자>@<서버>:/home/gw.park/offline_semantic_mapping/output/<결과 이름>/compiled/
 ```
 
-Potree 뷰어는 서버에서 만든다 (사용자에게 서버 쪽에서 실행하도록 안내):
-
-```bash
-# 서버, 컨테이너 offline_3d_semantic_map 안에서
-cd /home/gw.park/offline_semantic_mapping
-python scripts/package/potree_export.py <결과 이름> --force
-```
+`compiled/potree/` 도 같이 가므로 서버 포털에서도 Potree 를 바로 열 수 있다.
 
 ## 7. 더 볼 것
 

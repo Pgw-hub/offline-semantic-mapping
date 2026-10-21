@@ -82,11 +82,22 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-geometry.txt
 .venv/bin/python scripts/build_map_package.py sessions/session_내세션.yaml   # geometry_only: true
 ```
 
-Potree 뷰어는 `tools/potree/PotreeConverter/build/PotreeConverter` (2.1.1) 가 있어야 만들어진다. 없으면 그 단계만 건너뛴다.
+Potree 는 `tools/potree/PotreeConverter/build/PotreeConverter` (2.1.1) 또는 환경변수 `POTREE_CONVERTER` 의 변환기가 있어야 만들어진다. 없으면 그 단계만 건너뛴다.
+
+## 결과 보기 (노트북 포털 · Potree)
+
+이미지에는 PotreeConverter 2.1.1(서버와 같은 커밋 d9387d5)이 들어 있어 노트북 빌드도 `compiled/potree/` 를 만든다. 보려면 한 번만:
+
+```
+tools/potree/fetch_viewer.sh                                                    # Potree 1.8.2 웹 뷰어 (서버 viewer/ 와 파일 동일)
+python3 -m venv ~/.venvs/rerun && ~/.venvs/rerun/bin/pip install -r requirements-geometry.txt
+tools/start_portal.sh                                                           # http://localhost:9092
+```
 
 ## 검증 기록 (2026-10-21, beolzip_grating_stair)
 
 - 깨끗한 clone + venv 로 기하 전용 빌드 → 서버 컨테이너 결과와 1,623 파일 동일.
 - 이 이미지로 `objects: false` 빌드 → 서버 컨테이너 결과와 동일 (SegFormer 출력 3,338 파일 포함, Potree 는 옥트리 순서만 다름). 470 s.
+- 이미지 안 PotreeConverter 로 만든 Potree 레이어: 점 수 · 범위가 서버 변환기 결과와 동일 (voxel3d 670,177 · raw 15,641,885).
 - GPU 메모리: SegFormer 단계 batch 8 약 7.0 GB, batch 2 약 2.4 GB. 노트북에서 메모리가 부족하면 `options` 에 `seg_batch: 2` (또는 4).
   batch 를 바꾸면 fp16 연산 경로가 달라져 세그 픽셀 약 1.4 % 가 달라지고, 보행용 맵 셀 0.009 % · 코스트맵 0.006 % 가 달라진다 (서버와 완전히 같게 하려면 기본 8).
