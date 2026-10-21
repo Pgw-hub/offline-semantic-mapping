@@ -173,3 +173,27 @@ def has_topic(mcap_path, topic):
     from mcap.reader import make_reader
     with open(mcap_path, "rb") as fh:
         s = make_reader(fh).get_summary(); return any(ch.topic == topic for ch in s.channels.values())
+
+# ---------------- nav_msgs/Odometry frame_id ----------------
+def odom_frame(d, sch=None):
+    """→ header.frame_id (v2) 또는 None (v1 레이아웃엔 없음). 위치추정 모드로 바뀌면 저장 맵 이름으로 바뀐다."""
+    if not is_v2(sch): return None
+    return _Cur(d, 8).header()[1]
+
+# ---------------- 레코더 자기 진단 (raisin_mcap_recorder_plugin, raisin_pod 레이아웃) ----------------
+def recorder_diagnostics(d):
+    """__recorder/diagnostics → dict(ns, enqueued, dropped, queue_depth, queue_cap, topics{topic: (received, written, published, pub_state, bytes)}, write_failed, open_failed, manifest_failed, free_mb).
+    dropped 는 큐 넘침 · 직렬화 실패 · 저장 오류로 취소된 작업을 겹쳐 센 값이라 다른 카운터와 더하지 않는다 (스키마 주석)."""
+    c = _Cur(d, 0); sec, nsec = c.u("<iI"); enq, drop = c.u("<2Q"); qd, qc, N = c.u("<3I"); topics = {}
+    for _ in range(N):
+        t = c.s(); rcv, wr, pub = c.u("<3Q"); ps, = c.u("<B"); nb, lw = c.u("<2Q"); c.u("<2B"); topics[t] = (rcv, wr, pub, ps, nb)
+    wf, of, mf, free = c.u("<4Q")
+    return {"ns": sec * 10**9 + nsec, "enqueued": enq, "dropped": drop, "queue_depth": qd, "queue_cap": qc, "topics": topics,
+            "write_failed": wf, "open_failed": of, "manifest_failed": mf, "free_mb": free}
+def recorder_system(d):
+    """__recorder/system → dict. cpu/disk 값은 직전 표본 대비 증분, psi_* 는 10 s 평균 %(some), wake_late_ms 는 표본 스레드가 늦게 깬 최대 시간."""
+    c = _Cur(d, 0); sec, nsec = c.u("<iI"); wall, up = c.u("<2Q"); l1, l5, l15, cpu, pc, pi, pm = c.u("<7f")
+    mt, ma, st, sf, dirty, wb, rss = c.u("<7Q"); thr, = c.u("<I"); scpu, vcs, nvcs, wl, ws, dt, da, dr, dw = c.u("<9Q")
+    return {"ns": sec * 10**9 + nsec, "load1": l1, "cpu_busy_pct": cpu, "psi_cpu": pc, "psi_io": pi, "psi_mem": pm,
+            "mem_total_mb": mt / 1024, "mem_avail_mb": ma / 1024, "dirty_mb": dirty / 1024, "writeback_mb": wb / 1024,
+            "wake_late_ms": wl / 1e6, "disk_avail_mb": da, "disk_read_kb": dr, "disk_write_kb": dw}
