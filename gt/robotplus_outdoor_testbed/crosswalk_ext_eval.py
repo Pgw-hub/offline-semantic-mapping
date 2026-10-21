@@ -3,7 +3,7 @@
 import os, sys, json, argparse
 import numpy as np
 from PIL import Image, ImageDraw
-HERE = os.path.dirname(os.path.abspath(__file__)); REPO = os.path.dirname(os.path.dirname(HERE)); sys.path.insert(0, REPO); sys.path.insert(0, HERE); sys.path.insert(0, HERE)
+HERE = os.path.dirname(os.path.abspath(__file__)); REPO = os.path.dirname(os.path.dirname(HERE)); sys.path.insert(0, os.path.join(REPO, "scripts")); sys.path.insert(0, HERE); sys.path.insert(0, HERE)
 from apps import crosswalk_extend as CX
 import gt_eval as GE
 ap = argparse.ArgumentParser(); ap.add_argument("root"); ap.add_argument("out"); ap.add_argument("--max-ext", type=float, default=1.0); ap.add_argument("--fill-interior", action="store_true")

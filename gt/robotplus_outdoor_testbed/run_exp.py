@@ -17,7 +17,7 @@ else:
     for f in ["rgb", "rgb_index.npz"]:
         if not os.path.exists(f"{sem}/{f}"): os.symlink(f"../../{a.base}/sem/{f}", f"{sem}/{f}")
     if not glob.glob(sem + "/sem/*.npz"):
-        cmd = [sys.executable, f"{REPO}/tools/preprocess/precompute_semantic.py", sem, "--classdict", a.classdict] + a.pre.split()
+        cmd = [sys.executable, f"{REPO}/scripts/preprocess/precompute_semantic.py", sem, "--classdict", a.classdict] + a.pre.split()
         t0 = time.time(); print("B:", " ".join(cmd[2:]), flush=True); subprocess.run(cmd, check=True, stdout=open(root + "/compiled/B.log", "w"), stderr=subprocess.STDOUT); print(f"B done {time.time()-t0:.0f}s", flush=True)
 # GT 정합(맵 프레임)은 base 것을 복사 (같은 데이터셋)
 import shutil; shutil.copy(f"{base}/compiled/gt_map_frame.npz", f"{root}/compiled/gt_map_frame.npz")
@@ -28,7 +28,7 @@ row = {"exp": os.path.basename(root), "base": a.base, "pre": a.pre, "sem_dir": a
 if a.build:
     if os.path.islink(root + "/voxel"): os.unlink(root + "/voxel")      # C 단계가 exp 자체 복셀을 만들도록 링크 제거
     y = open(f"{REPO}/sessions/session_{a.base}.yaml").read().replace(f"root: {a.base}\n", f"root: {os.path.basename(root)}\n"); yp = f"{REPO}/sessions/session_{os.path.basename(root)}.yaml"; open(yp, "w").write(y)
-    t0 = time.time(); subprocess.run([sys.executable, f"{REPO}/sessions/build_map_package.py", os.path.basename(yp), "--steps", "C,E,F,G,H"], cwd=f"{REPO}/sessions", check=True, stdout=open(root + "/compiled/build.log", "w"), stderr=subprocess.STDOUT)
+    t0 = time.time(); subprocess.run([sys.executable, f"{REPO}/scripts/build_map_package.py", os.path.basename(yp), "--steps", "C,E,F,G,H"], cwd=f"{REPO}/sessions", check=True, stdout=open(root + "/compiled/build.log", "w"), stderr=subprocess.STDOUT)
     subprocess.run([sys.executable, f"{HERE}/gt_eval.py", "eval", root], check=True, stdout=open(root + "/compiled/gt_eval.log", "w"), stderr=subprocess.STDOUT)
     g = json.load(open(root + "/compiled/gt_eval.json")); row["iou3d"] = {k: v["iou"] for k, v in g["iou"].items()}; row["key3d"] = g["key"]; row["build_s"] = round(time.time() - t0)
 with open(HERE + "/experiments.jsonl", "a") as fh: fh.write(json.dumps(row, ensure_ascii=False) + "\n")

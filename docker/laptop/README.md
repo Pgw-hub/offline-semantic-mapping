@@ -41,7 +41,7 @@ GPU 가 없거나 Docker 를 쓰지 않을 때:
 
 ```
 python3 -m venv .venv && .venv/bin/pip install -r requirements-geometry.txt
-.venv/bin/python sessions/build_map_package.py sessions/session_내세션.yaml   # geometry_only: true
+.venv/bin/python scripts/build_map_package.py sessions/session_내세션.yaml   # geometry_only: true
 ```
 
 Potree 뷰어는 `tools/potree/PotreeConverter/build/PotreeConverter` (2.1.1) 가 있어야 만들어진다. 없으면 그 단계만 건너뛴다.

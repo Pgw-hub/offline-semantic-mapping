@@ -15,4 +15,4 @@ HF_CACHE="${HF_CACHE:-$HOME/.cache/offline_map_hf}"; mkdir -p "$HF_CACHE"
 VOLS=(-v "$REPO:$REPO" -v "$MCAP:$MCAP:ro" -v "$HF_CACHE:/models/hf_cache" -v "$(dirname "$YAML"):$(dirname "$YAML")")
 if [[ -n "$CALIB" && "$CALIB" != "$MCAP"* ]]; then VOLS+=(-v "$CALIB:$CALIB:ro"); fi
 if [[ "$ROOT" == /* ]]; then mkdir -p "$(dirname "$ROOT")"; VOLS+=(-v "$(dirname "$ROOT"):$(dirname "$ROOT")"); fi
-exec docker run --rm --gpus all "${VOLS[@]}" -w "$REPO/sessions" "$IMAGE" python build_map_package.py "$YAML" "$@"
+exec docker run --rm --gpus all "${VOLS[@]}" -w "$REPO/sessions" "$IMAGE" python ../scripts/build_map_package.py "$YAML" "$@"

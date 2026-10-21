@@ -117,7 +117,7 @@ class Jobs:
                     if job: job["status"] = "running"; job["started_at"] = time.time(); self.save()
             if not job: time.sleep(2); continue
             log = os.path.join(SESS, f"{job['name']}_build.out")
-            cmd = ["docker", "exec", CONTAINER, "bash", "-lc", f"cd {SESS} && python build_map_package.py {os.path.basename(job['yaml'])}"]
+            cmd = ["docker", "exec", CONTAINER, "bash", "-lc", f"cd {SESS} && python ../scripts/build_map_package.py {os.path.basename(job['yaml'])}"]
             with open(log, "a") as lf:
                 lf.write(f"===== WEB BUILD {time.strftime('%Y-%m-%d %H:%M:%S')} =====\n"); lf.flush()
                 p = subprocess.Popen(cmd, stdout=lf, stderr=subprocess.STDOUT)

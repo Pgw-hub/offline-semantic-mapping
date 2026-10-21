@@ -22,7 +22,7 @@ output/*/localize/
 refer/
 models/
 gt/robotplus_outdoor_testbed/train_data/
-locomotion_map/bonxai/bonxai_occupancy
+scripts/locomotion_map/bonxai/bonxai_occupancy
 tools/potree/PotreeConverter/
 tools/potree/viewer/build/
 tools/potree/viewer/libs/
