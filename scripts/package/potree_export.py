@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """맵 빌드 결과 → Potree 웹 뷰어 (포털에서 열기). 컨테이너 offline_3d_semantic_map 안에서 실행.
 
-사용: python tools/potree/potree_export.py <map_root 또는 output 아래 이름> [--layers voxel3d,raw] [--raw-max 40000000] [--force]
+사용: python scripts/package/potree_export.py <map_root 또는 output 아래 이름> [--layers voxel3d,raw] [--raw-max 40000000] [--force]
 레이어
   voxel3d       compiled/session_voxel3d.npz — 보행 맵 셀 중심 (x, y) 와 컨트롤러가 읽는 높이 mean_z.
                 변형(session_voxel3d_<이름>.npz: bonxai, lidaronly …)도 각각 레이어로.
                 classification = 출처(1 LiDAR · 2 depth 채움 · 3 평탄 채움), intensity = 클래스 id, RGB = 클래스 색.
   raw           dataset/<log>/lidar_scans/*.npz — S 단계의 정합된 스캔 점 전부(최종 PGO 프레임). 너무 많으면 --raw-max 로 균등 추출.
 출력: compiled/potree/<레이어>/(metadata.json, octree.bin, hierarchy.bin) + compiled/potree/index.html
-뷰어 정적 파일은 tools/potree/viewer/{build,libs} (Potree 1.8.2), 변환기는 tools/potree/PotreeConverter/build/PotreeConverter (2.1.1).
+뷰어 정적 파일은 tools/potree/viewer/{build,libs} (Potree 1.8.2, 없으면 tools/potree/fetch_viewer.sh), 변환기는 $POTREE_CONVERTER 또는 tools/potree/PotreeConverter/build/PotreeConverter (2.1.1; 노트북 이미지는 /opt/potree/PotreeConverter).
 """
 import os as _os, sys as _sys; _sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..")))  # scripts/ (패키지 import)
 import argparse, glob, json, os, shutil, struct, subprocess, sys, tempfile, time
@@ -19,7 +19,7 @@ REPO = os.path.dirname(CODE)                                         # 저장소
 sys.path.insert(0, CODE)
 from common import classdict as CD  # noqa: E402
 
-CONVERTER = os.path.join(REPO, "tools", "potree", "PotreeConverter", "build", "PotreeConverter")
+CONVERTER = os.environ.get("POTREE_CONVERTER") or os.path.join(REPO, "tools", "potree", "PotreeConverter", "build", "PotreeConverter")   # 노트북 이미지는 환경변수로
 SRC_NAMES = {1: "LiDAR", 2: "depth fill", 3: "flat fill"}
 SRC_COLORS = {1: [0.35, 0.75, 0.45, 1.0], 2: [0.30, 0.55, 0.95, 1.0], 3: [0.62, 0.62, 0.62, 1.0]}
 
@@ -187,7 +187,7 @@ def main():
     a = ap.parse_args()
     root = a.map if os.path.isabs(a.map) else os.path.join(REPO, "output", a.map)
     comp = os.path.join(root, "compiled"); os.makedirs(os.path.join(comp, "potree"), exist_ok=True)
-    if not os.path.exists(CONVERTER): sys.exit(f"PotreeConverter 없음: {CONVERTER}")
+    if not os.path.exists(CONVERTER): sys.exit(f"PotreeConverter 없음: {CONVERTER} (POTREE_CONVERTER 환경변수로 지정 가능)")
     want = [s.strip() for s in a.layers.split(",") if s.strip()]
     tmp = tempfile.mkdtemp(prefix="potree_")
     try:
