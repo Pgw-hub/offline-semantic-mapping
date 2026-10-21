@@ -10,7 +10,7 @@ lz4
 rerun-sdk==0.16.1
 pyarrow>=14,<26     # rerun 0.16 이 끌어오는 pyarrow 26 은 numpy 2 필요 → 컨테이너와 같은 25 이하
 opencv-python-headless>=4.8
-open3d>=0.18,<0.21
+open3d==0.19.0      # 서버 컨테이너와 같게 (0.20 은 PCD 헤더의 rgb 를 U 로 써서 소비자 해석이 달라짐)
 # 선택: 트랙 1(robot_map 없음, 서버가 PGO) 일 때만 필요
 # gtsam==4.2.2
 # 선택: Potree 뷰어 생성은 PotreeConverter 2.1.1 실행 파일이 tools/potree/PotreeConverter/build/ 에 있어야 한다 (없으면 그 단계만 건너뜀)

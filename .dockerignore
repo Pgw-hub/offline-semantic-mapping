@@ -1,0 +1,4 @@
+# 이미지에는 requirements 만 들어간다 (코드는 실행 때 마운트). 큰 데이터·산출물이 빌드 컨텍스트로 가지 않게.
+*
+!requirements-geometry.txt
+!requirements-semantic.txt

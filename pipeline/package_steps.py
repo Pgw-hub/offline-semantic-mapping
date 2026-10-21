@@ -27,6 +27,8 @@ class PackageSteps:
                  "edges_object_terrain": ("compiled/voxel_session_relations.json", "객체-지형 관계 (bbox 발자국 아래 지배 지형)"),
                  "edges_vlm": ("compiled/session_edges_vlm.json", "VLM 판정 엣지 (Qwen2.5-VL)")}
         if self.geo_only: files = {}                                       # 기하 전용: 보행 맵(voxel3d)만
+        elif not self.with_objects:                                        # objects: false — semantic 맵까지만 (객체·엣지 항목 없음)
+            files = {k: v for k, v in files.items() if k in ("terrain_voxels", "occupancy_probabilistic")}
         if self.opt.get("voxel3d") and os.path.exists(os.path.join(self.root, "compiled", "session_voxel3d.npz")):
             files["voxel3d_prior"] = ("compiled/session_voxel3d.npz", "보행용 3D 확률 복셀 사전맵: 로봇 VoxelMap 격자(0.025×0.025×0.1 m) ijk/mean_z/logodds/cls/source + 확률 격자(0.1 m) 전체")
             files["voxel3d_tiles"] = ("compiled/session_voxel3d_tiles/index.json", "voxel3d 타일 바이너리(10 m, 20 B/셀) 인덱스 — 로봇은 창 주변 3×3 타일만 적재")
@@ -111,7 +113,7 @@ class PackageSteps:
         out = os.path.join(self.D["compiled"], f"session_rgb_x{sp}.mp4")
         if not self.done("V", out):
             self.run([PY, f"{REPO}/package/make_rgb_video.py", self.D["dataset"], out, "--speed", str(sp), "--width", str(self.opt.get("video_width", 960)), "--logs", *self.logs], logname="V.log")
-        if self.opt.get("video_pipeline", True):                 # RGB | 검출 | 세그멘테이션 3분할
+        if self.opt.get("video_pipeline", True) and self.with_objects:   # RGB | 검출 | 세그멘테이션 3분할 (검출 = D 단계 결과)
             out2 = os.path.join(self.D["compiled"], f"session_pipeline_x{sp}.mp4")
             if not self.done("V", out2):
                 self.run([PY, f"{REPO}/package/make_pipeline_video.py", self.root, out2, "--speed", str(sp), "--logs", *self.logs], logname="V_pipeline.log")

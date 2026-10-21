@@ -1,0 +1,11 @@
+# semantic 맵까지 빌드 (3D scene graph 제외, 세션 옵션 objects: false) — 노트북 등 GPU 메모리가 작은 PC 용.
+# 기하 전용 패키지 + SegFormer 세그멘테이션(torch · transformers) + 라벨 투영(scipy).
+# torch 는 CUDA 빌드가 필요하므로 따로 설치: pip install torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
+# (docker/laptop/Dockerfile 이 이 순서로 설치한다. 버전은 서버 컨테이너 offline-3d-semantic-map 기준)
+-r requirements-geometry.txt
+transformers==5.16.1
+accelerate==1.14.0
+safetensors>=0.4
+timm==1.0.29
+pillow>=10
+scipy>=1.11

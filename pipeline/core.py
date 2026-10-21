@@ -24,6 +24,7 @@ class BuildCore:
         self.opt.update(cfg.get("options", {}))
         self.graph = os.path.join(self.root, "graph")
         self.geo_only = bool(self.opt.get("geometry_only"))                     # 카메라 없는 기하 전용 빌드 (보행 맵만)
+        self.with_objects = bool(self.opt.get("objects", True)) and not self.geo_only   # false: 3D scene graph(D·E) 없이 semantic 맵까지만 (GPU 메모리 작은 PC용)
         if self.opt["pose_graph"] and "frame" not in cfg.get("options", {}): self.opt["frame"] = "SLAM world, PGO-corrected (preprocess/geometry/build_graph.py)"
         if self.opt.get("robot_map"): self.opt["pose_graph"] = True; self.opt.setdefault("frame", "robot lidar_slam saved map frame (final PGO)"); self.opt["frame"] = "robot lidar_slam saved map frame (final PGO)"
         for d in self.D.values():
@@ -79,10 +80,14 @@ class BuildCore:
     # go — 단계 문자열 순서대로 step_<X> 를 호출. 각 단계는 산출물이 있으면 건너뛰므로(멱등) 중단된 빌드를 같은 명령으로 재개할 수 있다.
     #      --force X 는 그 단계 산출물만 지우고 다시 만든다. 끝나면 컨테이너(root)가 만든 파일 소유권을 호스트 사용자로 돌린다.
     GEOMETRY_STEPS = ("Q", "P", "S", "F", "G", "H")
+    OBJECT_STEPS = ("D", "E")                                               # 3D Scene Graph builder (ConceptGraphs, GPU 메모리 ~10 GB)
     def go(self, steps):
         if self.geo_only:
             skipped = [s for s in steps if s not in self.GEOMETRY_STEPS]; steps = [s for s in steps if s in self.GEOMETRY_STEPS]
             if skipped: self.say(f"기하 전용 → 카메라 단계 생략: {','.join(skipped)}")
+        elif not self.with_objects:
+            skipped = [s for s in steps if s in self.OBJECT_STEPS]; steps = [s for s in steps if s not in self.OBJECT_STEPS]
+            if skipped: self.say(f"objects: false → 3D scene graph 단계 생략: {','.join(skipped)}")
         try:
             for s in steps:
                 self.say(f"===== 단계 {s} =====")

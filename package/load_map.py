@@ -24,12 +24,12 @@ class MapPackage:
         self.n_sem, self.n_pts = v["n_sem"], v["n_pts"]
         self.classes = [str(c) for c in v["classes"]]
         self.classdict = CD.from_voxsem(v); self.colors = CD.colors_rgb(self.classdict)     # 클래스별 (r,g,b)
-        raw = json.load(open(P("objects")))
+        F = self.man["files"]                                               # 객체·엣지는 선택 항목 (objects: false 빌드에는 없음)
+        raw = json.load(open(P("objects"))) if "objects" in F else []
         self.objects = list(raw.values()) if isinstance(raw, dict) else raw
-        self.clip = np.load(P("objects_clip"))["clip"].astype(np.float32)
-        self.edges = {"heuristic": json.load(open(P("edges_heuristic"))),
-                      "object_terrain": json.load(open(P("edges_object_terrain"))),
-                      "vlm": json.load(open(P("edges_vlm")))}
+        self.clip = np.load(P("objects_clip"))["clip"].astype(np.float32) if "objects_clip" in F else np.zeros((0, 1024), np.float32)
+        self.edges = {name: (json.load(open(P(key))) if key in F else [])
+                      for name, key in (("heuristic", "edges_heuristic"), ("object_terrain", "edges_object_terrain"), ("vlm", "edges_vlm"))}
         if self.costmap_key in self.man["files"]:
             cm = np.load(P(self.costmap_key))
             self.costmap, self.cm_x0, self.cm_y0, self.cm_res = cm["cost"], float(cm["x0"]), float(cm["y0"]), float(cm["res"])
