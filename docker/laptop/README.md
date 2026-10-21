@@ -3,6 +3,7 @@
 mcap 을 서버로 옮기지 않고, 데이터를 받은 노트북에서 바로 맵을 만든다.
 노트북 이미지는 **기하 전용 보행용 맵**과 **semantic 맵**까지 만든다.
 3D scene graph(ConceptGraphs 객체 검출)는 GPU 메모리 ~10 GB 가 필요해 서버에서만 돌린다.
+노트북의 Claude Code 세션에 작업을 맡길 때는 [docs/LAPTOP_CLAUDE_GUIDE.md](../../docs/LAPTOP_CLAUDE_GUIDE.md) 를 읽게 한다.
 
 | 빌드 종류 | 세션 옵션 | GPU | 산출물 |
 |---|---|---|---|
