@@ -58,10 +58,11 @@ docker run --rm offline-map-laptop bash -c 'ls -l $POTREE_CONVERTER'      # Potr
 
 ```bash
 tools/potree/fetch_viewer.sh                                            # Potree 1.8.2 웹 뷰어 파일 (65 MB, git 에 없음)
-python3 -m venv ~/.venvs/rerun && ~/.venvs/rerun/bin/pip install -r requirements-geometry.txt   # 포털 · rerun 뷰어용 (rerun 0.16.1)
+docker/laptop/container.sh up                                           # 상주 컨테이너 offline-map (4 참고). 이미지를 다시 빌드했으면 rm 후 up
 ```
 
-`tools/start_portal.sh` 가 `~/.venvs/rerun` 경로를 그대로 쓰므로 venv 는 이 위치에 만든다.
+포털 · rerun 뷰어는 컨테이너 안에서 띄우면 venv 가 필요 없다 (이미지에 rerun-sdk 0.16.1 포함, 6.1 참고).
+호스트에서 띄우려면 `python3 -m venv ~/.venvs/rerun && ~/.venvs/rerun/bin/pip install -r requirements-geometry.txt` (`tools/start_portal.sh` 가 이 경로를 먼저 찾고, 없으면 PATH 의 python · rerun 을 쓴다).
 
 ## 3. 세션 yaml 만들기
 
@@ -165,7 +166,7 @@ docker/laptop/run.sh sessions/<세션>.yaml                # 실제 빌드
 | 증상 | 원인 · 조치 |
 |---|---|
 | 단계 B 에서 `CUDA out of memory` | 세그멘테이션 batch 8 은 GPU 약 7 GB 를 쓴다. yaml `options` 에 `seg_batch: 4` (또는 2, 약 2.4 GB) 를 넣고 `--steps B --force B` 후 이어서 빌드. 결과는 batch 8 과 세그 픽셀 약 1 % 다르고 맵 차이는 0.01 % 수준이라 써도 된다. 바꿨으면 사용자에게 보고한다. |
-| 단계 H 로그에 `Potree 생성 실패(빌드는 계속)` · `PotreeConverter 없음` | 이미지가 변환기를 넣기 전(2026-10-21 이전) 버전. `git pull` 후 2.2 의 `docker build` 를 다시 하고 `--steps H --force H` 로 Potree 만 다시 만든다. |
+| 단계 H 로그에 `Potree 생성 실패(빌드는 계속)` · `PotreeConverter 없음` | 이미지가 변환기를 넣기 전(2026-10-21 이전) 버전. `git pull` 후 2.2 의 `docker build` 를 다시 하고, `docker/laptop/container.sh rm && docker/laptop/container.sh up` 으로 컨테이너를 새 이미지로 다시 만든 뒤 `--steps H --force H` 로 Potree 만 다시 만든다. |
 | 포털의 Potree 화면이 비어 있음 | 뷰어 파일이 없음. `tools/potree/fetch_viewer.sh` 실행 (2.3). |
 | `mcap_dir 가 없습니다` | yaml 의 `mcap_dir` 가 노트북 경로가 아님. 서버 경로(`/data2/...`)를 그대로 복사하지 않았는지 확인. |
 | calibration 관련 파일 없음 | `<mcap_dir>/config_snapshot/raisin_root/calibration` 이 없는 녹화. 사용자에게 알린다 (yaml 에 `calib:` 로 다른 경로를 줄 수는 있다). |
@@ -194,7 +195,8 @@ cat output/<결과 이름>/compiled/session_voxel3d_summary.json   # 셀 수 · 
 노트북에서 직접 보기 (2.3 준비가 되어 있어야 함):
 
 ```bash
-tools/start_portal.sh          # 포털 http://localhost:9092 + rerun 웹 뷰어 :9091
+docker exec -w /home/raion-seoul/offline-semantic-mapping offline-map bash tools/start_portal.sh   # 포털 http://localhost:9092 + rerun 웹 뷰어 :9091 (컨테이너 안, --network host)
+# 또는 호스트 venv 가 있으면: tools/start_portal.sh
 ```
 
 포털 맵 카드에서 **Potree**(보행용 맵 · 원본 스캔 점, 확대 · 단면 · 측정), **3D prior (locomotion)** · **Map in rerun** 을 연다.

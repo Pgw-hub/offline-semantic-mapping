@@ -28,6 +28,7 @@ mcap 을 서버로 옮기지 않고, 데이터를 받은 노트북에서 바로 
    ```
 
    마운트는 만들 때 고정된다: `$HOME` 전체 읽기 전용(mcap 녹화가 홈 아래 어디 있든 보인다), 저장소 읽기·쓰기, 모델 캐시(`$HF_CACHE`, 기본 `~/.cache/offline_map_hf`) → `/models/hf_cache`.
+   이미지를 다시 빌드했으면 `container.sh rm && container.sh up` 으로 컨테이너도 다시 만든다 (기존 컨테이너는 옛 이미지를 계속 쓴다).
    홈 밖(`/data2`, 외장 디스크 등)의 녹화를 쓰려면 `EXTRA_RO="/data2:/mnt/usb" docker/laptop/container.sh up` 처럼 만든다 (이미 있으면 `container.sh rm` 후).
 
 ## 빌드
@@ -59,19 +60,30 @@ docker/laptop/container.sh rm       # 지움 (이미지 offline-map-laptop 은 �
 컨테이너 안에서 `pip install` 등으로 바꾼 것은 컨테이너에 남지만 이미지에는 남지 않는다. 이미지에 넣으려면 Dockerfile 을 고쳐 다시 빌드한다.
 `docker` 를 sudo 없이 쓰려면 사용자가 `docker` 그룹에 있어야 한다 (추가 직후에는 새 터미널 또는 `newgrp docker`).
 
-## 맵 보기 (포털 :9092 + rerun 웹뷰어 :9091)
+## 맵 보기 (포털 :9092 + rerun 웹뷰어 :9091 + Potree)
 
-서버와 같은 포털을 컨테이너 안에서 띄운다 (이미지에 rerun-sdk 0.16.1 뷰어가 들어 있어 별도 venv 가 필요 없다):
+이미지에는 PotreeConverter 2.1.1(서버와 같은 커밋 d9387d5)이 들어 있어 노트북 빌드도 `compiled/potree/` 를 만든다. Potree 웹 뷰어 정적 파일은 git 에 없으니 한 번만 받는다:
 
 ```
+tools/potree/fetch_viewer.sh        # Potree 1.8.2 웹 뷰어 (65 MB) → tools/potree/viewer/
+```
+
+포털은 서버와 같은 `tools/start_portal.sh` 로 띄운다. 두 방법 중 하나:
+
+```
+# (a) 컨테이너 안에서 — 이미지에 rerun-sdk 0.16.1 뷰어가 있어 venv 가 필요 없다 (권장)
 docker exec -w /home/raion-seoul/offline-semantic-mapping offline-map bash tools/start_portal.sh   # 또는 container.sh shell 안에서 tools/start_portal.sh
+# (b) 호스트에서 — ~/.venvs/rerun 에 venv 를 만들어 둔다
+python3 -m venv ~/.venvs/rerun && ~/.venvs/rerun/bin/pip install -r requirements-geometry.txt
+tools/start_portal.sh
 ```
 
-- 컨테이너가 `--network host` 로 만들어졌으면(기본, 2026-10-21 이후) 브라우저에서 http://localhost:9092 (포털) · http://localhost:9091 (rerun) 을 연다.
-- 그 전에 bridge 네트워크로 만든 컨테이너면 `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' offline-map` 의 IP 로 연다 (예 http://172.17.0.2:9092). localhost 로 쓰려면 `container.sh rm && container.sh up` 으로 다시 만든다.
-- 포털은 `output/*/compiled/map_manifest.json` 을 스캔해 세션 카드를 보여 주고, rerun 링크는 같은 포털에서 `.rrd` 를 받아 연다. Potree 뷰어는 노트북에서 만들지 않으므로 카드에 없다.
+- 브라우저: http://localhost:9092 (포털) · http://localhost:9091 (rerun). (a) 는 컨테이너가 `--network host` 로 만들어졌을 때(기본) localhost 로 보인다.
+  bridge 네트워크로 만든 옛 컨테이너면 `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' offline-map` 의 IP 로 열거나 `container.sh rm && container.sh up` 으로 다시 만든다.
+- 포털은 `output/*/compiled/map_manifest.json` 을 스캔해 세션 카드를 보여 준다. 카드에서 **Potree**(보행용 맵 · 원본 스캔 점), **3D prior (locomotion)** · **Map in rerun** 을 연다. rerun 링크는 같은 포털에서 `.rrd` 를 받아 연다.
 - 포털의 "빌드" 버튼은 서버 컨테이너(`offline_3d_semantic_map`)를 부르므로 노트북에서는 쓰지 않는다. 빌드는 `docker/laptop/run.sh` 로 한다.
-- 로그: 컨테이너 안 `/tmp/map_portal.log`, `/tmp/rerun_viewer.log`. 컨테이너를 재시작하면 포털도 내려가니 다시 `start_portal.sh` 를 실행한다.
+- 로그: `/tmp/map_portal.log`, `/tmp/rerun_viewer.log` (컨테이너 안에서 띄웠으면 컨테이너 안). 컨테이너를 재시작하면 포털도 내려가니 다시 `start_portal.sh` 를 실행한다.
+- 이미지 안 PotreeConverter 로 만든 Potree 레이어: 점 수 · 범위가 서버 변환기 결과와 동일 (voxel3d 670,177 · raw 15,641,885).
 
 ## 이미지 없이 (보행용 맵만)
 
@@ -83,16 +95,6 @@ python3 -m venv .venv && .venv/bin/pip install -r requirements-geometry.txt
 ```
 
 Potree 는 `tools/potree/PotreeConverter/build/PotreeConverter` (2.1.1) 또는 환경변수 `POTREE_CONVERTER` 의 변환기가 있어야 만들어진다. 없으면 그 단계만 건너뛴다.
-
-## 결과 보기 (노트북 포털 · Potree)
-
-이미지에는 PotreeConverter 2.1.1(서버와 같은 커밋 d9387d5)이 들어 있어 노트북 빌드도 `compiled/potree/` 를 만든다. 보려면 한 번만:
-
-```
-tools/potree/fetch_viewer.sh                                                    # Potree 1.8.2 웹 뷰어 (서버 viewer/ 와 파일 동일)
-python3 -m venv ~/.venvs/rerun && ~/.venvs/rerun/bin/pip install -r requirements-geometry.txt
-tools/start_portal.sh                                                           # http://localhost:9092
-```
 
 ## 검증 기록 (2026-10-21, beolzip_grating_stair)
 
