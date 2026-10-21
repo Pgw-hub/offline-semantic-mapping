@@ -12,6 +12,7 @@ __pycache__/
 *.pkl.gz
 *.log
 *.png
+!docs/img/*.png
 *.jpg
 sessions/*/
 sessions/*.out

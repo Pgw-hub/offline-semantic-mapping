@@ -4,7 +4,7 @@
 
 ![Offline Map Build Pipeline v2](docs/img/pipeline_v2.png)
 
-*파이프라인 구조도 (Miro "Offline Map Build Pipeline v2"). 아래 `scripts/` 디렉터리는 이 그림의 블록과 1:1 로 대응한다.*
+*파이프라인 구조도 (Miro "Offline Map Build Pipeline v2", 원본 PDF [docs/SystemPipeline.pdf](docs/SystemPipeline.pdf)). 아래 `scripts/` 디렉터리는 이 그림의 블록과 1:1 로 대응한다.*
 
 ## 빠른 시작
 
