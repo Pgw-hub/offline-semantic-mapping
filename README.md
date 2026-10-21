@@ -160,6 +160,14 @@ python3 -m venv ~/.venvs/coverage && ~/.venvs/coverage/bin/pip install -r requir
 #   --view save    : <out>/coverage.rrd 로 저장
 ```
 
+인자 없이 실행하면 레코더 제어 소켓(127.0.0.1:8089)에 물어 **녹화 중이면 그 세션을 `--live` 로**, 아니면 `$REC_OUTPUT_DIR`(기본 `~/logger_data`) 의 가장 최근 세션을 재생한다.
+녹화 PC 의 GNOME 독에는 "매핑 커버리지 모니터" 아이콘(`scripts/recording/coverage_monitor_launch.sh`, 센서 수집 아이콘과 같은 방식)이 있다: 누르면 녹화 시작을 기다렸다가 자동으로 모니터를 띄우고, 다시 누르면 결과를 저장하고 끝난다. 길게 누르면 `마지막 세션 재생` · `결과 폴더 열기`. 추가 옵션은 `COVERAGE_MONITOR_ARGS="--mask-bottom 60"` 처럼 환경변수로.
+
+```bash
+~/.venvs/coverage/bin/python scripts/recording/coverage_monitor.py            # 인자 없이: 녹화 중이면 --live, 아니면 최근 세션 재생
+scripts/recording/coverage_monitor_launch.sh [stop|replay|results]           # 독 아이콘이 부르는 스크립트
+```
+
 `<세션 폴더>` 는 `log_000.mcap …` 과 `config_snapshot/raisin_root/calibration`(또는 `raisin_config/calibration`)이 있는 폴더다. 결과 `coverage_summary.json` · `coverage_bev.png` · `coverage_camera.png` · `coverage_grid.npz` 는 `output/_coverage/<세션 이름>/` 에 생긴다.
 
 ### `scripts/dev/` — 실험 · 평가 (빌드에는 안 쓰임)

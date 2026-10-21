@@ -14,6 +14,7 @@
 자세는 녹화 중 SLAM 자세(/Odometry/base) — 빌드는 최종 PGO 자세라 루프 보정이 큰 세션에서는 수 cm~수십 cm 어긋날 수 있다.
 
 사용
+  python coverage_monitor.py                                        # 인자 없이: 레코더(127.0.0.1:8089)가 녹화 중이면 그 세션 --live, 아니면 가장 최근 세션 재생
   python coverage_monitor.py <mcap 폴더 또는 .mcap>                 # 녹화 끝난 데이터 재생 (rerun 창)
   python coverage_monitor.py <녹화 중인 폴더> --live                 # 녹화 중 따라 읽기 (Ctrl+C 로 끝)
   python coverage_monitor.py <시뮬 녹화 폴더> --live --sim           # 시뮬 (LiDAR 외부 파라미터 slam · RGB/depth 짝 250 ms)
@@ -39,6 +40,47 @@ C_LIDAR_ONLY, C_TRAJ, C_POS, C_FOV, C_CAM = (200, 60, 200), (255, 255, 255), (25
 def log_files(src):
     if os.path.isfile(src): return [src]
     return sorted(glob.glob(os.path.join(src, "log_*.mcap")), key=lambda p: int(re.findall(r"(\d+)", os.path.basename(p))[-1]))
+
+def logger_roots(extra=None):
+    """세션 폴더가 생기는 곳: $REC_OUTPUT_DIR (센서 수집 아이콘이 ~/logger_data 로 줌), 레코더 기본값 /home/raibo2/logger_data"""
+    roots = list(extra or []) + [os.environ.get("REC_OUTPUT_DIR"), os.path.expanduser("~/logger_data"), "/home/raibo2/logger_data"]
+    seen = []; [seen.append(r) for r in roots if r and r not in seen]; return seen
+
+def recorder_status(port=None):
+    """레코더 제어 소켓(127.0.0.1:$REC_CTRL_PORT, 기본 8089)에 status → {"recording": "1", "session": "railab_raibo_…", …}. 레코더가 안 떠 있으면 None"""
+    import socket
+    port = port or int(os.environ.get("REC_CTRL_PORT", "8089")); line = b""
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=2) as s:
+            s.sendall(b"status\n")
+            while not line.endswith(b"\n"):
+                c = s.recv(4096)
+                if not c: break
+                line += c
+    except OSError: return None
+    return dict(re.findall(r"(\w+)=(\S*)", line.decode(errors="replace")))
+
+def session_dirs(roots):
+    """<root>/<YYYYMMDD>/<세션>/ 중 mcap 이나 config_snapshot 이 있는 폴더, 오래된 것부터 (수정 시각순)"""
+    out = {os.path.realpath(d) for r in roots for d in glob.glob(os.path.join(r, "*", "*")) if os.path.isdir(d) and (log_files(d) or os.path.isdir(os.path.join(d, "config_snapshot")))}
+    return sorted(out, key=os.path.getmtime)
+
+def pick_session(a):
+    """src 생략: 녹화 중이면 그 세션(--live), 아니면 가장 최근 세션(재생). 레코더가 세션 폴더를 막 만드는 중이면 잠시 기다린다."""
+    roots = logger_roots(a.logger_root); st = recorder_status()
+    if st and st.get("recording") == "1" and st.get("session"):
+        for _ in range(30):
+            name = st["session"].rsplit("/", 1)[-1]                                      # session= 은 "<날짜>/<이름>" (예전 판은 이름만)
+            m = [d for r in roots for d in (glob.glob(os.path.join(r, st["session"])) + glob.glob(os.path.join(r, "*", name))) if os.path.isdir(d)]
+            if m: a.live = True; print(f"녹화 중인 세션: {st['session']}", flush=True); return m[0]
+            print(f"세션 폴더 기다리는 중: {st['session']} ({', '.join(roots)})", flush=True); time.sleep(1)
+        sys.exit(f"레코더는 {st['session']} 녹화 중이라는데 폴더가 안 보임 (--logger-root 로 지정): {', '.join(roots)}")
+    ds = session_dirs(roots)
+    if not ds: sys.exit(f"세션 폴더 없음 ({', '.join(roots)}). 폴더를 인자로 주거나 --logger-root 로 지정")
+    if a.live: print("레코더가 녹화 중이 아님 → 가장 최근 세션을 따라 읽음 (녹화가 시작되면 새 세션으로 다시 실행)", flush=True)
+    else: print(f"가장 최근 세션 재생: {ds[-1]}", flush=True)
+    return ds[-1]
+
 
 def replay_source(files, topics):
     from mcap.reader import make_reader
@@ -336,7 +378,7 @@ class Monitor:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("src", help="mcap 폴더 (log_*.mcap) 또는 .mcap 파일"); ap.add_argument("--live", action="store_true", help="녹화 중인 폴더를 따라 읽기")
+    ap.add_argument("src", nargs="?", help="mcap 폴더 (log_*.mcap) 또는 .mcap 파일. 생략: 레코더가 녹화 중이면 그 세션을 --live 로, 아니면 가장 최근 세션을 재생"); ap.add_argument("--live", action="store_true", help="녹화 중인 폴더를 따라 읽기")
     ap.add_argument("--calib", help="기본: <폴더>/config_snapshot/raisin_root/calibration 또는 raisin_config/calibration")
     ap.add_argument("--near-range", type=float, default=5.0, help="보행용 맵에 쓰는 LiDAR 거리 (build_voxel3d max_range, 사용자 결정 5 m)")
     ap.add_argument("--far-range", type=float, default=40.0); ap.add_argument("--res", type=float, default=0.1); ap.add_argument("--ok-scans", type=int, default=3)
@@ -355,6 +397,7 @@ def main():
     ap.add_argument("--cam-hz", type=float, default=4.0, help="3D 뷰 카메라 영상 갱신 (녹화 시간 기준 Hz)"); ap.add_argument("--cam-img-w", type=int, default=320, help="3D 뷰 카메라 영상 폭 (px, 축소)")
     ap.add_argument("--sim", action="store_true", help="시뮬 녹화: --lidar-extrinsic slam · --pair-ms 250 (RGB/depth 비동기). 시뮬 시계는 자동 감지")
     ap.add_argument("--no-nice", action="store_true", help="nice/ionice 를 걸지 않음 (재생 전용 PC)")
+    ap.add_argument("--logger-root", action="append", help="src 생략 시 세션을 찾을 폴더 (여러 번 가능; 기본 $REC_OUTPUT_DIR · ~/logger_data · /home/raibo2/logger_data)")
     ap.add_argument("--done-idle", type=float, default=0.0, help="--live: 마지막 로그를 다 읽고 이 초만큼 새 로그가 없으면 끝냄 (0: Ctrl+C 까지 계속)")
     a = ap.parse_args()
     if a.sim: a.lidar_extrinsic = "slam"; a.pair_ms = max(a.pair_ms, 250.0)
@@ -364,10 +407,21 @@ def main():
         if shutil.which("ionice"): subprocess.run(["ionice", "-c3", "-p", str(os.getpid())], stderr=subprocess.DEVNULL)
     cv2.setNumThreads(1)
     import signal; signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(KeyboardInterrupt()))   # kill/systemd stop 도 Ctrl+C 처럼 결과 저장 후 종료
-    src = os.path.abspath(a.src); base = src if os.path.isdir(src) else os.path.dirname(src)
+    src = os.path.abspath(a.src or pick_session(a)); base = src if os.path.isdir(src) else os.path.dirname(src)
     while a.live and not log_files(src): print("녹화 파일 기다리는 중:", src); time.sleep(2)
-    calib = a.calib or next((c for c in (os.path.join(base, "config_snapshot", "raisin_root", "calibration"), os.path.join(base, "raisin_config", "calibration")) if os.path.isdir(c)), None)
+    cands = [os.path.join(base, "config_snapshot", "raisin_root", "calibration"), os.path.join(base, "raisin_config", "calibration")]
+    calib = a.calib or next((c for c in cands if os.path.isfile(os.path.join(c, "livox_lidar_0_lidar.yaml"))), None)
+    if not calib:   # 노드를 root(sudo su)로 띄우면 스냅샷이 /root/.raisin 기준이라 livox·d455 캘리브레이션이 빠진다 → 이 PC 사용자의 ~/.raisin/calibration 으로 대신
+        home = os.path.expanduser("~/.raisin/calibration")
+        if os.path.isfile(os.path.join(home, "livox_lidar_0_lidar.yaml")): calib = home; print(f"⚠ 세션 스냅샷에 livox 캘리브레이션 없음 → {home} 사용 (노드를 sudo 로 띄웠나요?)", flush=True)
     if not calib: sys.exit(f"캘리브레이션 폴더 없음 (--calib 로 지정): {base}")
+    man = os.path.join(base, "log_manifest.json")
+    if os.path.isfile(man):   # 레코더가 세션 시작 때 쓰는 채널 목록 → 필수 토픽이 빠졌으면 바로 알림
+        try:
+            have = {c["topic"] for c in json.load(open(man)).get("channels", [])}
+            miss = [t for t in ("/cloud_registered", "/Odometry/base", f"{a.camera}/rgb", f"{a.camera}/depth") if t not in have]
+            if miss: print(f"⚠ 이 세션에 없는 토픽: {', '.join(miss)} — 레코더 설정(~/.raisin/raisin_mcap_recorder_plugin/params.yaml)이 안 먹었거나 lidar_slam 이 안 떴음. 노드를 sudo 로 띄우면 ~/.raisin 이 아니라 /root/.raisin 을 읽음", flush=True)
+        except Exception: pass
     out = a.out or os.path.join(REPO, "output", "_coverage", os.path.basename(base.rstrip("/"))); os.makedirs(out, exist_ok=True)
 
     import rerun as rr, rerun.blueprint as rrb
