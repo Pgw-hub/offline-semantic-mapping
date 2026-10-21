@@ -140,7 +140,9 @@ docker/laptop/run.sh sessions/<세션>.yaml --dry-run      # 먼저 실행할 �
 docker/laptop/run.sh sessions/<세션>.yaml                # 실제 빌드
 ```
 
-- `run.sh` 는 저장소 · mcap 폴더 · 출력 폴더를 호스트와 **같은 경로**로 컨테이너에 마운트한다. 그래서 yaml 에는 노트북의 실제 절대 경로를 쓴다.
+- `run.sh` 는 상주 컨테이너 `offline-map`(`docker/laptop/container.sh up` 으로 만든다, 없으면 run.sh 가 자동으로 만든다) 안에서 `docker exec` 로 빌드한다. 빌드가 끝나도 컨테이너는 지워지지 않는다 (사용자 결정, 2026-10-21).
+  컨테이너는 저장소(읽기·쓰기) · `$HOME` 전체(읽기 전용) · 모델 캐시를 호스트와 **같은 경로**로 마운트한다. 그래서 yaml 에는 노트북의 실제 절대 경로를 쓰고, `mcap_dir` 는 `$HOME` 아래에 있어야 한다 (홈 밖이면 `EXTRA_RO=<경로> container.sh rm && up`).
+  컨테이너 안에서 직접 작업하려면 `docker/laptop/container.sh shell`.
 - 처음 semantic 빌드 때 SegFormer 모델(약 0.5 GB)을 `~/.cache/offline_map_hf` 로 내려받는다 (인터넷 필요, 이후 재사용).
 - 일부 단계만 다시: `--steps F,G` / 지우고 다시: `--force F`. 이미 있는 산출물은 건너뛴다.
 - 진행 확인: `tail -f output/<결과 이름>/logs/build.log`, 단계별 로그는 같은 폴더의 `<단계>*.log`.
@@ -157,6 +159,7 @@ docker/laptop/run.sh sessions/<세션>.yaml                # 실제 빌드
 | `mcap_dir 가 없습니다` | yaml 의 `mcap_dir` 가 노트북 경로가 아님. 서버 경로(`/data2/...`)를 그대로 복사하지 않았는지 확인. |
 | calibration 관련 파일 없음 | `<mcap_dir>/config_snapshot/raisin_root/calibration` 이 없는 녹화. 사용자에게 알린다 (yaml 에 `calib:` 로 다른 경로를 줄 수는 있다). |
 | `docker: permission denied` | 사용자가 docker 그룹에 없음. 사용자에게 묻는다. |
+| `컨테이너 offline-map 안에서 mcap_dir 가 안 보입니다` | mcap 폴더가 `$HOME` 밖에 있어 컨테이너에 마운트되지 않음. `EXTRA_RO=<폴더> docker/laptop/container.sh rm && EXTRA_RO=<폴더> docker/laptop/container.sh up` 으로 다시 만든다. |
 | `could not select device driver "" with capabilities: [[gpu]]` | NVIDIA Container Toolkit 없음 (2.1). |
 | git push/pull 이 `vscode-git-*.sock ECONNREFUSED` 로 실패 | VS Code 로그인 연결이 끊긴 것. `GIT_ASKPASS= VSCODE_GIT_IPC_HANDLE= git ...` 로 실행하거나 VS Code 창을 새로 고친다. |
 

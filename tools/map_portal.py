@@ -6,7 +6,7 @@
 - 그 외 경로                저장소 파일 서빙 (CORS) — rerun 뷰어가 .rrd 를 여기서 받는다 (rrd_http.py 대체)
 사용: python tools/map_portal.py [저장소 루트=이 파일의 상위] [포트=9092]
 """
-import os as _os, sys as _sys; _sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..")))  # 저장소 루트 (패키지 import)
+import os as _os, sys as _sys; _sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "scripts")))  # 코드 루트 scripts/ (common · package import; 리팩터링 4단계 이후)
 import http.server, functools, glob, json, os, re, subprocess, sys, threading, time, urllib.parse
 
 ROOT = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -59,7 +59,7 @@ def public_url():
             if m: url = m[-1]
     except Exception: pass
     _pub.update(t=time.time(), v=url); return url
-sys.path.insert(0, ROOT); from common import classdict as CD
+sys.path.insert(0, os.path.join(ROOT, "scripts")); from common import classdict as CD
 LABELS = {space: CD.labels_for(space) for space in {m["labels"] for m in CD.MODELS.values()}}   # 라벨 공간별 목록 (편집기 검색용): classdicts/<space>_labels.json
 ADE_LABELS = LABELS.get("ade20k", [])
 

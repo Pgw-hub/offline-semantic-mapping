@@ -21,6 +21,14 @@ mcap 을 서버로 옮기지 않고, 데이터를 받은 노트북에서 바로 
    git clone <repo> offline_semantic_mapping && cd offline_semantic_mapping
    docker build -f docker/laptop/Dockerfile -t offline-map-laptop .
    ```
+3. 상주 컨테이너를 만든다 (이름 `offline-map`, 빌드가 끝나도 지워지지 않고 재부팅 후에도 다시 뜬다):
+
+   ```
+   docker/laptop/container.sh up
+   ```
+
+   마운트는 만들 때 고정된다: `$HOME` 전체 읽기 전용(mcap 녹화가 홈 아래 어디 있든 보인다), 저장소 읽기·쓰기, 모델 캐시(`$HF_CACHE`, 기본 `~/.cache/offline_map_hf`) → `/models/hf_cache`.
+   홈 밖(`/data2`, 외장 디스크 등)의 녹화를 쓰려면 `EXTRA_RO="/data2:/mnt/usb" docker/laptop/container.sh up` 처럼 만든다 (이미 있으면 `container.sh rm` 후).
 
 ## 빌드
 
@@ -32,9 +40,38 @@ mcap 을 서버로 옮기지 않고, 데이터를 받은 노트북에서 바로 
    docker/laptop/run.sh sessions/session_내세션.yaml
    ```
 
-   저장소 · mcap · 출력 폴더를 호스트와 같은 경로로 마운트하므로 yaml 의 경로를 그대로 쓴다.
+   상주 컨테이너 `offline-map` 안에서 `docker exec` 로 돈다 (없으면 자동으로 만든다). 저장소 · 홈 · 출력 폴더가 호스트와 같은 경로라 yaml 의 경로를 그대로 쓴다.
+   `mcap_dir` 는 컨테이너에 마운트된 경로여야 한다 (`$HOME` 아래, 또는 `EXTRA_RO` 로 추가한 경로). 아니면 run.sh 가 바로 멈추고 알려 준다.
    처음 semantic 빌드 때 SegFormer(약 0.5 GB)를 `~/.cache/offline_map_hf` 로 내려받는다 (`HF_CACHE` 로 변경 가능).
+   컨테이너는 root 로 돌지만 파이프라인이 끝날 때 `output/` 산출물을 호스트 사용자 소유로 돌린다 (`PYTHONDONTWRITEBYTECODE=1` 이라 `scripts/` 에 root 소유 `__pycache__` 도 안 생긴다).
 3. 결과는 `<root>/compiled/` (기본 `output/<root>/compiled/`). 서버 포털로 보내려면 이 폴더째 복사한다.
+
+## 컨테이너 안에서 작업
+
+```
+docker/laptop/container.sh shell    # 컨테이너 안 bash, 저장소 루트에서 시작 (GPU · torch · open3d 사용 가능)
+docker/laptop/container.sh status   # 떠 있는지
+docker/laptop/container.sh stop     # 멈춤 (컨테이너는 남는다)
+docker/laptop/container.sh rm       # 지움 (이미지 offline-map-laptop 은 남는다). 마운트를 바꿀 때 rm 후 up
+```
+
+안에서 직접 빌드하려면 `cd sessions && python ../scripts/build_map_package.py <session.yaml>` (run.sh 가 하는 일과 같다).
+컨테이너 안에서 `pip install` 등으로 바꾼 것은 컨테이너에 남지만 이미지에는 남지 않는다. 이미지에 넣으려면 Dockerfile 을 고쳐 다시 빌드한다.
+`docker` 를 sudo 없이 쓰려면 사용자가 `docker` 그룹에 있어야 한다 (추가 직후에는 새 터미널 또는 `newgrp docker`).
+
+## 맵 보기 (포털 :9092 + rerun 웹뷰어 :9091)
+
+서버와 같은 포털을 컨테이너 안에서 띄운다 (이미지에 rerun-sdk 0.16.1 뷰어가 들어 있어 별도 venv 가 필요 없다):
+
+```
+docker exec -w /home/raion-seoul/offline-semantic-mapping offline-map bash tools/start_portal.sh   # 또는 container.sh shell 안에서 tools/start_portal.sh
+```
+
+- 컨테이너가 `--network host` 로 만들어졌으면(기본, 2026-10-21 이후) 브라우저에서 http://localhost:9092 (포털) · http://localhost:9091 (rerun) 을 연다.
+- 그 전에 bridge 네트워크로 만든 컨테이너면 `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' offline-map` 의 IP 로 연다 (예 http://172.17.0.2:9092). localhost 로 쓰려면 `container.sh rm && container.sh up` 으로 다시 만든다.
+- 포털은 `output/*/compiled/map_manifest.json` 을 스캔해 세션 카드를 보여 주고, rerun 링크는 같은 포털에서 `.rrd` 를 받아 연다. Potree 뷰어는 노트북에서 만들지 않으므로 카드에 없다.
+- 포털의 "빌드" 버튼은 서버 컨테이너(`offline_3d_semantic_map`)를 부르므로 노트북에서는 쓰지 않는다. 빌드는 `docker/laptop/run.sh` 로 한다.
+- 로그: 컨테이너 안 `/tmp/map_portal.log`, `/tmp/rerun_viewer.log`. 컨테이너를 재시작하면 포털도 내려가니 다시 `start_portal.sh` 를 실행한다.
 
 ## 이미지 없이 (보행용 맵만)
 

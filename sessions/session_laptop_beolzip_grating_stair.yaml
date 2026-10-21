@@ -1,0 +1,37 @@
+# 노트북(Docker, docker/laptop/run.sh) 빌드용 — session_t3_handheld_1016_beolzip_grating_stair.yaml 을 로컬 경로 + objects: false 로 복사 (2026-10-21).
+# 2026-10-16 21:17 (원 세션 20261016_211738, 폴더명 beolzip_grating_stair_data) 핸드헬드 리그 168 s — 둔곡 실내 시험장 그레이팅 계단 위주. 노트북 취득, IMU 200 Hz·SLAM 10 Hz·지연 60 ms.
+# 카메라는 녹화된 캘리브레이션 그대로 (LiDAR 와 ~3° 어긋남 의심, docs/HANDOFF.md 2026-10-16). depth 는 640×360 원시(color 정렬 아님).
+# 0–6.3 s 초기화 전 센서 프레임 클라우드는 export_registered_scans 가 자동 제외.
+root: laptop_t3_handheld_1016_beolzip_grating_stair
+mcap_dir: /home/raion-seoul/logger_data/20261016/beolzip_grating_stair_data
+calib: /home/raion-seoul/logger_data/20261016/beolzip_grating_stair_data/config_snapshot/raisin_root/calibration
+logs:
+- 0
+- 1
+- 2
+options:
+  objects: false               # 노트북 이미지: 3D scene graph(D·E) 제외, semantic 맵까지
+  map_id: "handheld beolzip_grating_stair (20261016_211738) · SegFormer indoor_v1 · track 2 all_scans · voxel3d prior (calib as recorded)"
+  robot_map:
+    geometry: all_scans
+  lidar_extrinsic: calib
+  livox_flip: false
+  lidar_fusion: false
+  mask_bottom_px: 0
+  drop_classes: person
+  vlm_edges: false
+  occupancy_res: 0.2
+  prob_hit: 0.85
+  prob_miss: 0.45
+  costmap: {h_ground: 2, h_obs: 3, clearance: 1.4, band_min: 0.3}
+  view_cubes: false
+  view_coarse: 0.3
+  video_speed: 15
+  video_pipeline: false         # objects: false 면 3분할 영상은 어차피 생략 (docs/LAPTOP_CLAUDE_GUIDE.md 3.2)
+  classdict: indoor_v1
+  label_edge_px: 4
+  require_depth: 1
+  pose_graph: true
+  depth_fill_range: 4.0
+  depth_fill_gap: 0.15
+  aux_lidar: "off"
