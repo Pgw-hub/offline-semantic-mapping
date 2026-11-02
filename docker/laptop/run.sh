@@ -16,4 +16,14 @@ MCAP="$(val mcap_dir)"
 "$REPO/docker/laptop/container.sh" up
 docker exec "$NAME" test -d "$MCAP" || { echo "컨테이너 $NAME 안에서 mcap_dir 가 안 보입니다: $MCAP — \$HOME 아래로 옮기거나 EXTRA_RO=<경로> container.sh rm && up 으로 다시 만드세요." >&2; exit 1; }
 docker exec "$NAME" test -r "$YAML" || { echo "컨테이너 $NAME 안에서 세션 yaml 이 안 보입니다: $YAML" >&2; exit 1; }
-exec docker exec -w "$REPO/sessions" "$NAME" python ../scripts/build_map_package.py "$YAML" "$@"
+# SegFormer 가 캐시에 있으면 Hugging Face 에 접속하지 않는다 (인터넷이 없을 때 HEAD 요청 재시도로 B 단계가 10 분 지연되는 것 방지)
+HF_CACHE="${HF_CACHE:-$HOME/.cache/offline_map_hf}"; OFFLINE=()
+[ -d "$HF_CACHE/hub/models--nvidia--segformer-b4-finetuned-ade-512-512/snapshots" ] && OFFLINE=(-e HF_HUB_OFFLINE=1)
+docker exec -w "$REPO/sessions" "${OFFLINE[@]}" "$NAME" python ../scripts/build_map_package.py "$YAML" "$@"
+# 빌드 뒤: LiDAR 전용 보행 맵 변형(depth·평탄 채움 제외) — 서버에서 수동으로 만들던 session_voxel3d_lidaronly (포털 다운로드 'LiDAR 만'). dry-run 이나 이미 있으면 건너뜀
+case " $* " in *" --dry-run "*) exit 0;; esac
+ROOT="$(val root)"; [[ "$ROOT" == /* ]] || ROOT="$REPO/output/$ROOT"
+if [ -f "$ROOT/compiled/session_voxel3d.npz" ] && [ ! -f "$ROOT/compiled/session_voxel3d_lidaronly.npz" ]; then
+  docker exec -w "$REPO" "$NAME" python scripts/locomotion_map/voxel3d_drop_fill.py "$ROOT/compiled" --drop-source 2 3 --suffix lidaronly
+  docker exec "$NAME" chown -R "$(id -u):$(id -g)" "$ROOT/compiled"
+fi

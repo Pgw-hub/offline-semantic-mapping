@@ -4,9 +4,11 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"; PY="$HOME/.venvs/rerun/bin/python"; RR
 # venv 가 없으면(노트북 컨테이너 offline-map 안 등) PATH 의 python · rerun 을 쓴다 (이미지에 rerun-sdk 0.16.1 포함)
 [ -x "$PY" ] || PY="$(command -v python3 || command -v python)"; [ -x "$RR" ] || RR="$(command -v rerun)"
 USER="${USER:-$(id -un)}"
+# rerun SDK(TCP)·WebSocket 포트. 노트북 컨테이너(host 네트워크)에서는 9886/9887 로 띄워 녹화 커버리지 모니터(rerun spawn, 9876)와 겹치지 않게 한다 (container.sh 가 넘김)
+RERUN_SDK_PORT="${RERUN_SDK_PORT:-9876}"; RERUN_WS_PORT="${RERUN_WS_PORT:-9877}"
 # pgrep 이 없는 환경(slim 이미지)용 대체: /proc 의 cmdline 에서 찾는다
 command -v pgrep >/dev/null || pgrep() { local pat="${@: -1}"; for f in /proc/[0-9]*/cmdline; do tr '\0' ' ' <"$f" 2>/dev/null | grep -qE -- "$pat" && return 0; done; return 1; }
 if pgrep -u "$USER" -f 'tools/map_porta[l].py' >/dev/null; then echo "portal already running"; else
   (cd "$REPO" && setsid nohup "$PY" tools/map_portal.py >/tmp/map_portal.log 2>&1 < /dev/null &) ; sleep 1; echo "portal started: http://localhost:9092/"; fi
 if pgrep -u "$USER" -f 'reru[n] --serve' >/dev/null; then echo "rerun viewer already running"; else
-  (setsid nohup "$RR" --serve --web-viewer-port 9091 --ws-server-port 9877 --port 9876 >/tmp/rerun_viewer.log 2>&1 < /dev/null &) ; sleep 1; echo "rerun viewer started: http://localhost:9091"; fi
+  (setsid nohup "$RR" --serve --web-viewer-port 9091 --ws-server-port "$RERUN_WS_PORT" --port "$RERUN_SDK_PORT" >/tmp/rerun_viewer.log 2>&1 < /dev/null &) ; sleep 1; echo "rerun viewer started: http://localhost:9091 (sdk :$RERUN_SDK_PORT ws :$RERUN_WS_PORT)"; fi

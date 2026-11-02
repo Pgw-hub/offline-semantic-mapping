@@ -43,9 +43,10 @@ mcap 을 서버로 옮기지 않고, 데이터를 받은 노트북에서 바로 
 
    상주 컨테이너 `offline-map` 안에서 `docker exec` 로 돈다 (없으면 자동으로 만든다). 저장소 · 홈 · 출력 폴더가 호스트와 같은 경로라 yaml 의 경로를 그대로 쓴다.
    `mcap_dir` 는 컨테이너에 마운트된 경로여야 한다 (`$HOME` 아래, 또는 `EXTRA_RO` 로 추가한 경로). 아니면 run.sh 가 바로 멈추고 알려 준다.
-   처음 semantic 빌드 때 SegFormer(약 0.5 GB)를 `~/.cache/offline_map_hf` 로 내려받는다 (`HF_CACHE` 로 변경 가능).
+   처음 semantic 빌드 때 SegFormer(약 0.5 GB)를 `~/.cache/offline_map_hf` 로 내려받는다 (`HF_CACHE` 로 변경 가능). 캐시에 있으면 run.sh 가 `HF_HUB_OFFLINE=1` 로 실행해 인터넷 없이도(그리고 접속 재시도 지연 없이) 돈다.
    컨테이너는 root 로 돌지만 파이프라인이 끝날 때 `output/` 산출물을 호스트 사용자 소유로 돌린다 (`PYTHONDONTWRITEBYTECODE=1` 이라 `scripts/` 에 root 소유 `__pycache__` 도 안 생긴다).
 3. 결과는 `<root>/compiled/` (기본 `output/<root>/compiled/`). 서버 포털로 보내려면 이 폴더째 복사한다.
+   run.sh 는 빌드가 끝나면 LiDAR 전용 보행 맵 변형 `session_voxel3d_lidaronly`(depth·평탄 채움 셀 제외, 포털 다운로드의 "LiDAR 만")도 만든다 — 서버에서 `scripts/locomotion_map/voxel3d_drop_fill.py <compiled> --drop-source 2 3 --suffix lidaronly` 로 수동으로 하던 것. 이미 있으면 건너뛴다.
 
 ## 컨테이너 안에서 작업
 
@@ -82,7 +83,9 @@ tools/start_portal.sh
   bridge 네트워크로 만든 옛 컨테이너면 `docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' offline-map` 의 IP 로 열거나 `container.sh rm && container.sh up` 으로 다시 만든다.
 - 포털은 `output/*/compiled/map_manifest.json` 을 스캔해 세션 카드를 보여 준다. 카드에서 **Potree**(보행용 맵 · 원본 스캔 점), **3D prior (locomotion)** · **Map in rerun** 을 연다. rerun 링크는 같은 포털에서 `.rrd` 를 받아 연다.
 - 포털의 "빌드" 버튼은 서버 컨테이너(`offline_3d_semantic_map`)를 부르므로 노트북에서는 쓰지 않는다. 빌드는 `docker/laptop/run.sh` 로 한다.
-- 로그: `/tmp/map_portal.log`, `/tmp/rerun_viewer.log` (컨테이너 안에서 띄웠으면 컨테이너 안). 컨테이너를 재시작하면 포털도 내려가니 다시 `start_portal.sh` 를 실행한다.
+- 컨테이너 안 rerun 은 SDK 포트 9886 · WebSocket 9887 을 쓴다 (호스트 기본 9876/9877 과 다름). 노트북 녹화 커버리지 모니터(`scripts/recording/coverage_monitor.py --view spawn`)가 9876 에 자기 창을 띄워야 하는데, 컨테이너가 host 네트워크라 같은 포트면 창 대신 컨테이너 뷰어로 흘러간다. 모니터를 포털 웹뷰어에서 보려면 `--view connect` 로 9886 에 연결.
+- `container.sh up` 으로 만든 컨테이너는 시작될 때(재부팅 후 자동 재시작 포함) `start_portal.sh` 를 스스로 실행한다 (2026-10-23 이후 생성분; 그 전 컨테이너는 `container.sh rm && up`). 로그: 컨테이너 안 `/tmp/start_portal.log`, `/tmp/map_portal.log`, `/tmp/rerun_viewer.log`.
+- localhost:9091/9092 가 안 열리면 VS Code 가 그 포트를 포워딩으로 잡고 있는 경우가 많다 (`ss -ltnp | grep 909` 에 `code` 가 보임). VS Code PORTS 패널에서 Stop Forwarding Port 한 뒤 `start_portal.sh` 를 다시 실행한다. VS Code 는 작업 공간별로 포워딩을 기억하므로 한 번 지우면 된다.
 - 이미지 안 PotreeConverter 로 만든 Potree 레이어: 점 수 · 범위가 서버 변환기 결과와 동일 (voxel3d 670,177 · raw 15,641,885).
 
 ## 이미지 없이 (보행용 맵만)

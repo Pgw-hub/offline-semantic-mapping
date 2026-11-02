@@ -34,7 +34,12 @@ def write_pcd(path, xyz, rgb=None, label=None, fmt="rgb"):
 
 def export(manifest, out, source="voxels", exclude=(), min_nsem=0, occ_filter=None, fmt="rgb", variant=""):
     """exclude: 클래스 이름 + 'other' + 'unknown' 중 뺄 것. occ_filter: None(소스 기본) / True / False — occupancy free·동적 복셀 제거 여부"""
-    mp = MapPackage(manifest); names = mp.classes; lab = mp.labels(); n_cls = len(names)
+    try:
+        mp = MapPackage(manifest); names = mp.classes; lab = mp.labels()
+    except KeyError as e:                                                       # 기하 전용(geometry_only) 맵: terrain_voxels 없음 → voxel3d 만 내보낼 수 있다 (라벨 전부 unknown)
+        if source != "voxel3d" or str(e) != "'terrain_voxels'": raise
+        mp = type("GeoOnly", (), {})(); mp.man = json.load(open(manifest)); mp.classdict = {"name": None, "classes": []}; names = []; lab = None
+    n_cls = len(names)
     exclude = tuple(exclude)
     if source in ("voxels", "voxels_occ"):
         keep = np.ones(len(lab), bool)
