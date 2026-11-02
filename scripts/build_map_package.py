@@ -24,6 +24,7 @@
                 + options.voxel3d.variants 에 bonxai: 같은 격자·채움에 점유 판정만 Bonxai ProbabilisticMap(third_party/bonxai, tools/bonxai) → session_voxel3d_bonxai_tiles/
                 + 보행용 3D 확률 복셀 사전맵 (locomotion_map/build_voxel3d.py: OctoMap 식 log-odds + 복셀 평균 z, 로봇 VoxelMap 격자 0.025×0.025×0.1 m) → compiled/session_voxel3d.npz
                   + session_voxel3d_tiles/(10 m 타일 바이너리, 로봇 적재용) + voxel3d_view.rrd/voxel3d_bev.png (기본 0.025 정육면체, 2026-10-15~) + 선택 변형 z01(로봇 VoxelMap 격자 0.025×0.025×0.1, options.voxel3d.variants). options.voxel3d: false 면 생략
+                + options.stair_complete: 계단 디딤판·앞면 채움 (locomotion_map/voxel3d_stair_complete.py, 전역 직선 모델) → session_voxel3d_stair_tiles/ + voxel3d_stair_check.png
   G  package    map_manifest.json 작성 + 코스트맵(costmap_from_occupancy) 등록
   H  view       compiled/map_package.rrd — 기본 0.1m 점 표현 (options.view_cubes: true 면 view_coarse m 큐브)
                 + compiled/potree/ Potree 웹 뷰어 (package/potree_export.py; options.potree: false 면 생략)

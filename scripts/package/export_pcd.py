@@ -82,6 +82,8 @@ def export_voxel3d_zip(manifest, out, variant=""):
         for f in sorted(os.listdir(td)): z.write(os.path.join(td, f), f"voxel3d_tiles/{f}"); n += 1
         summ = os.path.join(root, "compiled", f"session_voxel3d{suf}_summary.json")
         if os.path.exists(summ): z.write(summ, "voxel3d_tiles/summary.json")
+        if os.path.exists(td + "_stair.json"): z.write(td + "_stair.json", "voxel3d_tiles/stair.json")          # 계단 채움 변형: 계단 모델 · 디딤판별 채움
+        if variant == "stair" and os.path.exists(os.path.join(root, "compiled", "voxel3d_stair_check.png")): z.write(os.path.join(root, "compiled", "voxel3d_stair_check.png"), "voxel3d_tiles/stair_check.png")
         spec = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "VOXEL3D_PRIOR.md")
         if os.path.exists(spec): z.write(spec, "voxel3d_tiles/SPEC.md")
         z.writestr("voxel3d_tiles/manifest_ref.json", json.dumps({"map_id": json.load(open(manifest)).get("map_id"), "frame": json.load(open(manifest)).get("frame"), "source_manifest": manifest}, ensure_ascii=False, indent=1))

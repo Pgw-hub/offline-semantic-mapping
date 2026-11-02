@@ -98,6 +98,7 @@ options:
   prob_hit: 0.85
   prob_miss: 0.45
   voxel3d: {res_xy: 0.025, res_z: 0.025, prob_res: 0.025, max_range: 5.0, free_range: 5.0, tile_m: 10.0, fill_flat: 0.0}
+  stair_complete: true                 # 계단 디딤판 채움 + 앞면 판. 아래 3.4 참고
 ```
 
 ### 3.2 semantic 맵까지
@@ -134,6 +135,7 @@ options:
   depth_fill_range: 4.0
   depth_fill_gap: 0.15
   aux_lidar: "off"
+  stair_complete: true                 # 계단 녹화면 (3.4)
   # seg_batch: 2                       # GPU 메모리 부족(OOM) 때만. 아래 5 참고
 ```
 
@@ -142,6 +144,21 @@ options:
 - `livox_flip`: 핸드헬드 리그와 레코더 v2 실기체 세션은 `false` 로 빌드해 왔다. 템플릿 기본값은 `true`(옛 실기체 규약)이니 어떤 리그인지 모르면 사용자에게 묻는다.
 - `classdict`: 세그멘테이션 클래스 사전. 실내는 `indoor_v1`. 다른 값을 쓰려면 `classdicts/` 에 있는 이름이어야 한다.
 - 녹화 앞부분의 센서 초기화 구간, 저장 지도 위치추정으로 좌표계가 바뀌는 구간은 스캔 내보내기 단계가 자동으로 뺀다.
+
+### 3.4 계단 디딤판 채움 (`stair_complete`)
+
+그레이팅 계단은 LiDAR 빔이 망 사이로 빠져 디딤판이 듬성듬성 잡힌다. 그대로 쓰면 prior map controller 가 디딤판 뒤쪽 구멍으로 계단 밑바닥을 읽어 발이 단차 틈에 빠진다.
+`stair_complete: true` 면 F 단계 끝에서 `scripts/locomotion_map/voxel3d_stair_complete.py` 가 본 보행 맵에서 계단을 스스로 찾아
+
+- 계단 전체에 높이 · 앞모서리 직선을 맞추고(전역 직선 모델), 각 디딤판 사각형 안의 빈 칸만 그 디딤판 높이로 채우고,
+- 디딤판 앞모서리 아래에 앞면 판(수직 셀, `risers`)을 넣어 뚫린 단차를 막힌 계단처럼 만든다.
+
+산출물은 본 맵과 **별도 폴더** `compiled/session_voxel3d_stair_tiles/` 이고(본 맵 `session_voxel3d_tiles/` 는 그대로), 계단 모델은 `session_voxel3d_stair_tiles_stair.json`, 확인 그림은 `voxel3d_stair_check.png`.
+
+- 맵 전체에서 가장 긴 계단 하나만 잡는다. ROI 없이 둔곡 그레이팅 계단 핸드헬드 맵 두 개에서 맞게 찾았다.
+  계단이 여럿이거나 엉뚱한 것을 잡으면 `stair_complete: {roi: [x0, x1, y0, y1]}` (맵 좌표 m) 로 좁힌다. 계단 결과만 지우고(`rm -r compiled/session_voxel3d_stair_tiles compiled/session_voxel3d_stair_tiles_stair.json compiled/voxel3d_stair_check.png`) `--steps F,G` 로 돌리면 계단 단계만 다시 돈다 (`--force F` 는 보행 맵 전체를 다시 만든다).
+- 계단을 못 찾으면 build.log 에 `계단 채움 실패(빌드는 계속…)` 한 줄이 남고 나머지 빌드는 그대로 진행된다. 이때는 `logs/F_voxel3d_stair.log` 를 사용자에게 보여 준다.
+- 둔곡 그레이팅 계단 기준값(10/16 녹화): 디딤판 9–10 개, 단 높이 약 20–20.5 cm, 단 너비 약 24 cm, 폭 약 85 cm. 크게 다르면 사용자에게 보고한다.
 
 ## 4. 빌드 실행
 
@@ -188,6 +205,8 @@ cat output/<결과 이름>/compiled/session_voxel3d_summary.json   # 셀 수 · 
 
 - 기하 전용: `map_manifest.json`, `session_voxel3d.npz`, `session_voxel3d_tiles/`, `voxel3d_bev.png`, `voxel3d_view.rrd`, `data_quality.json`, `potree/`
 - semantic 맵까지: 위 + `robot_map_semantic.pcd`, `session_occupancy.npz`, `session_costmap_occ.npz`, `bev.png`, `map_package.rrd`
+- `stair_complete: true` 면 + `session_voxel3d_stair_tiles/`, `session_voxel3d_stair_tiles_stair.json`, `voxel3d_stair_check.png`.
+  build.log 의 `계단: 디딤판 N 개 …` 줄과 `voxel3d_stair_check.png` 를 사용자에게 보여 준다. 그림 위 두 칸은 채움 전·후 측면도(초록 = 채운 셀, 점선 = 디딤판 높이), 아래는 디딤판 칸 윗면도(파랑 = 디딤판 높이 셀, 빨강 = 디딤판 사이 높이의 가짜 윗면)다. 디딤판 수가 실제 계단과 다르거나 점선이 계단 단과 어긋나면 보고한다.
 - `voxel3d_bev.png`, `bev.png` 를 열어 사용자에게 보여주고(Read 로 이미지 확인 가능), 맵이 비었거나 벽이 두 겹이면 보고한다.
 
 사용자에게 요약해 줄 것: 빌드 종류, 걸린 시간, 스캔 수, voxel3d 셀 수와 타일 수, semantic 이면 라벨 비율, `seg_batch` 를 바꿨는지, 이상한 점.
@@ -202,7 +221,19 @@ docker exec -w /home/raion-seoul/offline-semantic-mapping offline-map bash tools
 포털 맵 카드에서 **Potree**(보행용 맵 · 원본 스캔 점, 확대 · 단면 · 측정), **3D prior (locomotion)** · **Map in rerun** 을 연다.
 포털의 빌드 버튼은 서버 컨테이너용이라 노트북에서는 쓰지 않는다 (빌드는 항상 `docker/laptop/run.sh`).
 
-### 6.2 서버로 보내기
+### 6.2 로봇에 넣기 (prior map controller)
+
+포털 맵 화면의 **Download stair tiles** 버튼(계단 채움 맵, `stair_complete` 일 때만 보임) 또는 **Download PCD…** 의 `3D prior 타일 zip` 항목(본 맵)으로 zip 을 받는다.
+zip 안은 `voxel3d_tiles/` 폴더 하나다(타일 + `index.json` + 요약, 계단 맵이면 `stair.json` · `stair_check.png` 도). 로봇의 raisin 워크스페이스에서
+
+```bash
+unzip <받은 zip> -d <raisin 워크스페이스>/log/map/<SLAM 맵 이름>/     # → log/map/<SLAM 맵 이름>/voxel3d_tiles/index.json
+```
+
+`<SLAM 맵 이름>` 은 로봇이 위치추정에 쓰는 lidar_slam 저장 지도 이름(= SLAM frame_id)이다. 컨트롤러는 `prior_map_dir` 가 비어 있으면 이 자리를 읽는다.
+이미 `voxel3d_tiles/` 가 있으면 덮기 전에 옛 폴더 이름을 바꿔 둔다. 보행 맵과 SLAM 저장 지도가 **같은 좌표계**여야 하므로, 녹화 때 그 저장 지도로 위치추정했는지(또는 3 의 `robot_map.traj`) 사용자에게 확인한다.
+
+### 6.3 서버로 보내기
 
 서버로는 **`compiled/` 폴더만** 보내면 된다 (`dataset/`, `sem/` 은 수 GB 라 보내지 않는다).
 받는 곳은 서버의 `/home/gw.park/offline_semantic_mapping/output/<결과 이름>/compiled/` 이고, 그러면 서버 맵 포털 목록에 나타난다.
