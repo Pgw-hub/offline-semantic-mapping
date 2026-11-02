@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """계단 디딤판 채움 확인 그림 (voxel3d_stair_complete.py 결과 검수용, 빌드 F 단계에서 자동 생성).
-위: 측면도(계단 축 t vs 높이 z, 계단 폭 안 셀) — 채움 전 / 채움 후. 회색 = 원래 셀, 초록 = 디딤판·앞면 채움(src 5), 점선 = 모델 디딤판 높이.
+위: 측면도(계단 축 t vs 높이 z, 계단 폭 안 셀) — 채움 전 / 채움 후. 회색 = 원래 셀(LiDAR·평탄 채움; depth 채움 src 2 는 그리지 않음), 초록 = 디딤판·앞면 채움(src 5), 점선 = 모델 디딤판 높이.
 아래: 채움 후 윗면도(맵 좌표) — 디딤판 사각형 안 칸마다 파랑 = 디딤판 높이(±3 cm)에 셀 있음, 빨강 = 디딤판 사이 높이의 원래 맵 윗면(가짜 중간 단·구름, 앞면 판 제외).
 글자는 영어(노트북 이미지에 한글 글꼴 없음).
 사용: voxel3d_stair_view.py <stair.json> <out.png> <before_tiles> <after_tiles>"""
@@ -16,6 +16,7 @@ from voxel3d_stair_complete import read_tiles, top_cells
 
 def load(d):
     idx, R = read_tiles(d); r = idx["res_xy"]
+    R = R[R["src"] != 2]                      # depth 채움 셀(src 2)은 그림에서 뺀다 — 계단 검수는 LiDAR 셀과 채움 셀만 (2026-11-02)
     x = (R["ix"] + 0.5) * r; y = (R["iy"] + 0.5) * r
     z = np.where(R["max_z"] - R["mean_z"] > 0.03, R["max_z"], R["mean_z"]).astype(np.float64)
     return R, r, x, y, z
@@ -26,7 +27,7 @@ def side(a, M, R, x, y, z, title):
     t_lo, t_hi = min(N) - 0.6, max(N) + M["depth"] + 0.6; z_lo, z_hi = min(H) - 0.45, max(H) + 0.45
     t = np.c_[x, y] @ u; l = np.c_[x, y] @ v
     band = (l >= M["l0"]) & (l <= M["l1"]) & (t > t_lo) & (t < t_hi) & (z > z_lo) & (z < z_hi)
-    for m, col, lab in [(band & (R["src"] != 5), "#8a8f94", "map cells"), (band & (R["src"] == 5), "#1f9a55", "tread / riser fill")]:
+    for m, col, lab in [(band & (R["src"] != 5), "#8a8f94", "map cells (no depth fill)"), (band & (R["src"] == 5), "#1f9a55", "tread / riser fill")]:
         if m.any(): a.scatter(t[m], z[m], s=1.4, c=col, lw=0, label=f"{lab} {m.sum():,}")
     for h, n in zip(H, N): a.plot([n, n + M["depth"]], [h, h], "k--", lw=0.6, alpha=0.6)
     a.set_xlim(t_lo, t_hi); a.set_ylim(z_lo, z_hi); a.set_aspect("equal"); a.set_title(title, fontsize=11)

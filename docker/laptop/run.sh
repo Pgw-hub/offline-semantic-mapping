@@ -27,3 +27,9 @@ if [ -f "$ROOT/compiled/session_voxel3d.npz" ] && [ ! -f "$ROOT/compiled/session
   docker exec -w "$REPO" "$NAME" python scripts/locomotion_map/voxel3d_drop_fill.py "$ROOT/compiled" --drop-source 2 3 --suffix lidaronly
   docker exec "$NAME" chown -R "$(id -u):$(id -g)" "$ROOT/compiled"
 fi
+# 계단 채움(options.stair_complete) 결과는 타일로만 나오므로 npz 로도 만들어 포털 변형 'stair' · Potree 레이어 'voxel3d_stair' 로 보이게 한다
+if [ -f "$ROOT/compiled/session_voxel3d_stair_tiles/index.json" ] && [ ! -f "$ROOT/compiled/session_voxel3d_stair.npz" ]; then
+  docker exec -w "$REPO" "$NAME" python scripts/locomotion_map/voxel3d_tiles_to_npz.py "$ROOT/compiled/session_voxel3d_stair_tiles" "$ROOT/compiled/session_voxel3d_stair.npz"
+  docker exec -w "$REPO" "$NAME" python scripts/package/potree_export.py "$ROOT" --force
+  docker exec "$NAME" chown -R "$(id -u):$(id -g)" "$ROOT/compiled"
+fi

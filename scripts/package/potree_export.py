@@ -20,8 +20,8 @@ sys.path.insert(0, CODE)
 from common import classdict as CD  # noqa: E402
 
 CONVERTER = os.environ.get("POTREE_CONVERTER") or os.path.join(REPO, "tools", "potree", "PotreeConverter", "build", "PotreeConverter")   # 노트북 이미지는 환경변수로
-SRC_NAMES = {1: "LiDAR", 2: "depth fill", 3: "flat fill"}
-SRC_COLORS = {1: [0.35, 0.75, 0.45, 1.0], 2: [0.30, 0.55, 0.95, 1.0], 3: [0.62, 0.62, 0.62, 1.0]}
+SRC_NAMES = {1: "LiDAR", 2: "depth fill", 3: "flat fill", 5: "stair fill"}                       # 5 = 계단 디딤판·앞면 채움 (voxel3d_stair_complete.py)
+SRC_COLORS = {1: [0.35, 0.75, 0.45, 1.0], 2: [0.30, 0.55, 0.95, 1.0], 3: [0.62, 0.62, 0.62, 1.0], 5: [0.95, 0.55, 0.15, 1.0]}
 
 PT2 = np.dtype([("x", "<i4"), ("y", "<i4"), ("z", "<i4"), ("intensity", "<u2"), ("ret", "u1"), ("cls", "u1"),
                 ("angle", "i1"), ("user", "u1"), ("psid", "<u2"), ("r", "<u2"), ("g", "<u2"), ("b", "<u2")])   # LAS 1.2 point format 2, 26 B
