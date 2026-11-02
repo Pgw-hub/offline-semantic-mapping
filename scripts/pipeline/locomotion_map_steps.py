@@ -54,24 +54,26 @@ class LocomotionMapSteps:
     #   전역 직선 모델로 디딤판 사각형만 그 높이로 채우고(src 5), 앞면 판(뚫린 단차를 막는 수직 셀)을 넣는다.
     #   스크립트: voxel3d_stair_complete.py → voxel3d_stair_view.py (확인 그림)
     #   산출: compiled/session_voxel3d_stair_tiles/ (포털 타일 zip 변형 'stair'), session_voxel3d_stair_tiles_stair.json (계단 모델·디딤판별 채움), voxel3d_stair_check.png
-    #   옵션: true 또는 {risers: true, roi: [x0, x1, y0, y1]} (맵에 계단이 여럿이거나 엉뚱한 것을 잡을 때만 roi). 계단을 못 찾아도 빌드는 계속.
+    #   옵션: true 또는 {risers: true, clean: true, roi: [x0, x1, y0, y1]} (맵에 계단이 여럿이거나 엉뚱한 것을 잡을 때만 roi). 계단을 못 찾아도 빌드는 계속.
+    #   clean(기본 true): 디딤판 사각형 안, 그 디딤판 위 3.5–15 cm 에 떠 있는 셀(그레이팅 halo) 제거. 다른 디딤판 높이 ±3.5 cm 는 남김. 끄려면 {clean: false}.
     # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_F3d_stair(self, tiles):
         sc = self.opt.get("stair_complete")
         if not sc: return
-        sc = dict({"risers": True, "roi": None}, **(sc if isinstance(sc, dict) else {}))
+        sc = dict({"risers": True, "roi": None, "clean": True}, **(sc if isinstance(sc, dict) else {}))   # clean: 디딤판 위 3.5–15 cm 떠 있는 셀(halo) 제거 (기본 켬, 2026-11-02)
         sout = os.path.join(self.D["compiled"], "session_voxel3d_stair_tiles"); png = os.path.join(self.D["compiled"], "voxel3d_stair_check.png")
         try:
             if not self.done("F", sout, lambda: os.path.exists(os.path.join(sout, "index.json"))):
-                self.run([PY, f"{CODE}/locomotion_map/voxel3d_stair_complete.py", tiles, sout] + (["--risers"] if sc["risers"] else []) + (["--roi", *map(str, sc["roi"])] if sc["roi"] else []),
+                self.run([PY, f"{CODE}/locomotion_map/voxel3d_stair_complete.py", tiles, sout] + (["--risers"] if sc["risers"] else []) + (["--clean"] if sc["clean"] else []) + (["--roi", *map(str, sc["roi"])] if sc["roi"] else []),
                          env={"CUDA_VISIBLE_DEVICES": ""}, logname="F_voxel3d_stair.log")
                 if os.path.exists(png): os.remove(png)
             if not self.done("F", png):
                 self.run([PY, f"{CODE}/locomotion_map/voxel3d_stair_view.py", sout + "_stair.json", png, tiles, sout], env={"CUDA_VISIBLE_DEVICES": "", "MPLCONFIGDIR": "/tmp/mpl"}, logname="F_voxel3d_stair.log")
             if not self.dry:
                 M = json.load(open(sout + "_stair.json"))
+                halo = sum(t.get("halo_removed", 0) for t in M["treads"])
                 self.say(f"  계단: 디딤판 {len(M['treads'])} 개 (모델로 추가 {sum(t['inferred'] for t in M['treads'])}), 단 높이 {M['rise'] * 100:.1f} cm, 단 너비 {M['run'] * 100:.1f} cm, "
-                         f"폭 {(M['l1'] - M['l0']) * 100:.0f} cm → {os.path.basename(sout)}/, {os.path.basename(png)}")
+                         f"폭 {(M['l1'] - M['l0']) * 100:.0f} cm" + (f", halo 제거 {halo:,} 셀" if sc["clean"] else "") + f" → {os.path.basename(sout)}/, {os.path.basename(png)}")
         except Exception as ex:
             self.say(f"  계단 채움 실패(빌드는 계속, 로그 logs/F_voxel3d_stair.log): {ex}")
     opt_default_voxel3d = {"res_xy": 0.025, "res_z": 0.025, "prob_res": 0.025, "max_range": 5.0, "free_range": 5.0, "tile_m": 10.0, "fill_flat": 0.0, "depth": True, "variants": []}

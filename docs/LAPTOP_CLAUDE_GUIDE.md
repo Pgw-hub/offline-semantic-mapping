@@ -152,6 +152,7 @@ options:
 
 - 계단 전체에 높이 · 앞모서리 직선을 맞추고(전역 직선 모델), 각 디딤판 사각형 안의 빈 칸만 그 디딤판 높이로 채우고,
 - 디딤판 앞모서리 아래에 앞면 판(수직 셀, `risers`)을 넣어 뚫린 단차를 막힌 계단처럼 만든다.
+- 디딤판 위 3.5–15 cm 에 떠 있는 셀(그레이팅 halo 노이즈)을 지운다(`clean`, 기본 켬. 끄려면 `stair_complete: {clean: false}`). build.log 의 `halo 제거 N 셀` 로 확인.
 
 산출물은 본 맵과 **별도 폴더** `compiled/session_voxel3d_stair_tiles/` 이고(본 맵 `session_voxel3d_tiles/` 는 그대로), 계단 모델은 `session_voxel3d_stair_tiles_stair.json`, 확인 그림은 `voxel3d_stair_check.png`.
 
