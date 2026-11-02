@@ -16,6 +16,8 @@ __pycache__/
 *.jpg
 sessions/*/
 sessions/*.out
+# 노트북 로컬 경로용 세션 (PC 마다 다름, git 제외)
+sessions/session_laptop_*.yaml
 output/
 data2_cg
 sessions/jobs.json
