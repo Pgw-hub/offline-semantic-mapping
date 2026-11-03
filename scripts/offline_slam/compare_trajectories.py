@@ -52,6 +52,7 @@ rep = {"lidar_scans": nl, "live_odom": len(lo), "offline_odom": len(oo), "matche
        "raw_pos_diff_cm": {"median": round(100 * float(np.median(raw)), 2), "p90": round(100 * float(np.percentile(raw, 90)), 2), "max": round(100 * float(raw.max()), 2)},
        "aligned_pos_diff_cm": {"median": round(100 * float(np.median(al)), 2), "p90": round(100 * float(np.percentile(al, 90)), 2), "max": round(100 * float(al.max()), 2)},
        "align_rot_deg": round(float(np.degrees(np.arccos(np.clip((np.trace(R) - 1) / 2, -1, 1)))), 3), "align_t_cm": np.round(100 * tr, 2).tolist(),
+       "align_yaw_deg": round(float(np.degrees(np.arctan2(R[1, 0], R[0, 0]))), 3), "align_tilt_deg": round(float(np.degrees(np.arccos(np.clip(R[2, 2], -1, 1)))), 3),   # 중력 방향 차 (높이 드리프트로 이어짐)
        "yaw_diff_deg": {"median": round(float(np.median(np.abs(dyaw))), 3), "max": round(float(np.abs(dyaw).max()), 3)}}
 q = np.linspace(0, len(t) - 1, 9).astype(int)
 rep["aligned_diff_along_time"] = [(round(float(t[i]), 1), round(100 * float(al[i]), 2)) for i in q]

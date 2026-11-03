@@ -13,6 +13,8 @@
 //             8-byte stamp (sim time, like the recorder) + raisin-serialized message
 //   tf args : base -> livox_lidar_0:imu / :lidar from the recording's tf_static
 // env OSL_SCAN_TIMEOUT_S (default 5): wall seconds to wait for a scan's odometry before moving on
+// env OSL_RATE (default 0 = unpaced): cap replay speed, 1 = real time
+// env OSL_IMU_LEAD_S (default 0.15): imu published ahead of each scan's header stamp
 // HOME must point to a profile whose .raisin/ holds the lidar_slam params (see run.sh).
 
 #include <dlfcn.h>
@@ -276,6 +278,7 @@ int main(int argc, char** argv) {
   // Feed in recorder-arrival order, except that before a scan goes out every imu up to
   // OSL_IMU_LEAD_S (default 0.15 s) past its header stamp is published first: on the robot the scan
   // arrives ~100 ms after its first point and the deskew waits for imu past its last point.
+  const double rate = std::getenv("OSL_RATE") ? std::atof(std::getenv("OSL_RATE")) : 0.0;  // 0 = as fast as the plugin answers
   const double imuLeadS = std::getenv("OSL_IMU_LEAD_S") ? std::atof(std::getenv("OSL_IMU_LEAD_S")) : 0.15;
   struct Pending {
     int64_t t;
@@ -341,6 +344,10 @@ int main(int argc, char** argv) {
       ++nAnswered;
     } else {
       ++nTimeout;
+    }
+    if (rate > 0) {  // OSL_RATE: cap replay speed (1 = real time)
+      const double ahead = (t - tFirst) / 1e9 / rate - std::chrono::duration<double>(std::chrono::steady_clock::now() - wall0).count();
+      if (ahead > 0) std::this_thread::sleep_for(std::chrono::duration<double>(ahead));
     }
     if (nScan % 500 == 0) {
       const double wall = std::chrono::duration<double>(std::chrono::steady_clock::now() - wall0).count();
