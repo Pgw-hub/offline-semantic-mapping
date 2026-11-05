@@ -29,3 +29,6 @@ scripts/locomotion_map/bonxai/bonxai_occupancy
 tools/potree/PotreeConverter/
 tools/potree/viewer/build/
 tools/potree/viewer/libs/
+# 로봇 목록(비밀번호 포함)·로봇 접속 전용 열쇠 — PC 마다 다름
+tools/robots.json
+.robot_ssh/

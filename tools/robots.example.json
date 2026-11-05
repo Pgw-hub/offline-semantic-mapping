@@ -1,0 +1,9 @@
+{
+  "_doc": "로봇 목록 (tools/deploy_robot_map.sh · 포털 '로봇에 넣기'). tools/robots.json 으로 복사해서 고친다 (robots.json 은 git 제외). 포털에서 '목록에 저장'으로 추가해도 robots.json 이 만들어진다. 로봇마다 user·password·ws·port 를 따로 적으면 defaults 보다 우선. 비밀번호는 git 에 올리지 않는 robots.json 에만 적는다.",
+  "defaults": {"user": "raion", "password": "", "ws": "raisin_master", "port": 22},
+  "robots": [],
+  "_robots_example": [
+    {"name": "raibo-01", "host": "192.168.0.10"},
+    {"name": "raibo-02", "host": "192.168.0.11", "ws": "/home/raion/raisin_ws"}
+  ]
+}

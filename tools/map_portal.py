@@ -250,7 +250,47 @@ def scan_maps():
     maps.sort(key=lambda m: -m["mtime"])
     return maps
 
+ROBOTS_FILE = os.environ.get("ROBOTS_FILE") or os.path.join(ROOT, "tools", "robots.json"); ROBOTS_EXAMPLE = os.path.join(ROOT, "tools", "robots.example.json")
+DEPLOY_SH = os.path.join(ROOT, "tools", "deploy_robot_map.sh")
+DEPLOY_ENABLED = os.environ.get("PORTAL_ROBOT_DEPLOY", "0") == "1"      # 1 일 때만 웹에서 로봇에 넣기 (노트북 컨테이너는 container.sh 가 켬). 꺼져 있으면 터미널 명령만 안내
+DEPLOYS = {}; _dep_lock = threading.Lock()
+def load_robots():
+    """tools/robots.json (없으면 robots.example.json) → {"defaults", "robots"}"""
+    for f in (ROBOTS_FILE, ROBOTS_EXAMPLE):
+        if os.path.exists(f):
+            try: return json.load(open(f, encoding="utf-8"))
+            except Exception: pass
+    return {"defaults": {}, "robots": []}
+def robots_public():
+    """비밀번호를 뺀 기본값·로봇 목록 (웹에 보내는 것)"""
+    c = load_robots(); d = {"user": "raion", "ws": "raisin_master", "port": 22, **{k: v for k, v in (c.get("defaults") or {}).items() if k != "password"}}
+    return d, [{k: v for k, v in r.items() if k != "password"} for r in c.get("robots") or [] if r.get("name") and r.get("host")]
+def save_robot(name, user, host, port, ws):
+    """robots.json 에 로봇 추가·갱신 (없으면 예시에서 만든다). 비밀번호는 defaults 를 따른다."""
+    c = load_robots(); c.setdefault("robots", [])
+    r = {"name": name, "host": host, **({"user": user} if user else {}), **({"port": port} if port and port != 22 else {}), **({"ws": ws} if ws else {})}
+    c["robots"] = [x for x in c["robots"] if x.get("name") != name] + [r]
+    tmp = ROBOTS_FILE + ".tmp"; json.dump(c, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=2); os.replace(tmp, ROBOTS_FILE)
+    if os.getuid() == 0: st = os.stat(ROOT); os.chown(ROBOTS_FILE, st.st_uid, st.st_gid)   # 노트북 컨테이너(root) — 사용자가 직접 고칠 수 있게
+def start_deploy(args, key):
+    """tools/deploy_robot_map.sh 를 백그라운드로 — 출력 줄을 모아 /api/robot_deploy/<id> 로 보여 준다"""
+    with _dep_lock:
+        if any(j["key"] == key and not j["done"] for j in DEPLOYS.values()): raise ValueError("같은 로봇에 이미 진행 중인 작업이 있습니다")
+        for k in sorted(DEPLOYS, key=lambda k: DEPLOYS[k]["t"])[:-30]: DEPLOYS.pop(k)
+        jid = f"{int(time.time() * 1000):x}"; job = {"id": jid, "key": key, "lines": [], "done": False, "rc": None, "t": time.time()}; DEPLOYS[jid] = job
+    p = subprocess.Popen(["bash", DEPLOY_SH, *args], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace", bufsize=1)
+    def pump():
+        for line in p.stdout: job["lines"].append(line.rstrip("\n"))
+        job.update(rc=p.wait(), done=True)
+    threading.Thread(target=pump, daemon=True).start(); return jid
+
 class H(http.server.SimpleHTTPRequestHandler):
+    def deploy_block_reason(self):
+        """웹에서 로봇에 넣기를 막는 이유 (공개 cloudflared 링크로 들어온 요청 등) — 빈 문자열이면 허용"""
+        if not DEPLOY_ENABLED: return "이 포털은 웹에서 로봇에 넣기가 꺼져 있습니다 (켜려면 포털을 PORTAL_ROBOT_DEPLOY=1 로 띄우기) — 아래 터미널 명령을 쓰세요"
+        if any(k.lower().startswith("cf-") for k in self.headers.keys()) or "cloudflare" in (self.headers.get("Cdn-Loop") or "").lower():
+            return "공개 링크로는 로봇에 넣을 수 없습니다 — 노트북(또는 서버)에서 http://localhost:9092 로 열어서 하세요"
+        return ""
     def end_headers(self):
         self.send_header("Access-Control-Allow-Origin", "*"); self.send_header("Cache-Control", "no-store"); super().end_headers()
     def log_message(self, fmt, *args): pass
@@ -287,6 +327,23 @@ class H(http.server.SimpleHTTPRequestHandler):
                     from package import export_pcd; export_pcd.export_raisin_map_zip(man, out, mname, road, cwx)
                 except Exception as e: return self.send_json({"error": f"raisin 맵 생성 실패: {e}"}, 500)
             return self.send_json({"ok": True, "path": f"output/{name}/compiled/export/{os.path.basename(out)}", "bytes": os.path.getsize(out)})
+        if p.startswith("/api/maps/") and p.endswith("/robot_package"):    # 로봇 맵 패키지: <맵이름>/{<맵이름>.pcd 위치추정, voxel3d_tiles 보행, …} — scripts/package/robot_map_package.py
+            name = os.path.basename(p[len("/api/maps/"):-len("/robot_package")]); q = urllib.parse.parse_qs(u.query)
+            root = os.path.join(OUT, name)
+            if not os.path.exists(os.path.join(root, "compiled", "map_manifest.json")): return self.send_json({"error": "no map"}, 404)
+            mname = q.get("map_name", [""])[0]; tiles = q.get("tiles", ["auto"])[0]
+            try: lv = float(q.get("loc_voxel", ["0.25"])[0])
+            except ValueError: return self.send_json({"error": "loc_voxel"}, 400)
+            if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", mname): return self.send_json({"error": "맵 이름은 영문/숫자/_/- 만 (64자 이하)"}, 400)
+            if not re.fullmatch(r"[A-Za-z0-9_]{1,32}", tiles): return self.send_json({"error": "tiles"}, 400)
+            msgs = []
+            try:
+                from package import robot_map_package as RMP
+                d, zp = RMP.build(root, mname, lv, tiles, make_zip=True, log=msgs.append)
+            except Exception as e: return self.send_json({"error": f"로봇 맵 패키지 생성 실패: {e}"}, 500)
+            rel = os.path.relpath(d, ROOT)
+            return self.send_json({"ok": True, "path": os.path.relpath(zp, ROOT), "dir": rel, "bytes": os.path.getsize(zp), "log": msgs,
+                                   "info": json.load(open(os.path.join(d, "map_info.json"))), "deploy": f"tools/deploy_robot_map.sh {rel} <로봇 이름 또는 user@주소>"})
         if p.startswith("/api/maps/") and p.endswith("/pcd"):
             name = os.path.basename(p[len("/api/maps/"):-len("/pcd")]); q = urllib.parse.parse_qs(u.query); src = q.get("source", ["voxels"])[0]
             if src not in ("voxels", "voxels_occ", "occupancy", "voxel3d", "voxel3d_tiles"): return self.send_json({"error": "source"}, 400)
@@ -317,6 +374,13 @@ class H(http.server.SimpleHTTPRequestHandler):
                 except Exception as e: return self.send_json({"error": f"PCD 생성 실패: {e}"}, 500)
             rel = f"output/{name}/compiled/export/{fname}"
             return self.send_json({"ok": True, "path": rel, "legend": rel[:-4] + "_legend.json", "bytes": os.path.getsize(out)})
+        if p == "/api/robots":
+            d, rs = robots_public(); why = self.deploy_block_reason()
+            return self.send_json({"enabled": not why, "reason": why, "defaults": d, "robots": rs, "file": os.path.relpath(ROBOTS_FILE, ROOT), "file_exists": os.path.exists(ROBOTS_FILE), "host": __import__("socket").gethostname()})
+        if p.startswith("/api/robot_deploy/"):
+            j = DEPLOYS.get(os.path.basename(p))
+            if not j: return self.send_json({"error": "no job"}, 404)
+            return self.send_json({"id": j["id"], "lines": j["lines"], "done": j["done"], "rc": j["rc"]})
         if p.startswith("/api/log/"):
             name = os.path.basename(p[len("/api/log/"):]); f = os.path.join(ROOT, "sessions", f"{name}_build.out")
             if not os.path.exists(f): return self.send_json({"error": "no log"}, 404)
@@ -368,6 +432,31 @@ class H(http.server.SimpleHTTPRequestHandler):
             f = os.path.join(CD.DIR, f"{name}.json")
             if os.path.exists(f): os.remove(f)
             return self.send_json({"ok": True})
+        if p == "/api/robot_deploy":    # 로봇 맵 패키지를 로봇 log/map/<이름>/ 에: {dir, robot | target(+save_name), ws, dry_run, forget_host}
+            why = self.deploy_block_reason()
+            if why: return self.send_json({"error": why}, 403)
+            pkg = os.path.realpath(os.path.join(ROOT, str(body.get("dir", ""))))
+            if not (pkg.startswith(os.path.realpath(OUT) + os.sep) and os.path.basename(os.path.dirname(pkg)) == "robot"
+                    and os.path.isfile(os.path.join(pkg, os.path.basename(pkg) + ".pcd"))): return self.send_json({"error": "패키지 폴더가 아닙니다 (먼저 Robot map package)"}, 400)
+            ws = str(body.get("ws", "") or "").strip()
+            if ws and not re.fullmatch(r"[A-Za-z0-9._/~-]{1,200}", ws): return self.send_json({"error": "워크스페이스 경로: 영문·숫자·. _ / ~ - 만"}, 400)
+            robot = str(body.get("robot", "") or ""); target = str(body.get("target", "") or "").strip(); save = str(body.get("save_name", "") or "").strip()
+            _, rs = robots_public()
+            if robot:
+                if robot not in [r["name"] for r in rs]: return self.send_json({"error": f"로봇 목록에 없는 이름: {robot}"}, 400)
+                target = robot
+            else:
+                m = re.fullmatch(r"(?:([a-z_][a-z0-9_.-]{0,31})@)?([A-Za-z0-9._-]{1,253})(?::(\d{1,5}))?", target)
+                if not m: return self.send_json({"error": "주소는 [user@]주소[:포트] (예: raion@192.168.0.10)"}, 400)
+                if save:
+                    if not re.fullmatch(r"[A-Za-z0-9_-]{1,40}", save): return self.send_json({"error": "저장할 이름: 영문·숫자·_·- 만"}, 400)
+                    try: save_robot(save, m[1], m[2], int(m[3]) if m[3] else None, ws)
+                    except Exception as e: return self.send_json({"error": f"로봇 목록 저장 실패: {e}"}, 500)
+                    target = save
+            args = [pkg, target] + (["--ws", ws] if ws else []) + (["--dry-run"] if body.get("dry_run") else []) + (["--forget-host"] if body.get("forget_host") else [])
+            try: jid = start_deploy(args, target)
+            except ValueError as e: return self.send_json({"error": str(e)}, 409)
+            return self.send_json({"ok": True, "id": jid, "robot": target, "saved": bool(save and not robot)})
         if p == "/api/datasets/rescan":
             _ds_cache["t"] = 0; return self.send_json({"datasets": scan_datasets()})
         return self.send_json({"error": "unknown"}, 404)

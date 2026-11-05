@@ -21,7 +21,7 @@ button{font-family:var(--font-text);cursor:pointer}button:focus-visible,a:focus-
 .sn .tabs{display:flex;align-items:center;gap:22px;font-size:14px;color:var(--color-ink-muted-48)}.sn .tabs span{cursor:pointer}.sn .tabs span.on{color:var(--color-ink)}
 .sn .actions{margin-left:auto;display:flex;align-items:center;gap:10px}
 .btn-link{height:30px;padding:0 14px;border:0;border-radius:var(--radius-sm);background:transparent;color:var(--color-primary);font-size:14px}.btn-link:hover{text-decoration:underline}
-.btn-pill{height:30px;padding:0 16px;border:0;border-radius:var(--radius-pill);background:var(--color-primary);color:var(--color-on-primary);font-size:14px;transition:filter var(--dur-state) var(--ease),transform var(--dur-press) var(--ease)}.btn-pill:hover{filter:brightness(1.06)}.btn-pill:active{transform:scale(.95)}
+.btn-pill{height:30px;padding:0 16px;border:0;border-radius:var(--radius-pill);background:var(--color-primary);color:var(--color-on-primary);font-size:14px;transition:filter var(--dur-state) var(--ease),transform var(--dur-press) var(--ease)}.btn-pill:hover{filter:brightness(1.06)}.btn-pill:active{transform:scale(.95)}.btn-pill:disabled,.btn-soft:disabled{opacity:.4;cursor:not-allowed;filter:none;transform:none}
 .btn-soft{height:32px;border:0;border-radius:var(--radius-sm);background:var(--color-canvas-parchment);color:var(--color-ink);font-size:14px;padding:0 16px;transition:transform var(--dur-press) var(--ease)}.btn-soft:active{transform:scale(.95)}
 a.btn-soft,a.btn-pill{display:inline-flex;align-items:center;text-decoration:none}a.btn-soft:hover,a.btn-pill:hover{text-decoration:none}
 .screen{flex:1;min-height:0;display:none}.screen.on{display:flex}
@@ -206,6 +206,17 @@ table.cdt input[type=text]{width:120px}table.cdt input[type=number]{width:70px}t
     <div id="pcdErr" class="err" hidden></div>
     <div style="display:flex;justify-content:flex-end;gap:10px;margin-top:14px"><button type="button" class="btn-soft" id="pcdCancel">취소</button><button type="submit" class="btn-pill">Generate & download</button></div>
   </form></div></div>
+<div class="modal" id="depModal"><div class="box" style="width:min(760px,94vw)"><h4 id="depTitle">Robot map package</h4><p id="depInfo" style="font-size:13px"></p>
+  <div class="bform" id="depForm">
+    <div class="row2"><label>로봇<select id="depRobot"></select></label><label>로봇 워크스페이스 (비우면 목록·기본값)<input id="depWs" placeholder="raisin_master"></label></div>
+    <div class="row2" id="depAdhoc"><label>주소 [user@]주소[:포트]<input id="depTarget" placeholder="raion@192.168.0.10"></label><label>목록에 저장할 이름 (비우면 저장 안 함)<input id="depSave" placeholder="raibo-01"></label></div>
+    <div style="font-size:12px;color:var(--color-ink-muted-48);margin-top:8px">접속은 <b>포털이 돌고 있는 컴퓨터</b><span id="depHost"></span>에서 합니다 (그 컴퓨터가 로봇과 같은 네트워크여야 함). 그 컴퓨터의 열쇠 → 안 되면 비밀번호(tools/robots.json)로 들어가 열쇠를 등록합니다. 같은 이름의 맵은 로봇 log/map_backup/ 으로 옮긴 뒤 바꿉니다.</div>
+  </div>
+  <div id="depBlocked" class="err" hidden></div>
+  <pre id="depLog" style="margin-top:14px;max-height:280px;white-space:pre-wrap" hidden></pre>
+  <div id="depStatus" style="font-size:14px;margin:10px 0 12px"></div>
+  <div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap"><a class="btn-soft" id="depZip" href="#">zip 내려받기</a><button class="btn-soft" id="depForget" hidden>지문 지우고 다시 확인</button><button class="btn-soft" id="depCheck">확인 (무엇이 바뀌는지)</button><button class="btn-pill" id="depGo" disabled>로봇에 넣기</button><button class="btn-soft" id="depClose">닫기</button></div>
+</div></div>
 <div class="modal" id="modal"><div class="box"><h4 id="mTitle"></h4><p id="mText"></p><pre id="mPre"></pre><div style="display:flex;justify-content:flex-end"><button class="btn-soft" id="mClose">닫기</button></div></div></div>
 
 <script>
@@ -380,7 +391,7 @@ function renderDetail(m){const s=m.summary||{}, q=m.quality||{}, st=statusOf(m);
   document.getElementById("dName").textContent=titleOf(m); document.getElementById("dSub").textContent=`${m.map_id||""} · ${kindOf(m)==="sim"?"Sim":"Real"} · output/${m.name}`;
   const bounds=q.log_bounds||[]; document.getElementById("dLogCount").textContent=`${m.n_logs} total`;
   document.getElementById("dLogs").innerHTML=m.logs.map(lg=>{const b=bounds.find(x=>x.log===lg)||{}; const late=Object.entries(q.topics||{}).filter(([k,v])=>v.late_start&&v.late_start.includes(lg)).map(([k])=>k.replace(/^\//,"")); return `<div class="logrow"><div class="t"><div class="dot ${late.length?"warn":""}"></div><div class="id">${lg}</div><div class="dur">${b.duration_s?b.duration_s+" s":""}</div></div><div class="d">${b.start_s!=null?`t = ${b.start_s}–${b.end_s} s`:"—"}</div>${late.length?`<div class="d">late start: ${late.join(", ")}</div>`:""}</div>`;}).join("");
-  document.getElementById("dActs").innerHTML=`${m.rrd?`<a class="btn-soft" target="_blank" rel="noopener" href="${rerunURL(m.rrd)}">Map in rerun</a>`:""}${m.quality_rrd?`<a class="btn-soft" target="_blank" rel="noopener" href="${rerunURL(m.quality_rrd)}">Data quality</a>`:""}${m.voxel3d_rrd?`<a class="btn-soft" target="_blank" rel="noopener" href="${rerunURL(m.voxel3d_rrd)}">3D prior (locomotion)</a>`:""}${Object.entries(m.voxel3d_variant_rrds||{}).map(([v,p])=>`<a class="btn-soft" target="_blank" rel="noopener" href="${rerunURL(p)}">3D prior · ${v}</a>`).join("")}${m.potree?`<a class="btn-soft" target="_blank" rel="noopener" href="${fileURL(m.potree)}" title="Potree: 확대·자르기·단면·측정 (tools/potree/potree_export.py)">Potree</a>`:""}<a class="btn-soft" target="_blank" rel="noopener" href="${fileURL(m.manifest)}">Manifest</a><button class="btn-soft" id="btnLog">Build log</button><button class="btn-soft" id="pcdBtn2">Download PCD…</button>${m.voxel3d_stair?`<button class="btn-soft" id="stairBtn" title="계단 디딤판·앞면 채움 타일 zip — 풀어서 raisin log/map/<SLAM 맵 이름>/voxel3d_tiles 로">Download stair tiles</button>${m.voxel3d_stair.check_png?`<a class="btn-soft" target="_blank" rel="noopener" href="${fileURL(m.voxel3d_stair.check_png)}" title="계단 채움 전후 측면도·윗면도">Stair check</a>`:""}`:""}<button class="btn-soft" id="raisinBtn" title="raisin log/map/ 에 풀면 Load Map 됨: PCD + 의미 코스트 격자">Download for raisin</button><label class="chk" style="display:inline-flex;gap:4px;align-items:center;font-size:12px" title="횡단보도 끝~인도 사이 좁은 차도 띠를 횡단보도로 (sim 용 후처리, 기본 끔)"><input type="checkbox" id="raisinCwExt"> 횡단보도 끝 연장</label>`;
+  document.getElementById("dActs").innerHTML=`${m.rrd?`<a class="btn-soft" target="_blank" rel="noopener" href="${rerunURL(m.rrd)}">Map in rerun</a>`:""}${m.quality_rrd?`<a class="btn-soft" target="_blank" rel="noopener" href="${rerunURL(m.quality_rrd)}">Data quality</a>`:""}${m.voxel3d_rrd?`<a class="btn-soft" target="_blank" rel="noopener" href="${rerunURL(m.voxel3d_rrd)}">3D prior (locomotion)</a>`:""}${Object.entries(m.voxel3d_variant_rrds||{}).map(([v,p])=>`<a class="btn-soft" target="_blank" rel="noopener" href="${rerunURL(p)}">3D prior · ${v}</a>`).join("")}${m.potree?`<a class="btn-soft" target="_blank" rel="noopener" href="${fileURL(m.potree)}" title="Potree: 확대·자르기·단면·측정 (tools/potree/potree_export.py)">Potree</a>`:""}<a class="btn-soft" target="_blank" rel="noopener" href="${fileURL(m.manifest)}">Manifest</a><button class="btn-soft" id="btnLog">Build log</button><button class="btn-soft" id="pcdBtn2">Download PCD…</button>${m.voxel3d_stair?`<button class="btn-soft" id="stairBtn" title="계단 디딤판·앞면 채움 타일 zip — 풀어서 raisin log/map/<SLAM 맵 이름>/voxel3d_tiles 로">Download stair tiles</button>${m.voxel3d_stair.check_png?`<a class="btn-soft" target="_blank" rel="noopener" href="${fileURL(m.voxel3d_stair.check_png)}" title="계단 채움 전후 측면도·윗면도">Stair check</a>`:""}`:""}<button class="btn-pill" id="robotPkgBtn" title="로봇에 바로 넣는 맵 폴더: <이름>.pcd(위치추정, 0.25 m) + voxel3d_tiles(보행, 계단 채움 있으면 그것) — tools/deploy_robot_map.sh 로 로봇 log/map/<이름>/ 에">Robot map package</button><button class="btn-soft" id="raisinBtn" title="raisin log/map/ 에 풀면 Load Map 됨: PCD + 의미 코스트 격자">Download for raisin</button><label class="chk" style="display:inline-flex;gap:4px;align-items:center;font-size:12px" title="횡단보도 끝~인도 사이 좁은 차도 띠를 횡단보도로 (sim 용 후처리, 기본 끔)"><input type="checkbox" id="raisinCwExt"> 횡단보도 끝 연장</label>`;
   // stage
   const vids=[["pipeline",m.video_pipeline||m.video_rgb,"Pipeline"],["bev",m.bev,"BEV"]].filter(v=>v[1]);   // RGB 단독 탭은 제외 (3분할에 이미 포함) if(!vids.find(v=>v[0]===state.mode)) state.mode=vids.length?vids[0][0]:"none";
   const stage=document.getElementById("stage"); stage.querySelectorAll("video,img.bev,.nomedia").forEach(e=>e.remove());
@@ -399,6 +410,12 @@ function renderDetail(m){const s=m.summary||{}, q=m.quality||{}, st=statusOf(m);
   {const b=document.getElementById("stairBtn"); if(b) b.addEventListener("click",async()=>{b.disabled=true; b.textContent="Preparing…";
     try{const r=await fetch(`/api/maps/${encodeURIComponent(m.name)}/pcd?source=voxel3d_tiles&variant=stair`); const j=await r.json(); if(j.error) alert(j.error); else {const a=document.createElement("a"); a.href=fileURL(j.path); a.download=j.path.split("/").pop(); document.body.appendChild(a); a.click(); a.remove();}}
     catch(err){alert("실패: "+err);} b.disabled=false; b.textContent="Download stair tiles";});}
+  {const b=document.getElementById("robotPkgBtn"); if(b) b.addEventListener("click",async()=>{const def=(m.name||"map").replace(/^session_(laptop_)?/,"").replace(/[^A-Za-z0-9_-]/g,"_").slice(0,64);
+    const nm=prompt("로봇 맵 이름 (로봇 log/map 아래 폴더 이름 = pcd 이름 = GUI Load Map 에 보이는 이름, 영문·숫자·_·-)",def); if(!nm) return;
+    if(!/^[A-Za-z0-9_-]{1,64}$/.test(nm)){alert("영문·숫자·_·- 만, 64자 이하"); return;} b.disabled=true; b.textContent="Preparing…";
+    try{const r=await fetch(`/api/maps/${encodeURIComponent(m.name)}/robot_package?map_name=${encodeURIComponent(nm)}`); const j=await r.json(); if(!r.ok||j.error){alert(j.error||"실패");}
+      else openDeploy(nm,j);}
+    catch(err){alert("실패: "+err);} finally{b.disabled=false; b.textContent="Robot map package";}});}
   {const b=document.getElementById("raisinBtn"); if(b) b.addEventListener("click",async()=>{const def=(m.name||"map").replace(/[^A-Za-z0-9_-]/g,"_"); const nm=def; b.disabled=true; b.textContent="Preparing…";
     try{const r=await fetch(`/api/maps/${encodeURIComponent(m.name)}/raisin?map_name=${encodeURIComponent(nm)}${document.getElementById("raisinCwExt")&&document.getElementById("raisinCwExt").checked?"&cwext=1":""}`); const j=await r.json(); if(!r.ok||j.error){alert(j.error||"실패");} else {const a=document.createElement("a"); a.href=fileURL(j.path); a.download=j.path.split("/").pop(); document.body.appendChild(a); a.click(); a.remove();}}
     finally{b.disabled=false; b.textContent="Download for raisin";}});}
@@ -455,4 +472,45 @@ document.getElementById("buildForm").addEventListener("submit",submitBuild);
 document.getElementById("pcdForm").addEventListener("submit",submitPcd);
 async function load(){const r=await fetch("/api/maps"); const d=await r.json(); MAPS=d.maps; RERUN_BASE=d.rerun_base||""; PUBLIC_URL=d.public_url||""; renderPublicLink(); OPTION_SPEC=d.option_spec||{}; TOKEN_REQUIRED=!!d.token_required; loadJobs(); if(state.screen==="datasets") loadDatasets(); renderLibrary(); if(state.cur){const m=MAPS.find(x=>x.name===state.cur.name); if(m){state.cur=m;}}}
 load(); setInterval(load,60000); setInterval(()=>{ if(JOBS.some(j=>j.status==="running"||j.status==="queued")) loadJobs(); },5000);
+
+const escH=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let DEP=null, ROBOTS={robots:[],defaults:{}};
+const DEP_RC={10:"로봇에 닿지 않습니다",11:"접속 인증 실패",12:"로봇 지문이 바뀌었습니다",3:"로봇에 워크스페이스가 없습니다",5:"로봇 디스크 공간 부족",4:"받은 파일 확인 실패",2:"보내는 도중 끊김",13:"ssh 실패"};
+function depEl(id){return document.getElementById(id);}
+function depReset(){if(!DEP) return; DEP.checked=false; depEl("depGo").disabled=true; depEl("depForget").hidden=true;}
+function depLabel(){const v=depEl("depRobot").value; return v==="__adhoc"?depEl("depTarget").value.trim():v;}
+async function depLoadRobots(sel){const r=await fetch("/api/robots"); ROBOTS=await r.json(); const s=depEl("depRobot");
+  let last=sel; if(!last){try{last=localStorage.getItem("dep_robot")||"";}catch(_){}}
+  s.innerHTML=ROBOTS.robots.map(x=>`<option value="${escH(x.name)}">${escH(x.name)} — ${escH((x.user||ROBOTS.defaults.user)+"@"+x.host+(x.port&&x.port!=22?":"+x.port:""))}</option>`).join("")+`<option value="__adhoc">직접 입력…</option>`;
+  s.value=ROBOTS.robots.some(x=>x.name===last)?last:(ROBOTS.robots.length?ROBOTS.robots[0].name:"__adhoc"); depRobotChanged();}
+function depRobotChanged(){const v=depEl("depRobot").value, rb=ROBOTS.robots.find(x=>x.name===v); depEl("depAdhoc").style.display=v==="__adhoc"?"grid":"none";
+  depEl("depWs").value=rb&&rb.ws?rb.ws:""; depEl("depWs").placeholder=ROBOTS.defaults.ws||"raisin_master"; try{localStorage.setItem("dep_robot",v);}catch(_){} depReset();}
+async function openDeploy(nm,j){const i=j.info; DEP={nm,dir:j.dir,deploy:j.deploy,checked:false,busy:false};
+  depEl("depTitle").textContent=`${nm} — 로봇에 넣기`;
+  depEl("depInfo").innerHTML=`위치추정 <b>${escH(nm)}.pcd</b> ${fmt(i.localization.points)} 점 (${i.localization.voxel_m||"dense"} m) · 보행 voxel3d_tiles <b>${escH(i.locomotion.variant||"default")}</b> (타일 ${i.locomotion.tiles}개) · zip ${(j.bytes/1e6).toFixed(1)} MB`+(j.log||[]).filter(x=>x.startsWith("주의")).map(x=>`<br><span style="color:#8f3d1c">${escH(x)}</span>`).join("");
+  const z=depEl("depZip"); z.href=fileURL(j.path); z.setAttribute("download",j.path.split("/").pop());
+  depEl("depLog").hidden=true; depEl("depLog").textContent=""; depEl("depStatus").textContent=""; depEl("depBlocked").hidden=true;
+  depEl("depModal").classList.add("on"); await depLoadRobots(); depEl("depHost").textContent=ROBOTS.host?` (${ROBOTS.host})`:"";
+  const blocked=!ROBOTS.enabled; depEl("depForm").style.display=blocked?"none":""; depEl("depCheck").hidden=blocked; depEl("depGo").hidden=blocked;
+  if(blocked){const b=depEl("depBlocked"); b.hidden=false; b.innerHTML=`${escH(ROBOTS.reason)}<br><br>노트북 터미널(저장소 폴더):<br><code>${escH(j.deploy)}</code>`;}}
+async function depRun(dry,forget){if(!DEP||DEP.busy) return; const v=depEl("depRobot").value;
+  const body={dir:DEP.dir,dry_run:dry,forget_host:!!forget,ws:depEl("depWs").value.trim()};
+  if(v==="__adhoc"){body.target=depEl("depTarget").value.trim(); body.save_name=depEl("depSave").value.trim(); if(!body.target){depEl("depStatus").textContent="주소를 입력하세요 (예: raion@192.168.0.10)"; return;}} else body.robot=v;
+  const headers={"Content-Type":"application/json"}; if(TOKEN_REQUIRED){const t=localStorage.getItem("portal_token")||prompt("빌드 토큰을 입력하세요"); if(t){headers["X-Portal-Token"]=t; try{localStorage.setItem("portal_token",t);}catch(_){}}}
+  DEP.busy=true; for(const id of ["depCheck","depGo","depForget"]) depEl(id).disabled=true; depEl("depForget").hidden=true;
+  const st=depEl("depStatus"), lg=depEl("depLog"); st.textContent=dry?"확인 중…":"로봇에 넣는 중…"; lg.hidden=false; lg.textContent="";
+  try{const r=await fetch("/api/robot_deploy",{method:"POST",headers,body:JSON.stringify(body)}); const k=await r.json();
+    if(!r.ok||k.error){st.textContent="✗ "+(k.error||"실패"); return;}
+    if(k.saved){await depLoadRobots(k.robot); depEl("depSave").value=""; depEl("depTarget").value="";}
+    let d; for(;;){await new Promise(res=>setTimeout(res,700)); d=await (await fetch(`/api/robot_deploy/${k.id}`)).json(); lg.textContent=d.lines.join("\n"); lg.scrollTop=lg.scrollHeight; if(d.done) break;}
+    if(d.rc===0){ if(dry){DEP.checked=true; st.innerHTML=`<b>확인됨</b> — 위 내용대로 <b>로봇에 넣기</b>를 누르면 설치합니다`;} else {DEP.checked=false; st.innerHTML=`<b>✓ 설치 완료</b> — raisin GUI Load Map 에서 <b>${escH(DEP.nm)}</b> 선택`;} }
+    else {DEP.checked=false; st.innerHTML=`<b>✗ ${escH(DEP_RC[d.rc]||"실패")}</b> (코드 ${d.rc}) — 위 로그의 안내를 확인하세요`; if(d.rc===12) depEl("depForget").hidden=false;}
+  }catch(err){st.textContent="✗ 실패: "+err;}
+  finally{DEP.busy=false; depEl("depCheck").disabled=false; depEl("depForget").disabled=false; depEl("depGo").disabled=!DEP.checked;}}
+depEl("depRobot").addEventListener("change",depRobotChanged);
+for(const id of ["depWs","depTarget"]) depEl(id).addEventListener("input",depReset);
+depEl("depCheck").addEventListener("click",()=>depRun(true,false));
+depEl("depForget").addEventListener("click",()=>{if(confirm("예전 지문을 지우고 다시 접속할까요? 로봇을 다시 설치한 경우처럼, 같은 로봇이 확실할 때만 하세요.")) depRun(true,true);});
+depEl("depGo").addEventListener("click",()=>{if(DEP&&DEP.checked&&confirm(`${depLabel()} 에 '${DEP.nm}' 맵을 넣을까요?`)) depRun(false,false);});
+depEl("depClose").addEventListener("click",()=>depEl("depModal").classList.remove("on"));
 </script></body></html>

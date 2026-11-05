@@ -13,8 +13,9 @@ RUN git clone https://github.com/potree/PotreeConverter.git /src && cd /src && g
 
 FROM python:3.11-slim
 
+# openssh-client: 포털 '로봇에 넣기'(tools/deploy_robot_map.sh)가 로봇에 ssh 로 보낸다
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ffmpeg libgl1 libglib2.0-0 libgomp1 \
+        ffmpeg libgl1 libglib2.0-0 libgomp1 openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128

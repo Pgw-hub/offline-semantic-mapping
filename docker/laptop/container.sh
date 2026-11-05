@@ -10,6 +10,7 @@
 # 네트워크는 기본 host (NETWORK 로 변경): 컨테이너 안에서 띄운 포털(:9092)·rerun 뷰어(:9091)가 호스트 localhost 로 바로 보인다.
 # 포털용 rerun 은 SDK 9886 · WS 9887 로 띄운다 (host 네트워크라 녹화 커버리지 모니터의 rerun spawn(9876)과 겹치면 모니터 창이 안 뜬다).
 # 컨테이너가 시작될 때 tools/start_portal.sh 를 실행해 포털(:9092)·rerun 뷰어(:9091)를 같이 띄운다 (재부팅 후 자동 재시작 포함). 포트를 다른 프로그램(VS Code 포트 포워딩 등)이 잡고 있으면 그 둘만 실패하고 컨테이너는 정상.
+# 포털의 '로봇에 넣기'(웹에서 ssh 로 로봇에 맵 보내기)는 PORTAL_ROBOT_DEPLOY=1 로 켠다 (서버 포털은 기본 꺼짐).
 # 컨테이너는 root 로 돈다. 빌드 산출물(output/)은 파이프라인이 끝날 때 호스트 사용자 소유로 돌린다.
 set -euo pipefail
 IMAGE="${IMAGE:-offline-map-laptop}"
@@ -29,7 +30,7 @@ case "$cmd" in
       IFS=: read -ra EXTRA <<< "${EXTRA_RO:-}"
       for d in "${EXTRA[@]}"; do [ -n "$d" ] && VOLS+=(-v "$d:$d:ro"); done
       docker create --name "$NAME" --gpus all --restart unless-stopped --network "${NETWORK:-host}" \
-        -e PYTHONDONTWRITEBYTECODE=1 -e RERUN_SDK_PORT=9886 -e RERUN_WS_PORT=9887 "${VOLS[@]}" -w "$REPO" "$IMAGE" \
+        -e PYTHONDONTWRITEBYTECODE=1 -e PORTAL_ROBOT_DEPLOY=1 -e RERUN_SDK_PORT=9886 -e RERUN_WS_PORT=9887 "${VOLS[@]}" -w "$REPO" "$IMAGE" \
         bash -c 'bash tools/start_portal.sh >/tmp/start_portal.log 2>&1 || true; exec sleep infinity' >/dev/null   # 컨테이너가 뜰 때(재부팅 포함) 포털·rerun 뷰어도 같이
       echo "컨테이너 생성: $NAME (이미지 $IMAGE)"
     fi

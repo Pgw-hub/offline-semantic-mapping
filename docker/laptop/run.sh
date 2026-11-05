@@ -27,6 +27,20 @@ if [ -f "$ROOT/compiled/session_voxel3d.npz" ] && [ ! -f "$ROOT/compiled/session
   docker exec -w "$REPO" "$NAME" python scripts/locomotion_map/voxel3d_drop_fill.py "$ROOT/compiled" --drop-source 2 3 --suffix lidaronly
   docker exec "$NAME" chown -R "$(id -u):$(id -g)" "$ROOT/compiled"
 fi
+# 계단 채움을 LiDAR 전용 타일에도 (session_voxel3d_stair_lidaronly_tiles, 대전 11/03 실기에 쓴 조합) — 파이프라인 계단 채움은 depth 채움이 섞인 기본 타일 위라서.
+# 옵션(risers·clean·roi)은 세션 yaml 의 options.stair_complete 를 파이프라인과 같은 기본값으로 읽는다. 로봇 맵 패키지(robot_map_package.py --tiles auto)가 이것을 먼저 고른다.
+if [ -f "$ROOT/compiled/session_voxel3d_stair_tiles/index.json" ] && [ -f "$ROOT/compiled/session_voxel3d_lidaronly_tiles/index.json" ] && [ ! -f "$ROOT/compiled/session_voxel3d_stair_lidaronly_tiles/index.json" ]; then
+  docker exec -i -w "$REPO" -e CUDA_VISIBLE_DEVICES= "$NAME" python - "$YAML" "$ROOT/compiled" <<'PY' || echo "경고: LiDAR 전용 계단 채움 실패 — 로봇 맵 패키지는 다음 변형을 쓴다" >&2
+import subprocess, sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1])); comp = sys.argv[2]
+sc = (cfg.get("options") or {}).get("stair_complete") or True
+sc = dict({"risers": True, "roi": None, "clean": True}, **(sc if isinstance(sc, dict) else {}))
+cmd = [sys.executable, "scripts/locomotion_map/voxel3d_stair_complete.py", f"{comp}/session_voxel3d_lidaronly_tiles", f"{comp}/session_voxel3d_stair_lidaronly_tiles"]
+cmd += (["--risers"] if sc["risers"] else []) + (["--clean"] if sc["clean"] else []) + (["--roi", *map(str, sc["roi"])] if sc["roi"] else [])
+subprocess.run(cmd, check=True)
+PY
+  docker exec "$NAME" chown -R "$(id -u):$(id -g)" "$ROOT/compiled"
+fi
 # 계단 채움(options.stair_complete) 결과는 타일로만 나오므로 npz 로도 만들어 포털 변형 'stair' · Potree 레이어 'voxel3d_stair' 로 보이게 한다
 if [ -f "$ROOT/compiled/session_voxel3d_stair_tiles/index.json" ] && [ ! -f "$ROOT/compiled/session_voxel3d_stair.npz" ]; then
   docker exec -w "$REPO" "$NAME" python scripts/locomotion_map/voxel3d_tiles_to_npz.py "$ROOT/compiled/session_voxel3d_stair_tiles" "$ROOT/compiled/session_voxel3d_stair.npz"

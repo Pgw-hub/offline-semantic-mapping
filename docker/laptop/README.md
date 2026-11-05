@@ -88,6 +88,44 @@ tools/start_portal.sh
 - localhost:9091/9092 가 안 열리면 VS Code 가 그 포트를 포워딩으로 잡고 있는 경우가 많다 (`ss -ltnp | grep 909` 에 `code` 가 보임). VS Code PORTS 패널에서 Stop Forwarding Port 한 뒤 `start_portal.sh` 를 다시 실행한다. VS Code 는 작업 공간별로 포워딩을 기억하므로 한 번 지우면 된다.
 - 이미지 안 PotreeConverter 로 만든 Potree 레이어: 점 수 · 범위가 서버 변환기 결과와 동일 (voxel3d 670,177 · raw 15,641,885).
 
+## 로봇에 넣기 (위치추정 지도 + 보행 지도)
+
+로봇은 맵 이름 하나로 두 지도를 잇는다: lidar_slam 은 `log/map/<이름>/<이름>.pcd` 를 읽고, 위치추정 중 `/Odometry/base` 의 frame_id 가 `<이름>` 이 되며,
+prior map controller 는 그 이름으로 `log/map/<이름>/voxel3d_tiles` 를 찾는다. 그래서 **폴더 이름 = pcd 이름 = 맵 이름** 이어야 한다. 아래 두 단계가 이를 맞춘다.
+
+1. 패키지 만들기 — 포털 세션 화면의 **Robot map package** 버튼(이름 입력 → 패키지를 만들고 '로봇에 넣기' 창을 연다), 또는:
+
+   ```
+   docker exec -u $(id -u):$(id -g) -w $PWD offline-map python scripts/package/robot_map_package.py output/<세션> --name 1103_daejeon_grating
+   ```
+
+   산출 `output/<세션>/compiled/export/robot/<이름>/`:
+   `<이름>.pcd`(위치추정, geometry_all_scans 를 0.25 m 격자 중심점으로 — 대전 실험 2–6 과 같은 방식, `--loc-voxel 0` = dense),
+   `<이름>.txt`(키프레임 궤적), `<이름>_manifest.txt`(voxel_size·새 map_id — 로봇 `relocalization.globalmap_voxel_size` 가 0.25 이하면 다시 줄이지 않음(그보다 크면 로봇이 그 크기로 줄임), 같은 이름으로 다시 넣어도 GUI 가 옛 캐시를 쓰지 않게),
+   `voxel3d_tiles/`(보행 지도: 계단 채움 LiDAR 만 → 계단 채움 → LiDAR 만 → 기본 순으로 있는 것, `--tiles` 로 지정), `map_info.json`(출처).
+   계단 채움 LiDAR 만(`stair_lidaronly`, 대전 11/03 실기 조합)은 run.sh 가 빌드 뒤 만든다. 파이프라인의 계단 채움(`stair`)은 카메라 빌드에서 depth 채움 셀이 섞인 타일 위라, 그것이 골라지면 패키지가 경고한다.
+   기하 전용 빌드라 geometry_all_scans.pcd 가 없으면 S 단계 스캔으로 만든다.
+
+2. 로봇에 넣기 — 포털 창에서 로봇을 고르고 **확인** → 로봇 상태(새로 설치 / 같은 이름 맵을 백업하고 교체, 여유 공간)를 보고 **로봇에 넣기**.
+   처음 보는 로봇은 '직접 입력…'에 `raion@<주소>` 를 넣고 '목록에 저장할 이름'을 적으면 `tools/robots.json` 에 남는다. 터미널로는:
+
+   ```
+   tools/deploy_robot_map.sh output/<세션>/compiled/export/robot/<이름> <robots.json 이름 | [user@]주소[:포트]> [--ws ~/raisin_master] [--dry-run]
+   ```
+
+   - 접속: 이 저장소 전용 열쇠 `.robot_ssh/id_ed25519`(처음 실행 때 생성)로 먼저, 안 되면 `tools/robots.json` 의 비밀번호(`defaults.password` — git 에 올리지 않으므로 PC 마다 한 번 적는다, 예시 `tools/robots.example.json`)로
+     들어가 그 열쇠를 로봇 `~/.ssh/authorized_keys` 에 등록한다 — 다음부터는 비밀번호 없이. `ssh-copy-id` 는 필요 없다. 처음 접속의 지문(yes/no)은 자동 수락.
+   - 안 될 때 안내: 로봇에 닿지 않음(같은 네트워크·주소 확인) / 인증 실패(robots.json 의 password 수정 또는 `ssh-copy-id -i .robot_ssh/id_ed25519.pub raion@<주소>`) /
+     지문 바뀜(로봇 재설치 — 같은 로봇이면 포털 '지문 지우고 다시 확인', 터미널 `--forget-host`) / 워크스페이스 없음(`ws` 수정) / 공간 부족.
+   - ssh 한 번으로 보내고 로봇에서 바로 풀며(로봇에 unzip 필요 없음), 받은 파일 목록·크기를 노트북 쪽과 비교한 뒤에만 설치한다.
+     같은 이름이 이미 있으면 `log/map_backup/<이름>_<시각>` 으로 옮긴다 (`log/map` 안에 두면 GUI 맵 목록에 뜨므로 밖에). 전송이 끊기면 기존 맵은 그대로.
+   - `--name <새 이름>` 으로 이름을 바꿔 넣을 수 있고(폴더·pcd·txt·manifest 함께), zip 도 받는다. USB 로 옮긴 경우 로봇에서 `--local`.
+   - 웹에서 넣기는 `PORTAL_ROBOT_DEPLOY=1` 인 포털에서만 된다 — 노트북 컨테이너는 container.sh 가 켜고, 서버 포털은 기본 꺼짐(켜려면 `PORTAL_ROBOT_DEPLOY=1 bash tools/start_portal.sh`).
+     켜져 있어도 공개 링크(cloudflared)로 들어온 요청은 거부한다. `PORTAL_TOKEN` 을 설정하면 빌드처럼 토큰도 필요.
+   - 노트북 포털은 컨테이너 안에서 ssh 를 쓰므로 이 기능은 2026-11-05 이후 이미지(openssh-client 포함)가 필요하다 — `docker build -f docker/laptop/Dockerfile -t offline-map-laptop .` 후 `docker/laptop/container.sh rm && docker/laptop/container.sh up`.
+
+3. 로봇 GUI 에서 Load Map → `<이름>` 선택. 위치추정이 잡히면 prior map controller 가 같은 이름의 보행 지도를 자동으로 읽는다.
+
 ## 이미지 없이 (보행용 맵만)
 
 GPU 가 없거나 Docker 를 쓰지 않을 때:
