@@ -13,9 +13,8 @@ RUN git clone https://github.com/potree/PotreeConverter.git /src && cd /src && g
 
 FROM python:3.11-slim
 
-# openssh-client: 포털 '로봇에 넣기'(tools/deploy_robot_map.sh)가 로봇에 ssh 로 보낸다
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        ffmpeg libgl1 libglib2.0-0 libgomp1 openssh-client \
+        ffmpeg libgl1 libglib2.0-0 libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir torch==2.7.1 torchvision==0.22.1 --index-url https://download.pytorch.org/whl/cu128
@@ -23,6 +22,10 @@ COPY requirements-geometry.txt requirements-semantic.txt /tmp/req/
 RUN pip install --no-cache-dir -r /tmp/req/requirements-semantic.txt
 # Open3D 헤드리스(EGL) 런타임 + PotreeConverter 런타임(TBB)
 RUN apt-get update && apt-get install -y --no-install-recommends libegl1 libx11-6 libxext6 libxrender1 libsm6 libtbb12 \
+    && rm -rf /var/lib/apt/lists/*
+
+# openssh-client: 포털 '로봇에 넣기'(tools/deploy_robot_map.sh)가 로봇에 ssh 로 보낸다 — torch 층 캐시를 살리려고 뒤쪽 층에
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-client \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=potree /src/build/PotreeConverter /opt/potree/PotreeConverter
