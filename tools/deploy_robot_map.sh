@@ -100,6 +100,15 @@ if [ -d "$SRC/voxel3d_tiles" ]; then
     [ -f "$SRC/voxel3d_tiles/$f" ] || { echo "타일 파일 없음: voxel3d_tiles/$f" >&2; exit 1; }
   done
   TILES="$(ls "$SRC"/voxel3d_tiles/t_*.bin | wc -l)"
+  # 보행 지도 ↔ 위치추정 지도 좌표계 연결: 타일의 map_id 가 manifest 와 같아야 로봇이 사전맵을 씀
+  MID="$(sed -n 's/^map_id=//p' "$SRC/${NAME}_manifest.txt" 2>/dev/null | head -1 || true)"
+  TMID="$(sed -n 's/^map_id=//p' "$SRC/voxel3d_tiles/map_id.txt" 2>/dev/null | head -1 || true)"
+  if [ -z "$TMID" ]; then
+    echo "경고: voxel3d_tiles/map_id.txt 가 없습니다 — 로봇이 이 보행 지도를 위치추정 지도와 같은 좌표계로 확인하지 못해 사전맵을 쓰지 않습니다." >&2
+    echo "      같은 빌드에서 나온 것이 확실하면: python scripts/package/robot_map_package.py --link $SRC" >&2
+  elif [ "$TMID" != "$MID" ]; then
+    echo "보행 지도 map_id($TMID) 가 $NAME"_manifest.txt"(${MID:-없음}) 와 다릅니다 — 다른 맵의 타일입니다" >&2; exit 1
+  fi
 else
   echo "경고: voxel3d_tiles 가 없습니다 — 위치추정 지도만 들어갑니다 (prior map controller 는 이 맵에서 사전맵 없음)" >&2
 fi

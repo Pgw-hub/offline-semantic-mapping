@@ -9,6 +9,7 @@
     <name>_manifest.txt   map_id(새로 뽑음)·saved_at·voxel_size — lidar_slam 이 다시 줄이지 않게, GUI 가 옛 캐시를 쓰지 않게
     voxel3d_tiles/        보행 지도 = compiled/locomotion/tiles (2.5 cm, 계단 보완까지 끝난 것). prior map controller 가
                           log/map/<SLAM 맵 이름>/voxel3d_tiles 를 자동으로 찾음. (옛 빌드: session_voxel3d*_tiles 변형 중 --tiles)
+      map_id.txt          manifest 와 같은 map_id — 보행 지도가 이 위치추정 지도와 같은 좌표계·저장본이라는 표시 (prior_map 플러그인이 비교)
     navigation_map.pcd    3D 내비 그래프용 촘촘한 지도 (빌드 N 단계, 있을 때만)
     nav3d_graph.bin       미리 계산한 통행성 그래프·토폴로지 (빌드 N 단계, 있을 때만) — raisin_navigation3d_plugin 이 원본 pcd·파라미터가
                           맞으면 읽고, 아니면 시작할 때 직접 계산 (+ nav3d_graph_summary.json)
@@ -16,8 +17,14 @@
 
 왜 한 이름이어야 하나: lidar_slam 은 log/map/<name>/<name>.pcd 를 읽고, 위치추정 중 /Odometry/base 의 frame_id 가 <name> 이 된다.
 prior map controller 는 그 frame_id 로 타일 폴더를 찾는다 → 폴더 이름 = pcd 이름 = 맵 이름.
+이름만으로는 같은 이름으로 다시 매핑한 맵(다른 좌표계)을 못 가리므로, 타일에 manifest 의 map_id 를 같이 적는다.
+로봇이 같은 이름으로 맵을 다시 저장하면 lidar_slam 이 manifest 의 map_id 를 새로 뽑으므로 → 타일의 map_id 와 달라져 사전맵을 쓰지 않는다.
+
+이미 있는 맵 폴더(예전 패키지, 로봇 log/map/<name>)의 타일에 map_id 만 적기: python robot_map_package.py --link <맵 폴더>
+  (그 폴더의 pcd 와 타일이 같은 좌표계라는 것을 사람이 확인했을 때만)
 
 사용: python robot_map_package.py <빌드 폴더(output/<세션>)> --name 1103_daejeon_grating [--loc-voxel 0.25] [--tiles auto|<변형>] [--out DIR] [--zip]
+     python robot_map_package.py --link <맵 폴더>
 로봇에 넣기: tools/deploy_robot_map.sh <out>/<name> raion@<로봇주소>
 """
 import os as _os, sys as _sys; _sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..")))  # scripts/
@@ -27,6 +34,33 @@ from package.export_pcd import write_pcd
 
 NAME_RE = re.compile(r"[A-Za-z0-9_-]{1,64}")
 TILE_PRIORITY = ("locomotion", "stair_lidaronly", "stair", "lidaronly", "")   # auto: 계단 채움(LiDAR 만) → 계단 채움 → LiDAR 만 → 기본
+TILE_MAP_ID = "map_id.txt"   # voxel3d_tiles/ 안, manifest 와 같은 "map_id=<hex>" 한 줄 — prior map 플러그인이 비교
+
+
+def read_map_id(path):
+    """manifest 형식 파일("key=value" 줄)의 map_id, 없으면 None."""
+    if not os.path.exists(path): return None
+    for line in open(path):
+        k, _, v = line.strip().partition("=")
+        if k == "map_id" and v: return v
+    return None
+
+
+def write_tile_map_id(tile_dir, map_id):
+    with open(os.path.join(tile_dir, TILE_MAP_ID), "w") as f: f.write(f"map_id={map_id}\n")
+
+
+def link(map_dir, log=print):
+    """이미 있는 맵 폴더: <name>_manifest.txt 의 map_id 를 voxel3d_tiles/map_id.txt 에 적음."""
+    map_dir = os.path.abspath(map_dir); name = os.path.basename(map_dir.rstrip("/"))
+    mid = read_map_id(os.path.join(map_dir, f"{name}_manifest.txt"))
+    if not mid: raise FileNotFoundError(f"{map_dir}/{name}_manifest.txt 에 map_id 가 없습니다 (lidar_slam 이 저장했거나 이 도구로 만든 맵이어야 함)")
+    tdir = os.path.join(map_dir, "voxel3d_tiles")
+    if not os.path.exists(os.path.join(tdir, "index.json")): raise FileNotFoundError(f"{tdir}/index.json 이 없습니다")
+    old = read_map_id(os.path.join(tdir, TILE_MAP_ID))
+    write_tile_map_id(tdir, mid)
+    log(f"{name}: voxel3d_tiles/{TILE_MAP_ID} = {mid}" + (f" (이전 {old})" if old and old != mid else ""))
+    return mid
 
 
 def read_pcd_xyz(path):
@@ -142,11 +176,13 @@ def build(root, name, loc_voxel=0.25, tiles="auto", out=None, make_zip=False, lo
         kf = os.path.join(root, "graph", "keyframes_tum.txt")
         if os.path.exists(kf):
             shutil.copy(kf, os.path.join(tmp, f"{name}.txt")); log(f"키프레임 궤적 {name}.txt: {sum(1 for l in open(kf) if l.strip() and not l.startswith('#'))} 개")
+        map_id = secrets.token_hex(16)
         with open(os.path.join(tmp, f"{name}_manifest.txt"), "w") as f:
-            f.write(f"map_id={secrets.token_hex(16)}\nsaved_at={time.strftime('%Y-%m-%dT%H:%M:%S')}\n" + (f"voxel_size={loc_voxel:g}\n" if loc_voxel > 0 else ""))
+            f.write(f"map_id={map_id}\nsaved_at={time.strftime('%Y-%m-%dT%H:%M:%S')}\n" + (f"voxel_size={loc_voxel:g}\n" if loc_voxel > 0 else ""))
         tkey, tdir = pick_tiles(root, tiles)
         shutil.copytree(tdir, os.path.join(tmp, "voxel3d_tiles"))
         if os.path.exists(tdir + "_stair.json"): shutil.copy(tdir + "_stair.json", os.path.join(tmp, "voxel3d_tiles", "stair.json"))
+        write_tile_map_id(os.path.join(tmp, "voxel3d_tiles"), map_id)
         idx = json.load(open(os.path.join(tdir, "index.json"))); nt = len(glob.glob(os.path.join(tdir, "t_*.bin")))
         log(f"보행 지도 voxel3d_tiles: 변형 '{tkey or 'default'}', 타일 {nt} 개, {idx.get('format')}")
         if idx.get("depth") and "lidaronly" not in tkey:
@@ -154,7 +190,7 @@ def build(root, name, loc_voxel=0.25, tiles="auto", out=None, make_zip=False, lo
                 "계단 채움까지 LiDAR 만이면 docker/laptop/run.sh 가 만드는 stair_lidaronly")
         nav3d = copy_nav3d(root, tmp, log)
         man = os.path.join(root, "compiled", "map_manifest.json"); M = json.load(open(man)) if os.path.exists(man) else {}
-        info = {"name": name, "made": time.strftime("%Y-%m-%d %H:%M:%S"), "build_dir": root, "build_map_id": M.get("map_id"), "build_time": M.get("built"),
+        info = {"name": name, "map_id": map_id, "made": time.strftime("%Y-%m-%d %H:%M:%S"), "build_dir": root, "build_map_id": M.get("map_id"), "build_time": M.get("built"),
                 "frame": M.get("frame"), "source": M.get("source"),
                 "localization": {"file": f"{name}.pcd", "points": int(len(P)), "voxel_m": loc_voxel if loc_voxel > 0 else None, "from": src},
                 "locomotion": {"dir": "voxel3d_tiles", "variant": tkey or "default", "tiles": nt, "from": os.path.relpath(tdir, root),
@@ -188,10 +224,16 @@ if __name__ == "__main__":
         ap = argparse.ArgumentParser(); ap.add_argument("main_pcd"); ap.add_argument("out"); ap.add_argument("--loc-voxel", type=float, default=0.25)
         a = ap.parse_args(sys.argv[2:]); write_localization(a.main_pcd, a.out, a.loc_voxel); sys.exit(0)
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("build_dir", help="빌드 폴더 (output/<세션>)"); ap.add_argument("--name", required=True, help="맵 이름 = 로봇 log/map 아래 폴더 이름 = pcd 이름 (영문·숫자·_·-)")
+    ap.add_argument("build_dir", nargs="?", help="빌드 폴더 (output/<세션>)"); ap.add_argument("--name", help="맵 이름 = 로봇 log/map 아래 폴더 이름 = pcd 이름 (영문·숫자·_·-)")
     ap.add_argument("--loc-voxel", type=float, default=0.25, help="위치추정 지도 격자 (m). 0 = dense (메인 맵 5 cm 그대로)")
     ap.add_argument("--tiles", default="auto", help="보행 지도 타일: auto(새 빌드 locomotion → 옛 빌드 계단 채움 LiDAR 만 → 계단 채움 → LiDAR 만 → 기본) | locomotion | locomotion_base | (옛) default | stair | lidaronly | ...")
     ap.add_argument("--out", help="출력 폴더 (기본 <빌드>/compiled/export/robot)"); ap.add_argument("--zip", action="store_true", help="<name>.zip 도 (USB·포털 다운로드용)")
+    ap.add_argument("--link", metavar="MAP_DIR", help="이미 있는 맵 폴더의 타일에 manifest map_id 만 적고 끝냄")
     a = ap.parse_args()
+    if a.link:
+        try: link(a.link)
+        except FileNotFoundError as e: sys.exit(f"오류: {e}")
+        sys.exit(0)
+    if not a.build_dir or not a.name: ap.error("build_dir 와 --name 이 필요합니다 (또는 --link <맵 폴더>)")
     try: build(a.build_dir, a.name, a.loc_voxel, a.tiles, a.out, a.zip)
     except (ValueError, FileNotFoundError) as e: sys.exit(f"오류: {e}")
