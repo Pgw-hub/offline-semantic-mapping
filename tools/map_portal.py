@@ -12,7 +12,7 @@ import http.server, functools, glob, json, os, re, subprocess, sys, threading, t
 ROOT = os.path.abspath(sys.argv[1]) if len(sys.argv) > 1 else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PORT = int(sys.argv[2]) if len(sys.argv) > 2 else 9092
 OUT = os.path.join(ROOT, "output"); SESS = os.path.join(ROOT, "sessions")
-DATASET_ROOTS = [p for p in os.environ.get("DATASET_ROOTS", "/data2").split(":") if p]
+DATASET_ROOTS = [p for p in os.environ.get("DATASET_ROOTS", "/data3/mcap-logging-data:/data2").split(":") if p]
 CONTAINER = os.environ.get("BUILD_CONTAINER", "offline_3d_semantic_map")
 TOKEN = os.environ.get("PORTAL_TOKEN", "")            # 설정되면 빌드/취소 POST 에 X-Portal-Token 헤더 필요
 JOBS_FILE = os.path.join(SESS, "jobs.json")
@@ -35,7 +35,7 @@ def find_robot_map(dp):
     for sub in [dp] + [os.path.join(dp, d) for d in sorted(os.listdir(dp)) if os.path.isdir(os.path.join(dp, d)) and d not in ("raisin_config",)]:
         for f in os.listdir(sub):
             if f.endswith(".pcd") and not f.endswith("_gt.pcd") and os.path.exists(os.path.join(sub, f[:-4] + ".txt")): cands.append(os.path.join(sub, f))
-    if not cands:                                             # 지도 폴더가 데이터셋 옆(형제 폴더)에 있는 경우 (예: /data2/20260915/260915_test)
+    if not cands:                                             # 지도 폴더가 데이터셋 옆(형제 폴더)에 있는 경우 (예: /data3/mcap-logging-data/20260915/260915_test)
         par = os.path.dirname(dp)
         for d in sorted(os.listdir(par)) if os.path.isdir(par) else []:
             sub = os.path.join(par, d)
