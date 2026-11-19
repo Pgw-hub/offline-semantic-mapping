@@ -10,6 +10,8 @@ set -eu
 SRC=$1; W=$2; CFG=${3:-}
 REPO=/home/gw.park/offline_semantic_mapping
 RM=/home/gw.park/raisin_master
+PY=${OSL_PY:-offline_3d_semantic_map}   # mcap 읽기·쓰기 컨테이너. 원본이 /data3 에 있으면 /data3 를 마운트한 컨테이너로 (예: OSL_PY=offline_map_recalib)
+docker exec "$PY" test -d "$SRC" || { echo "컨테이너 $PY 에서 $SRC 가 안 보임 — /data3 를 마운트한 컨테이너를 OSL_PY 로 지정"; exit 1; }
 NAME=$(basename "$W")
 mkdir -p "$W/slam_config"
 if [ -z "$CFG" ]; then
@@ -18,14 +20,14 @@ if [ -z "$CFG" ]; then
 fi
 cp "$CFG/params.yaml" "$CFG/mid360.yaml" "$W/slam_config/"; echo "$CFG" > "$W/slam_config/SOURCE.txt"
 echo "[1/4] 센서 추출"
-docker exec offline_3d_semantic_map bash -c "cd $REPO && python scripts/offline_slam/export_sensor_dump.py $SRC $W/sensors" 2>&1 | grep -v Warn
+docker exec "$PY" bash -c "cd $REPO && python scripts/offline_slam/export_sensor_dump.py $SRC $W/sensors" 2>&1 | grep -v Warn
 echo "[2/4] lidar_slam 재생 (raisin_novnc)"
 RUN=/home/raisin_master/log/offline_slam/$NAME
 docker exec raisin_novnc bash -c "rm -rf $RUN && mkdir -p $RUN && cp $W/slam_config/* $RUN/ 2>/dev/null; /home/raion/offline_semantic_mapping/scripts/offline_slam/run.sh $W/sensors.bin $RUN $RUN && chown -R 1007:1007 /home/raisin_master/log/offline_slam"
 cp "$RM/log/offline_slam/$NAME/slam_out.bin" "$RM/log/offline_slam/$NAME/host.log" "$W/"
 rm -rf "$W/map"; cp -r "$RM/log/offline_slam/$NAME/log/map/offline" "$W/map"
 echo "[3/4] mcap 데이터셋으로"
-docker exec offline_3d_semantic_map bash -c "cd $REPO && python scripts/offline_slam/import_outputs_to_mcap.py $SRC $W/slam_out.bin $W/mcap --map-dir $W/map && chown -R 1007:1007 $W" 2>&1 | grep -v Warn
+docker exec "$PY" bash -c "cd $REPO && python scripts/offline_slam/import_outputs_to_mcap.py $SRC $W/slam_out.bin $W/mcap --map-dir $W/map && chown -R 1007:1007 $W" 2>&1 | grep -v Warn
 echo "[4/4] 실시간 SLAM 출력과 비교 (녹화에 있으면)"
-docker exec offline_3d_semantic_map bash -c "cd $REPO && python scripts/offline_slam/compare_trajectories.py $SRC $W/mcap --out $W/compare.json" 2>&1 | grep -v Warn | grep -E '"(matched|live_keyframes|offline_keyframes|path_live_m|path_offline_m)"|median' || true
+docker exec "$PY" bash -c "cd $REPO && python scripts/offline_slam/compare_trajectories.py $SRC $W/mcap --out $W/compare.json" 2>&1 | grep -v Warn | grep -E '"(matched|live_keyframes|offline_keyframes|path_live_m|path_offline_m)"|median' || true
 echo "완료: mcap_dir = $W/mcap · 궤적 = $W/mcap/offline_slam_map/offline.txt"

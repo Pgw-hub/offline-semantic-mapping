@@ -21,7 +21,8 @@ KIND = {"/livox/lidar": 1, "/livox/imu": 0}
 recs, tf, n = [], {}, {0: 0, 1: 0}
 for f in files:
     with open(f, "rb") as fh:
-        for sch, ch, m in make_reader(fh).iter_messages(topics=list(KIND) + [t for t in ["railab_raibo/tf_static"]]):
+        rd = make_reader(fh); tft = [c.topic for c in rd.get_summary().channels.values() if c.topic.endswith("/tf_static")]   # <로봇 id>/tf_static (id 는 녹화마다 다를 수 있음)
+        for sch, ch, m in rd.iter_messages(topics=list(KIND) + tft):
             if ch.topic.endswith("tf_static"):
                 c = RM._Cur(m.data, 8); _, parent = c.header(); child = c.s(); t = c.u("<3d"); q = c.u("<4d")
                 tf[child.split("/")[-1]] = {"parent": parent.split("/")[-1], "t": list(t), "q_xyzw": list(q)}

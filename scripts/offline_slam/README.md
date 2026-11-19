@@ -23,7 +23,7 @@
 
 ```bash
 # 서버 호스트에서 (컨테이너 offline_3d_semantic_map, raisin_novnc 가 떠 있어야 함)
-scripts/offline_slam/offline_slam.sh <녹화 mcap_dir> /data2/offline_slam/<이름> [lidar_slam 설정 폴더]
+scripts/offline_slam/offline_slam.sh <녹화 mcap_dir> /data2/users/gw.park/offline_slam/<이름> [lidar_slam 설정 폴더]
 ```
 
 - lidar_slam 설정: 기본은 녹화의 `config_snapshot/base/raisin_lidar_slam_plugin/config/{params.yaml,mid360.yaml}`, 없으면 raisin 설치본.
@@ -50,4 +50,4 @@ scripts/offline_slam/offline_slam.sh <녹화 mcap_dir> /data2/offline_slam/<이�
 | 20261016_151520 (핸드헬드, 166 s) | 키프레임 50 / 50, 경로 68.72 / 68.63 m, 같은 시각 위치 차(강체 정렬 후) 중앙 0.71 cm · 최대 3.8 cm, 28 s 에 처리 |
 | 20261023 KAIST DTIPS (758 s) | 실시간이 정상이던 0–540 s: 경로 630.94 / 630.87 m, 정렬 후 중앙 3.5 cm · p90 5.4 cm. 오프라인은 758 s 끝까지 순간이동 0·출력 간격 최대 0.12 s (실시간은 560 s 부터 발산). 경사 빼고 본 바닥 두께 전 구간 중앙 1.5–1.8 cm(맵이 끝까지 안 어긋남; 뒤쪽 경사 7–10 % 는 절대값 미검증). 5.6 분에 처리 |
 
-세부 수치: `/data2/offline_slam/*/compare*.json`.
+세부 수치: `/data2/users/gw.park/offline_slam/*/compare*.json`.
