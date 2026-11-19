@@ -1,6 +1,6 @@
 # 2026-09-14 web_172935_l02_pgo 와 동일 옵션 + LiDAR 외부파라미터 SLAM 값 (lidar_extrinsic: slam). P(자체 PGO) 부터 재실행, sem 은 l05_cdv2_fix 심볼릭링크 재사용. 비교 대상: web_172935_l02_pgo
 root: web_172935_l02_pgo_ext
-mcap_dir: /data2/20260827/20260827/KR-RRT-2604-008_20260827_172935
+mcap_dir: /data3/mcap-logging-data/20260827/20260827/KR-RRT-2604-008_20260827_172935
 logs:
 - 0
 - 1

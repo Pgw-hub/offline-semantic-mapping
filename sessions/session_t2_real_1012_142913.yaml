@@ -1,6 +1,6 @@
 # 2026-10-12 실로봇(KR-RRT-2604-008) 310 s 녹화 — 레코더 v2(config_snapshot). 저장 지도 없음 → /path/pgo(28 msgs) + 오도메트리 매칭. calibration 은 snapshot 의 로봇 자체 값(raisin_root/calibration).
 root: t2_real_1012_142913
-mcap_dir: /data2/20261012/KR-RRT-2604-008_20261012_142913
+mcap_dir: /data3/mcap-logging-data/20261012/KR-RRT-2604-008_20261012_142913
 logs:
 - 0
 - 1

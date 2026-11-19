@@ -1,7 +1,7 @@
 # 2026-09-23 시뮬레이션(dungok_nav_testbed_2f) 계단 데이터 — 레코더 v2(raisin_pod ROS 레이아웃). 저장 지도(.pcd/.txt) 없음 → 키프레임 자세는 /path/pgo 마지막 메시지 + 오도메트리 매칭(graph/keyframes_tum.txt).
 # calibration 은 0921 시뮬 데이터의 raisin_config/calibration 복사(동일 시뮬 로봇). sim: livox_flip false, lidar_extrinsic slam.
 root: t2_sim_0923_stairs
-mcap_dir: /data2/20260923/railab_raibo_20260923_062441
+mcap_dir: /data3/mcap-logging-data/20260923/railab_raibo_20260923_062441
 logs:
 - 0
 - 1

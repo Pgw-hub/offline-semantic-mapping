@@ -4,7 +4,7 @@
 import os as _os, sys as _sys; _sys.path.insert(0, _os.path.abspath(_os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "..")))  # scripts/ (패키지 import)
 import sys, numpy as np, open3d as o3d, yaml, os
 from preprocess.geometry.deskew import read_mcap, deskew_scan
-S = "/data2/20260827/20260827/KR-RRT-2604-008_20260827_172935"; C = S + "/raisin_config/calibration"
+S = "/data3/mcap-logging-data/20260827/20260827/KR-RRT-2604-008_20260827_172935"; C = S + "/raisin_config/calibration"
 from preprocess.geometry.extrinsics import lidar_t_bl; t_bl = lidar_t_bl(a.calib if "a" in dir() else C)
 odom, scans = read_mcap(S + "/log_002.mcap")
 def pose(t):

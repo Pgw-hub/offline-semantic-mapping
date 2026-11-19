@@ -2,8 +2,8 @@
 # 카메라는 녹화된 캘리브레이션 그대로 (LiDAR 와 ~3° 어긋남 의심, docs/HANDOFF.md 2026-10-16). depth 는 640×360 원시(color 정렬 아님).
 # 0–6.3 s 초기화 전 센서 프레임 클라우드는 export_registered_scans 가 자동 제외.
 root: t3_handheld_1016_beolzip_grating_stair
-mcap_dir: /data2/20261016/beolzip_grating_stair_data
-calib: /data2/20261016/beolzip_grating_stair_data/config_snapshot/raisin_root/calibration
+mcap_dir: /data3/mcap-logging-data/20261016/beolzip_grating_stair_data
+calib: /data3/mcap-logging-data/20261016/beolzip_grating_stair_data/config_snapshot/raisin_root/calibration
 logs:
 - 0
 - 1

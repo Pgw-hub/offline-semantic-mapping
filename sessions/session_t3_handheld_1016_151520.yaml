@@ -2,8 +2,8 @@
 # 카메라는 녹화된 캘리브레이션 그대로 (LiDAR 와 ~3° 어긋남 의심, docs/HANDOFF.md 2026-10-16). depth 는 640×360 원시(color 정렬 아님).
 # 프레임 전환 없음 (전 구간 단일 world frame).
 root: t3_handheld_1016_151520
-mcap_dir: /data2/20261016/railab_raibo_20261016_151520
-calib: /data2/20261016/railab_raibo_20261016_151520/config_snapshot/raisin_root/calibration
+mcap_dir: /data3/mcap-logging-data/20261016/railab_raibo_20261016_151520
+calib: /data3/mcap-logging-data/20261016/railab_raibo_20261016_151520/config_snapshot/raisin_root/calibration
 logs:
 - 0
 - 1

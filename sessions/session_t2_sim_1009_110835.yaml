@@ -1,6 +1,6 @@
 # 2026-10-09 시뮬레이션(dungok 2F) 5분 녹화 — 레코더 v2. 저장 지도 없음 → /path/pgo + 오도메트리 매칭. calibration 은 0921 시뮬 복사.
 root: t2_sim_1009_110835
-mcap_dir: /data2/20261009/railab_raibo_20261009_110835
+mcap_dir: /data3/mcap-logging-data/20261009/railab_raibo_20261009_110835
 logs:
 - 0
 - 1

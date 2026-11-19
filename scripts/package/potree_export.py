@@ -29,6 +29,7 @@ PT2 = np.dtype([("x", "<i4"), ("y", "<i4"), ("z", "<i4"), ("intensity", "<u2"), 
 
 def write_las(path, xyz, intensity=None, classification=None, rgb=None, scale=0.001):
     """LAS 1.2 / point format 2 (laspy 없이). rgb 는 0..255 uint8 (N,3)."""
+    xyz = np.round(np.asarray(xyz, np.float64) / scale) * scale     # 헤더 경계 상자가 양자화된 점을 감싸게 (반올림으로 최댓값을 넘으면 변환기가 거부)
     n = len(xyz); lo = xyz.min(0); hi = xyz.max(0); off = np.floor(lo)
     rec = np.zeros(n, PT2)
     q = np.round((xyz - off) / scale).astype(np.int64)
@@ -41,7 +42,7 @@ def write_las(path, xyz, intensity=None, classification=None, rgb=None, scale=0.
         rec["r"], rec["g"], rec["b"] = rgb16[:, 0], rgb16[:, 1], rgb16[:, 2]
     hdr = struct.pack("<4sHH16sBB32s32sHHHIIBHI5I3d3d6d", b"LASF", 0, 0, b"\0" * 16, 1, 2, b"offline_semantic_mapping".ljust(32, b"\0"),
                       b"potree_export.py".ljust(32, b"\0"), int(time.strftime("%j")), int(time.strftime("%Y")), 227, 227, 0, 2, PT2.itemsize,
-                      n, n, 0, 0, 0, 0, scale, scale, scale, *off, hi[0], lo[0], hi[1], lo[1], hi[2], lo[2])
+                      n, n, 0, 0, 0, 0, scale, scale, scale, *off, *(v for a in range(3) for v in (hi[a] + scale / 2, lo[a] - scale / 2)))   # 경계 상자에 반 칸 여유 (복원 좌표의 부동소수 오차)
     assert len(hdr) == 227, len(hdr)
     with open(path, "wb") as f:
         f.write(hdr); rec.tofile(f)

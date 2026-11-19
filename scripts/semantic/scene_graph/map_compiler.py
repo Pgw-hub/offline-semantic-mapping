@@ -2,8 +2,8 @@
 """Map Compiler 프로토타입 (서버측).
 
 입력(고표현력 맵):
-  - 전역 DINO feat 맵: /data2/20260827/_peek/global_session_feat.npz (16D/셀, world 좌표)
-  - 지형 프로토타입:   /data2/20260827/_dino/proto_session.npz
+  - 전역 DINO feat 맵: /data3/mcap-logging-data/20260827/_peek/global_session_feat.npz (16D/셀, world 좌표)
+  - 지형 프로토타입:   /data3/mcap-logging-data/20260827/_dino/proto_session.npz
   - ConceptGraphs 객체 맵: /data2/cg/data/raibo/<log>/exps/r_mapping_stride10/
       (pkl.gz 의 clip_ft + obj json 의 bbox — GradSLAM relative_pose=True 라서
        traj.txt 첫 줄 T_w_c0 로 world 변환해서 통합)
@@ -22,8 +22,8 @@ import argparse, glob, gzip, json, os, pickle, time
 
 import numpy as np
 
-FEAT_NPZ = "/data2/20260827/_peek/global_session_feat.npz"
-PROTO_NPZ = "/data2/20260827/_dino/proto_session.npz"
+FEAT_NPZ = "/data3/mcap-logging-data/20260827/_peek/global_session_feat.npz"
+PROTO_NPZ = "/data3/mcap-logging-data/20260827/_dino/proto_session.npz"
 RAIBO_ROOT = os.environ.get("CG_RAIBO_ROOT", "/data2/cg/data/raibo")
 OUT_DIR = os.environ.get("CG_OUT_DIR", "/data2/cg/compiled")
 

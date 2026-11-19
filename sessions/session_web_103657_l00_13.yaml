@@ -1,7 +1,7 @@
 # 2026-09-11 신규 데이터셋(20260911_103657, 14 로그 824s) 전체 — 트랙 1 (raw /livox/lidar + deskew + 오프라인 PGO).
 # /cloud_registered 는 레코더가 CustomMsg 직렬화기로 기록해 손상(헤더만 2.3KB) → 사용 불가. raisin_config 는 20260827 것 복사(같은 로봇).
 root: web_103657_l00_13
-mcap_dir: /data2/20260911/KR-RRT-2604-008_20260911_103657
+mcap_dir: /data3/mcap-logging-data/20260911/KR-RRT-2604-008_20260911_103657
 logs:
 - 0
 - 1

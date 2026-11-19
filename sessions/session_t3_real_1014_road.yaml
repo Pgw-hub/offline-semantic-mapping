@@ -1,7 +1,7 @@
 # 2026-10-14 실로봇(KR-RRT-2604-008) 도로 현장(인도·횡단보도·차도) 321 s, /path/pgo 135 msgs — 레코더 v2. calibration 은 config_snapshot/raisin_root/calibration(로봇 자체). 저장 지도 없음.
 root: t3_real_1014_road
-mcap_dir: /data2/20261014/KR-RRT-2604-008_20261014_105348
-calib: /data2/20261014/KR-RRT-2604-008_20261014_105348/config_snapshot/raisin_root/calibration
+mcap_dir: /data3/mcap-logging-data/20261014/KR-RRT-2604-008_20261014_105348
+calib: /data3/mcap-logging-data/20261014/KR-RRT-2604-008_20261014_105348/config_snapshot/raisin_root/calibration
 logs:
 - 0
 - 1

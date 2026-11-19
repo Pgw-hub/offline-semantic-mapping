@@ -1,7 +1,7 @@
 # 2026-10-14 16:57 실로봇(KR-RRT-2604-008) 206 s, /path/pgo 48 msgs — 레코더 v2, 로봇 자체 calibration. 저장 지도 없음.
 root: t3_real_1014_165753
-mcap_dir: /data2/20261014/KR-RRT-2604-008_20261014_165753
-calib: /data2/20261014/KR-RRT-2604-008_20261014_165753/config_snapshot/raisin_root/calibration
+mcap_dir: /data3/mcap-logging-data/20261014/KR-RRT-2604-008_20261014_165753
+calib: /data3/mcap-logging-data/20261014/KR-RRT-2604-008_20261014_165753/config_snapshot/raisin_root/calibration
 logs:
 - 0
 - 1

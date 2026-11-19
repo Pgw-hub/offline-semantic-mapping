@@ -1,6 +1,6 @@
 # PGO 기하(트랙 1) 검증용 — web_172935_l02_cdv2_fix 와 동일 옵션 + pose_graph. sem 은 기존 맵 심볼릭링크 재사용 2026-09-10
 root: web_172935_l02_pgo
-mcap_dir: /data2/20260827/20260827/KR-RRT-2604-008_20260827_172935
+mcap_dir: /data3/mcap-logging-data/20260827/20260827/KR-RRT-2604-008_20260827_172935
 logs:
 - 0
 - 1

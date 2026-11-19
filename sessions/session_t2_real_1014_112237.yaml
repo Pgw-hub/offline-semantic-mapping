@@ -1,7 +1,7 @@
 # 2026-10-14 실로봇(KR-RRT-2604-008) 베이스라인 79 s, /path/pgo 없음 → odom_traj — 레코더 v2. calibration 은 config_snapshot/raisin_root/calibration(로봇 자체). 저장 지도 없음.
 root: t2_real_1014_112237
-mcap_dir: /data2/20261014/KR-RRT-2604-008_20261014_112237
-calib: /data2/20261014/KR-RRT-2604-008_20261014_112237/config_snapshot/raisin_root/calibration
+mcap_dir: /data3/mcap-logging-data/20261014/KR-RRT-2604-008_20261014_112237
+calib: /data3/mcap-logging-data/20261014/KR-RRT-2604-008_20261014_112237/config_snapshot/raisin_root/calibration
 logs:
 - 0
 - 1
@@ -9,7 +9,7 @@ options:
   map_id: "real 20261014_112237 baseline (stairs/slope) · track 2 all_scans (odom traj) · voxel3d prior"
   robot_map:
     geometry: all_scans
-    traj: /data2/20261014/KR-RRT-2604-008_20261014_112237/odom_traj.txt    # geometry/odom_traj.py (PGO Δ=0)
+    traj: /data3/mcap-logging-data/20261014/KR-RRT-2604-008_20261014_112237/odom_traj.txt    # geometry/odom_traj.py (PGO Δ=0)
   lidar_extrinsic: calib
   livox_flip: true
   lidar_fusion: false

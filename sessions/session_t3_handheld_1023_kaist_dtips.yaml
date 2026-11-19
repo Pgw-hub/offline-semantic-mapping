@@ -1,0 +1,34 @@
+# 2026-10-23 20:19 KAIST DTIPS 데이터셋 — 핸드헬드 리그(Mid-360 + D455, livox_d455_rig) 실외 야간 보도·자전거길, 원본 ~13 분(log_000–012).
+# 위치추정(LIO) 이 녹화 시작 후 ~560 s 부터 발산(초당 10–80 m 순간이동, z +12 → −34 m) → 0–558 s 만 사용: log_000–008 + 558 s 에서 자른 log_009.
+#   원본 log_009·log_010–012 는 /data3/mcap-logging-data/20261023/kaist_dtips/excluded_diverged/ (log_012 는 끝이 잘려 앞 38.6 s 만 복구), log_013–018 은 0 으로 채워진 빈 파일이라 복사 안 함.
+# 원본 config_snapshot·session_window·log_manifest 가 0 바이트(비어 있음) → calibration 은 10/16 핸드헬드(dungok_2f_office) 것을 복사(mcap tf_static 리그 값 동일 확인).
+# 카메라는 녹화된 캘리브레이션 그대로 (LiDAR 와 ~3° 어긋남 의심). 실외 → Mapillary 도로 모델.
+root: t3_handheld_1023_kaist_dtips
+mcap_dir: /data3/mcap-logging-data/20261023/kaist_dtips
+calib: /data3/mcap-logging-data/20261023/kaist_dtips/config_snapshot/raisin_root/calibration
+logs: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+options:
+  map_id: "handheld KAIST DTIPS 20261023 (0–558 s, LIO 발산 이후 제외) · Mask2Former Mapillary (sidewalk/crosswalk/road) · track 2 all_scans · locomotion map"
+  robot_map:
+    geometry: all_scans
+  lidar_extrinsic: calib
+  livox_flip: false
+  lidar_fusion: false
+  mask_bottom_px: 0
+  drop_classes: person
+  vlm_edges: false
+  occupancy_res: 0.2
+  prob_hit: 0.85
+  prob_miss: 0.45
+  costmap: {h_ground: 2, h_obs: 3, clearance: 1.4, band_min: 0.3}
+  view_cubes: false
+  view_coarse: 0.3
+  video_speed: 15
+  video_pipeline: true
+  classdict: mapillary_road_v1
+  label_edge_px: 4
+  require_depth: 1
+  pose_graph: true
+  depth_fill_range: 4.0
+  depth_fill_gap: 0.15
+  aux_lidar: "off"

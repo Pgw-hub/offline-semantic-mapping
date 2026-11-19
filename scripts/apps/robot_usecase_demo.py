@@ -21,7 +21,7 @@ os.makedirs(OUT, exist_ok=True)
 RES = 0.10   # 데모 해상도 (0.05 원본을 2x 다운샘플)
 
 # ---------------- 1. 맵 로드 ----------------
-d = np.load("/data2/20260827/_peek/global_session_full.npz")
+d = np.load("/data3/mcap-logging-data/20260827/_peek/global_session_full.npz")
 res0 = float(d["gres"]); gx0 = float(d["gy0"]) * 0 + float(d["gx0"]); gy0 = float(d["gy0"])
 cnt = d["el_cnt"]
 
