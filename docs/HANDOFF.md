@@ -15,15 +15,15 @@
   ★emc 안에 별도 Claude 세션이 있을 수 있음 — **ROS replay 는 한 세션만** (rosnode kill 충돌 이력)
 - 컨테이너 `cg`: pytorch/pytorch:2.7.1-cuda12.8-cudnn9-**devel** (nvcc), /data2 마운트, 상주형.
   ConceptGraphs ali-dev + 패치. 버전 고정: supervision 0.21.0, rerun-sdk 0.16.1, opencv 4.10, numpy 1.26.
-- 데이터: /data2/20260827/20260827/KR-RRT-2604-008_20260827_172935 (야외 강변 log_000~010, 11분)
+- 데이터: /data3/mcap-logging-data/20260827/20260827/KR-RRT-2604-008_20260827_172935 (야외 강변 log_000~010, 11분)
   - log_000 실내 사무실, 001 전환, 002~010 야외. **011~014 SLAM 발산 → 사용 금지**
   - 자세 = mcap `/Odometry/base` (LiDAR SLAM). depth = `d455_front/depth` (color 정렬 640x360)
 
 ## 완성된 파이프라인 (전부 검증됨)
 ### A. Dense 지형 레이어 (emc, 이전 단계 완료분)
-- 전역 semantic 맵: /data2/20260827/_peek/global_session_full.npz (grass/path/tree/person)
-- 전역 DINO 16D 맵: /data2/20260827/_peek/global_session_feat.npz (167×140m, res 0.10, feat셀 622k)
-  - 고정 PCA /data2/20260827/_dino/dino_pca.npz — **재학습 절대 금지** (기존 맵 전부 무효화됨)
+- 전역 semantic 맵: /data3/mcap-logging-data/20260827/_peek/global_session_full.npz (grass/path/tree/person)
+- 전역 DINO 16D 맵: /data3/mcap-logging-data/20260827/_peek/global_session_feat.npz (167×140m, res 0.10, feat셀 622k)
+  - 고정 PCA /data3/mcap-logging-data/20260827/_dino/dino_pca.npz — **재학습 절대 금지** (기존 맵 전부 무효화됨)
   - 교차로그 게이트 통과: 선형 0.841/kNN15 0.844 (기준선 0.416)
 - ★전역 npz grid 규약: **row=x, col=y**
 
@@ -77,8 +77,8 @@
 
 ## 스냅샷·유스케이스 (2026-09-02 밤)
 - 형상 저장: cg → 이미지 `cg-conceptgraphs:20260902` (docker commit). emc 는 베이스 레이어 손상으로
-  commit 불가 → git 커밋(f3311a5, /opt/catkin_ws) + `docker export` → /data2/backups/emc_20260902.tar.gz (11.8GB).
-  concept-graphs 패치는 레포 git 커밋(8ebc68a). map_compiler/cg_query 사본 → /data2/backups/code/.
+  commit 불가 → git 커밋(f3311a5, /opt/catkin_ws) + `docker export` → /data2/users/gw.park/backups/emc_20260902.tar.gz (11.8GB).
+  concept-graphs 패치는 레포 git 커밋(8ebc68a). map_compiler/cg_query 사본 → /data2/users/gw.park/backups/code/.
 - CPU 로봇 유스케이스 검증 완료: /data2/cg/robot_usecase_demo.py → /data2/cg/compiled/usecase/
   A(잔디 goal: 기하 불가→semantic 72m 도달) · B(경로준수: on-path 21%→79%) ·
   C(텍스트 "bench"→CLIP 124ms→goal→106m 경로). 리포트 아티팩트 "CPU 로봇 Semantic Navigation 검증".
@@ -105,7 +105,7 @@
   (a) occupancy 복셀(점유=관측 복셀, free/unknown 미구분 — ray-cast 정보 없음) 높이색 → world/occupancy_height
   (b) n×n costmap: 컬럼 지면(하위10% z, 3×3 min 평활) 위 [0.15, clearance] 에 non-grass 복셀 → 254 lethal,
       지면 semantic → path10/grass90/other150/기하만60, 희소컬럼(n_pts<6)·미관측 → 255. ROS 규약 npz+png, rerun world/costmap2d
-  log_007: 1377×696, 관측 134k셀, 장애물 99k, path 7.1k, grass 16.7k. 코드 사본 /data2/backups/code/
+  log_007: 1377×696, 관측 134k셀, 장애물 99k, path 7.1k, grass 16.7k. 코드 사본 /data2/users/gw.park/backups/code/
 - costmap 규칙 최종(등급형): 지면 위 [0.15, clearance] 구간에서 grass 라벨 → 통과(무시) / tree·other 라벨 또는
   라벨 없는 0.5m 초과 물체 → 254 lethal / 라벨 없는 ≤0.5m 물체(LiDAR 만 봄) → 200 고비용(불확실).
   log_007: lethal 44k · uncertain 48k · path 13k · grass 17k (이전 lethal 99k 에서 과판정 해소). 색: 주황=200.
@@ -139,7 +139,7 @@
 | cg:/data2/cg/concept-graphs (git, ali-dev 로컬 브랜치) | ConceptGraphs 호환 패치·raibo 설정 | fabcd43 |
 | /data2/cg (git, main — 신설) | map_compiler·복셀 도구·vlm_edges·load_map·뷰어·docs/HANDOFF.md | b4811bb |
 - 커밋은 컨테이너 안에서: `docker exec cg bash -c "cd /data2/cg && git add -A && git commit -m ..."` (git identity 는 -c 로 지정 또는 git config 설정)
-- 데이터·모델·산출물(data/ voxel/ compiled/ hf_cache/ *.rrd *.npz)은 .gitignore — 백업은 docker 이미지 cg-conceptgraphs:20260902 + /data2/backups
+- 데이터·모델·산출물(data/ voxel/ compiled/ hf_cache/ *.rrd *.npz)은 .gitignore — 백업은 docker 이미지 cg-conceptgraphs:20260902 + /data2/users/gw.park/backups
 - 원격(remote) 미설정 — GitHub/GitLab 에 올리려면 `git remote add origin <url> && git push -u origin main`
 
 ## 확률적 occupancy (OctoMap) 실험 (2026-09-04)
@@ -254,7 +254,7 @@
   ★미지원: EoMT-DINOv3 변형(transformers 5.16 출력 깨짐), SAM 3(HF 게이트). 라이선스: ADE20K·Mapillary 비상업 → 제품화 전 확인.
 
 ## 20261002 sim 도로 환경 — Mask2Former Mapillary 첫 빌드 (2026-10-02)
-- 데이터 /data2/20261002/railab_raibo_20261002_054154 (원본 ~/raisin_logs/data_logger_data/20261002 복사, 3 로그 170 s, sim 시각 53.6~128.9 s, rgb 1,338 프레임). 캘리브는 데이터셋 자체 config_snapshot/raisin_root/calibration (0923 것과 mm 차이).
+- 데이터 /data3/mcap-logging-data/20261002/railab_raibo_20261002_054154 (원본 ~/raisin_logs/data_logger_data/20261002 복사, 3 로그 170 s, sim 시각 53.6~128.9 s, rgb 1,338 프레임). 캘리브는 데이터셋 자체 config_snapshot/raisin_root/calibration (0923 것과 mm 차이).
 - ★이 녹화의 /path/pgo 는 메시지마다 pose 2개뿐 → robot_graph 키프레임 복원 1노드로 실패(ufunc invert TypeError → 명확한 메시지로 교체). /Odometry/base 는 루프클로저 점프 0 → geometry/odom_traj.py 로 TUM(every 4, 189 kf) 만들어 robot_map.traj 로 (PGO 보정 Δ=0). 세션 sessions/session_t3_sim_1002_road.yaml (0923 설정 + classdict mapillary_road_v1).
 - sim 렌더(검은 하늘·평면 회색 인도·흰 줄무늬 횡단보도·구형 나무)에도 Mapillary 가 횡단보도/차도/인도/연석을 분리(compiled/sem_overlay_samples.jpg). 검은 하늘은 building(49.9% 픽셀, depth 없어 복셀 미반영), 넓은 밝은 회색 광장 일부는 road/building 으로 혼동.
 - 결과 output/t3_sim_1002_road (280 s): 지도 점 211,706 중 66% 라벨(road 44k · sidewalk 29k · crosswalk 4.1k · curb 876 · pole 7.8k · building 51k), occupancy 676k 셀, 코스트맵 290×278@0.2 m(sidewalk10 6,832 · crosswalk20 933 · 차도 10,822 · lethal 564). compiled/robot_map_semantic.pcd = 요청한 semantic PCD. BEV compiled/bev.png, 코스트맵 compiled/costmap_preview.png.
@@ -345,7 +345,7 @@
   결과 파일: output/web_172935_l02_pgo/{loc_bench.json, loc_bench_oldmap.json}. held-out 질의 스캔은 export_lidar_scans.py --deskew (그래프 없이 원 오도메트리) 로 생성.
 
 ## 2차 데이터셋 20260911_103657 (2026-09-11)
-- /home/gw.park/raisin_logs/20260911/... → /data2/20260911/KR-RRT-2604-008_20260911_103657 로 복사(컨테이너 마운트). 14 로그 824s 19GB, raisin_config 는 20260827 복사.
+- /home/gw.park/raisin_logs/20260911/... → /data3/mcap-logging-data/20260911/KR-RRT-2604-008_20260911_103657 로 복사(컨테이너 마운트). 14 로그 824s 19GB, raisin_config 는 20260827 복사.
 - 점검 결과는 docs/RECORDING_CHECKLIST.md 상단. 요약: /cloud_registered 손상(typekey 오류), /Odometry/base 는 PGO 실시간 보정 포함(루프클로저 점프 ≤10m), /path/pgo 998kf(stamp 없음).
 - geometry/robot_graph.py: 로봇 최종 PGO(/path/pgo 마지막 메시지 또는 --traj <name>.txt) → graph/ (PoseProvider 규약). /path/pgo 는 점프 제거 오도메트리와 상대이동 매칭으로 시각 복원,
   --tmax/--max-err 로 신뢰 노드만. 노드 jump_ns → pose_provider.delta 가 그 구간은 보간 대신 점프 시각에서 계단 전환.
@@ -374,7 +374,7 @@
   ⇒ 실로봇에서는 calib 값이 맞다(확정). SLAM 하드코딩 오프셋은 sim 에서만 유효(driver/flip 관례 차이). 두 _ext 지도는 비교용으로 포털에 남김.
 
 ## 트랙 2 첫 빌드 — sim 20260915 (2026-09-15)
-- 데이터: /data2/20260915/railab_raibo_20260915_065435 (mcap 3개, sim 시각 97 s) + /data2/20260915/260915_test/{.pcd(15,742 pts, 0.1 m), .txt(20 kf), _gt.*}. 점검 표: docs/RECORDING_CHECKLIST.md.
+- 데이터: /data3/mcap-logging-data/20260915/railab_raibo_20260915_065435 (mcap 3개, sim 시각 97 s) + /data3/mcap-logging-data/20260915/260915_test/{.pcd(15,742 pts, 0.1 m), .txt(20 kf), _gt.*}. 점검 표: docs/RECORDING_CHECKLIST.md.
 - 파이프라인 추가: options.robot_map {pcd, traj} → P = geometry/robot_graph.py --traj(키프레임 자세, stamp 가 /Odometry/base 와 일치) · S = tools/preprocess/export_registered_scans.py(/cloud_registered → Δ(t) 로 최종 PGO 프레임)
   · C = tools/preprocess/label_map_points.py(지도 점에 SegFormer 투영, depth z-buffer·경계 제외; session_voxsem 직접 + compiled/robot_map_semantic.pcd) · D/E/F/G/H/V 는 그대로. 매니페스트 geometry_source: robot_map:<pcd>.
 - extract_rgb_session 이 log_time 대신 헤더 stamp 사용 (sim 은 log_time=벽시계 ≠ 헤더=sim 시각). classdicts/indoor_v1.json 추가(floor/stairs/wall/railing/column/door/furniture/person).
@@ -385,7 +385,7 @@
   옵션: robot_map.geometry = pcd(저장 지도) | keyframe_scans | all_scans | every_N. tools/preprocess/scans_to_pcd.py.
 
 ## 트랙 2 실로봇 첫 빌드 — 20260916 yeoksam (2026-09-16)
-- 데이터 /data2/20260916/{260916_yeoksam_office_b1f_2, 260916_yeoksam_office_nearblock_2} (+ 미사용 b1f_1, nearblock_1). raisin_config 없음 → 20260827 캘리브(URDF 값, raisin_calibration_plugin 산출) 복사.
+- 데이터 /data3/mcap-logging-data/20260916/{260916_yeoksam_office_b1f_2, 260916_yeoksam_office_nearblock_2} (+ 미사용 b1f_1, nearblock_1). raisin_config 없음 → 20260827 캘리브(URDF 값, raisin_calibration_plugin 산출) 복사.
   매핑이 녹화보다 21~31 s 먼저 시작 → robot_graph 가 오도메트리 범위 밖 키프레임 제외. /livox/lidar 가 PointCloud2(x,y,z,intensity,tag,line,t) 로 바뀜 → geometry/pc2_reader.decode_livox 공용 디코더(LIVOX_FLIP, 실로봇 1 / sim 0).
 - 6 빌드(sessions/run_t2_0916.sh, 각 ~15 min): 변형 pcd / keyframe_scans / all_scans. 결과(라벨 비율 = 지도 점 중 SegFormer 라벨 받은 비율):
     b1f_2 (indoor_v1, 31 kf, 112 s):  A 3.8k pts 45% · B 66.8k 49% · C 140k 43% · 코스트맵 free 120 / 458 / 1,295 셀
@@ -411,7 +411,7 @@
   b1f_2 kf 지도: LiDAR 54k → +depth 36k(68% 가 바닥 15 cm 이하: 키프레임 LiDAR 가 못 본 로봇 앞 지면) · 라벨 복셀 24.8k→60.2k · 코스트맵 free 458→1,351. z-buffer 필터 전에는 74k 가 붙었고 그중 절반이 벽 뒤 0.2~0.45 m 복제층이었음.
 
 ## LiDAR 없는 옛 데이터셋 — 20260908 nambu (2026-09-17)
-- /data2/20260908/20260908_nambu/ 6세션. **/livox/lidar·/livox/imu 수신 0**, /Odometry/base 도 사실상 없음(112322 세션만 83개). 남은 것: robot_state(10 Hz base_pos/quat), base_imu, joint_states,
+- /data3/mcap-logging-data/20260908/20260908_nambu/ 6세션. **/livox/lidar·/livox/imu 수신 0**, /Odometry/base 도 사실상 없음(112322 세션만 83개). 남은 것: robot_state(10 Hz base_pos/quat), base_imu, joint_states,
   d455_front/{rgb,depth}_compressed, d430_{front,rear}/depth_compressed (전부 AV1). raisin_config 포함(ouster 설정 로봇, LiDAR 미기록).
 - tools/map_from_depth_cams.py 신규: depth 카메라 + robot_state 로 지도·재생 rrd 생성.
   · AV1 디코딩: 패킷 단위 PyAV decode 는 실패(sequence header 없음) → **OBU 시퀀스 헤더가 든 첫 패킷부터 payload 를 이어 붙여 `av.open(..., format="obu")`** 로 한 번에 디코딩. 헤더는 21패킷마다 반복.
@@ -453,7 +453,7 @@
 ## 레코더 v2 형식 + 0923 시뮬 계단 데이터 (2026-09-23)
 - 0923 데이터부터 mcap 메시지가 ROS 전체 레이아웃(raisin_pod v2: 수신 stamp + header{stamp, frame_id} + 본문, Image raw 32FC1/bgr8, 스키마에 `nanosec`). 옛 형식과 공존하므로 `geometry/raisin_msgs.py` 공용 디코더를 만들고 mcap 을 읽는 모든 스크립트(export_registered_scans, robot_graph, robot_pgo_path, mcap_to_cg, extract_rgb_session, mcap_quality, deskew, export_lidar_scans, build_voxel_sem_map, build_graph, geom_ab_test, map_from_depth_cams)를 교체. 0916(v1) 결과 동일성 확인.
 - 0921 시뮬 데이터 두 세션은 레코더가 다른 브랜치라 `/livox/lidar`·`/cloud_registered`·`/pgo/keyframe_cloud` 채널이 없음 → 사용 불가. 0923 은 정상(97 s, 계단 1.8 m 승강).
-- 0923 특성: sim 시계(헤더 stamp ≈ 25 s 부터, 수신 시각과 다름) → 헤더 stamp 로 매칭. rgb 1280×960 bgr8 vs caminfo 640×480 → mcap_to_cg 에서 축소. rgb/depth 비동기 → 옵션 `pair_ms` 추가(세션 250). 저장 지도 없음 → robot_graph 가 /path/pgo + 오도메트리 매칭으로 `graph/keyframes_tum.txt` 생성, build_map_package 의 robot_map.traj/pcd 선택적. 키프레임 19개(1.5 s) → geometry all_scans. calibration 은 0921 시뮬 것 복사(`/data2/20260923/.../raisin_config/calibration`).
+- 0923 특성: sim 시계(헤더 stamp ≈ 25 s 부터, 수신 시각과 다름) → 헤더 stamp 로 매칭. rgb 1280×960 bgr8 vs caminfo 640×480 → mcap_to_cg 에서 축소. rgb/depth 비동기 → 옵션 `pair_ms` 추가(세션 250). 저장 지도 없음 → robot_graph 가 /path/pgo + 오도메트리 매칭으로 `graph/keyframes_tum.txt` 생성, build_map_package 의 robot_map.traj/pcd 선택적. 키프레임 19개(1.5 s) → geometry all_scans. calibration 은 0921 시뮬 것 복사(`/data3/mcap-logging-data/20260923/.../raisin_config/calibration`).
 - 세션 `sessions/session_t2_sim_0923_stairs.yaml`. 평가 `tools/voxel3d_eval.py` 에 계단 컬럼 부분집합 + max_z 보수 규칙(std>2 cm) 비교 추가.
 - 0923 계단 빌드 결과(`output/t2_sim_0923_stairs`): 라벨 59 %(floor/stairs/wall/railing), voxel3d 1.09 M 셀 26 MB(LiDAR 38 만 + 평탄 채움 69 만 + depth 1.7 만), 확률 free 제거 4.2 만.
   hold-out(1/10 스캔 제외, `compiled/voxel3d_eval.json`): 윗면 3,000점 |Δh| 중앙 0.05 cm(sim 무노이즈), 미응답 2.1 %. **계단 윗면 198점**: mean_z 중앙 0.55 cm p90 3.5 cm, 3 cm 이상 낮게 본(위험 방향) 비율 11.1 % → **max_z 규칙(std>2 cm) 적용 시 2.5 %**, p90 1.66 cm. 평지 윗면은 규칙 영향 없음. 유령 1.0 %.
@@ -503,11 +503,11 @@
 ## raisin 내비게이션 연동 의뢰 (2026-10-03)
 - raisin_navigation_plugin 에는 StaticLayer·/map 이 없고 KeepoutFilter(마스크 0~100 → 코스트 선형, max 병합, -1 무시)가 있음 → 의미 코스트를 이 마스크로 넣는 방식으로 결정.
 - tools/export_nav_semantic.py <map_root> <out> [--road 90] [--map-name] → semantic/{semantic_mask.png+yaml(mode raw), .npy, geofence_block_road.json, semantic_info.json, topview.png}. 값: 인도 4 · 횡단보도 8 · 잔디 35 · 차도 90, 나머지 -1.
-- 패키지 /data2/semantic_nav_handoff/t3_sim_1002b_tex/ + 의뢰서 /data2/semantic_nav_handoff/HANDOFF_semantic_costmap_nav.md (사본 docs/HANDOFF_semantic_costmap_nav.md). raisin 이 빌드된 다른 컨테이너의 에이전트가 1단계(지오펜스) → 2단계(맵 부가 파일 semantic/ + NavigationNode 마스크 max 병합) 진행.
+- 패키지 /data2/users/gw.park/semantic_nav_handoff/t3_sim_1002b_tex/ + 의뢰서 /data2/users/gw.park/semantic_nav_handoff/HANDOFF_semantic_costmap_nav.md (사본 docs/HANDOFF_semantic_costmap_nav.md). raisin 이 빌드된 다른 컨테이너의 에이전트가 1단계(지오펜스) → 2단계(맵 부가 파일 semantic/ + NavigationNode 마스크 max 병합) 진행.
 - ★좌표계: 이번 sim 녹화는 로봇 저장 맵 없음 → 맵을 저장한 세션 녹화를 받아 같은 프레임으로 재생성하거나 ICP 정합 필요.
 
 ## 1009 시뮬 5분 녹화 빌드 (2026-10-09)
-- `/data2/20261009/railab_raibo_20261009_110835` (레코더 v2, 로그 5개 298 s, 키프레임 41). 세션 `session_t2_sim_1009_110835.yaml`(0923 복사, all_scans, pair_ms 250, calibration 0921 복사). 전체 빌드 530 s.
+- `/data3/mcap-logging-data/20261009/railab_raibo_20261009_110835` (레코더 v2, 로그 5개 298 s, 키프레임 41). 세션 `session_t2_sim_1009_110835.yaml`(0923 복사, all_scans, pair_ms 250, calibration 0921 복사). 전체 빌드 530 s.
 - 결과 `output/t2_sim_1009_110835`: 라벨 83 %(0923 59 % → 사진 988장으로 커버리지 상승), voxel3d 1.36 M 셀 33 MB · 타일 10. depth 채움은 498 셀뿐(LiDAR 가 거의 다 덮음).
 - hold-out: 윗면 29,513점 |Δh| 0.11 cm, 계단 윗면 3 cm 이상 낮게 본 비율 3.6 % → max_z 규칙 2.4 %, 유령 0.17 %. 0923(계단 198점 11 %→2.5 %)보다 계단 코 오차가 작음 — 반복 통과로 LiDAR 셀이 촘촘해져 평균이 덜 섞인 것으로 보임.
 - 주의: sim 헤더 시계가 실시간의 1/3 로 흐름(오도메트리 991개가 헤더 99 s). 헤더 stamp 로만 매칭하므로 결과엔 영향 없음.
@@ -517,12 +517,12 @@
   파이프라인의 lidar_1 원시 채움은 crop_box 가 없어 계단에서 앞다리 self-hit(lidar_1 스캔의 10 %, base 기준 앞 0.4~0.6 m·왼 0.3 m)가 기둥으로 들어감 → 기본값 `aux_lidar: off` 로 되돌림(코드는 유지, 쓰려면 발자국 crop 추가 필요). 1009 지도는 순수 `/cloud_registered` 로 재빌드.
 
 ## 1012 실로봇 빌드 (2026-10-12)
-- `/data2/20261012/KR-RRT-2604-008_20261012_142913` (레코더 v2, 310 s, 23 GB, 로그 6개, LiDAR 1대). 실내 사무실 + 계단. 저장 지도 없음 → /path/pgo 누적 42 키프레임 + 오도메트리 매칭. calibration 은 config_snapshot/raisin_root/calibration(로봇 자체, source urdf; 0916 값과 1 mm 차). 세션 `session_t2_real_1012_142913.yaml` (all_scans, indoor_v1, aux off).
+- `/data3/mcap-logging-data/20261012/KR-RRT-2604-008_20261012_142913` (레코더 v2, 310 s, 23 GB, 로그 6개, LiDAR 1대). 실내 사무실 + 계단. 저장 지도 없음 → /path/pgo 누적 42 키프레임 + 오도메트리 매칭. calibration 은 config_snapshot/raisin_root/calibration(로봇 자체, source urdf; 0916 값과 1 mm 차). 세션 `session_t2_real_1012_142913.yaml` (all_scans, indoor_v1, aux off).
 - 소요: Q 33 s · P 2 s · A 94 s · S 3 s · R 139 s · B 271 s · C 150 s · **D 2,134 s** · E 5 s · F 142 s · G/H 1 s · V 38 s = **약 51 분** (D 가 75 %).
 - 결과: 라벨 52 %, 복셀 11.8 만, 객체 122, voxel3d 1.40 M 셀 33.6 MB·타일 10. LiDAR hit 셀의 19 % 가 확률 free 로 제거(사람 통행 많은 사무실), person 셀 5,082 제거. 스캔 104개 센서 프레임 글리치 제외.
 
 ## 1014 실로봇 도로 현장 빌드 (2026-10-14)
-- `/data2/20261014/KR-RRT-2604-008_20261014_{105348,105958,110144,112237}` (레코더 v2, 로봇 자체 calibration). 현장 = 시뮬 도로 테스트베드의 실제 장소(보도블록 인도·횡단보도·차도) + 컨테이너 앞 체커플레이트 경사로/계단.
+- `/data3/mcap-logging-data/20261014/KR-RRT-2604-008_20261014_{105348,105958,110144,112237}` (레코더 v2, 로봇 자체 calibration). 현장 = 시뮬 도로 테스트베드의 실제 장소(보도블록 인도·횡단보도·차도) + 컨테이너 앞 체커플레이트 경사로/계단.
 - 도로 지도 `t3_real_1014_road` (105348, 321 s, PGO 229 노드): classdict `mapillary_road_v1`(M2F Swin-L Mapillary panoptic@896), `require_depth: lidar`. 라벨 93 %, 복셀 125 만, voxel3d 975 만 셀 234 MB·76 타일. BEV 에서 인도·횡단보도·차도가 시뮬 테스트베드와 같은 배치로 분리됨. 소요 50 분(B 19 min: M2F 3,211장 · C 12 min · D 11 min · F 4.5 min).
 - 베이스라인 3개(`t2_real_1014_{105958,110144,112237}`, 94/51/79 s): 110144·112237 은 /path/pgo 없음 → `geometry/odom_traj.py`(Δ=0). 같은 사전 적용. 라벨 2~3 % (카메라는 플레이트/문만 보고 LiDAR 는 넓은 실외를 찍어 분모가 큼; 기하 베이스라인 용도엔 무관). 소요 17/6/9 분.
 - 1014 hold-out(스캔 1/10 제외, 윗면 |Δh| 중앙 / 미응답 / 유령): road 1.76 cm / 8.2 % / 2.0 % · 110144 0.44 cm / 1.9 % / 1.4 % · 112237 0.48 cm / 11 % / 1.9 % · 105958 4.85 cm / **46 %** / 1.9 % (윗면 표본 376점뿐; 1.9×5.9 m 안에서 18 m 이동·정지 68 %, 실외 지면을 LiDAR 가 성기게 찍어 2.5 cm 컬럼 빈칸 多 — 오류가 아니라 커버리지). 실기 LiDAR 노이즈로 시뮬(0.1 cm)보다 중앙 오차 0.4~1.8 cm.
@@ -544,7 +544,7 @@
   남은 이유 = 확률 판정이 0.1 m 부모 칸 단위라 표면과 같은 부모(72 %)에 든 1회성 점은 지워지지 않음. 같은 영역에서 확률 판정이 지운 칸 394개. min_scans=2 는 전체 LiDAR 칸 40 %·디딤판 27 % 를 잃어 부적합. 후보: 스캔 단계 강도+거리 불연속 필터, 표면 근처만 세부 칸 carving.
 - 2026-10-15 실험: 165753 를 확률 판정도 2.5 cm 칸 단위로(`--prob-res 0.025`, OctoMap/Bonxai 방식) → `compiled/session_voxel3d_prob025*`, 뷰 voxel3d_prob025_view.rrd, 비교 `stairs_prob025_vs_01.png`, `voxel3d_eval_prob025_vs_01.json`. 확률 칸 73 만→3,763 만, 빌드 ~7 분. 결과: 3단 앞 공중 칸 33→13, 계단 내부 2.5 cm 컬럼 커버리지 89→74 %(깎임), LiDAR 칸 135 만→127 만, hold-out 윗면 미응답 10.4→11.7 %(±5 cm 지터 19.6→22.0 %, 계단 19→35 %), 윗면 오차 중앙 1.95→1.6 cm. depth 채움 5.6 만→7.8 만(부모 칸이 작아져 조건 완화). 유령 지표는 판정 해상도가 달라 직접 비교 불가.
 - 2026-10-15 hit/miss 비교(165753, `compiled/stairs_hitmiss_compare.png`, `voxel3d_eval_hitmiss.json`): A 0.1 m·.85/.45(현행) 공중 33·계단 커버리지 89 %·윗면 미응답 10.4 %·로봇지도 5 cm 안 96.9 % / B 2.5 cm·.85/.45 13·74 %·11.7 %·97.9 % / C 0.1 m·.70/.40(OctoMap 기본) 17·88 %·19.0 %·93.8 % / D 2.5 cm·.70/.40 0·47 %·24.9 %·95.4 %. 결론: miss 를 세게(.40) 하면 공중 점은 줄지만 바닥(윗면 미응답)이 크게 깎임. D 는 계단 디딤판 절반이 사라짐. 현행 A 유지가 보행엔 최선, 공중 점은 두 단계(한 번만 찍힌 세부 칸만 세부 carving) 쪽으로.
-- 2026-10-15 실제 라이브러리 비교(165753, 2.5 cm · hit .70/miss .40 · max_range 30, 같은 cloud_registered 스캔 1,944 개). 작업 폴더 `/data2/libcmp_165753/` (scans_*.bin, run_octomap.py, lib2npz.py, stairs_cmp.py, eval_*.json), 그림 `compiled/stairs_libcmp.png`. Bonxai 벤치 `~/bonxai_novnc/bench/bonxai_bench` (컨테이너에서 /data2 는 읽기 전용 → 출력은 /work/bench/out 에 쓰고 복사; 안 그러면 fopen NULL 로 segfault). 결과: Bonxai 점유 862,851 칸 · 45.6 s · 261 MB / OctoMap(python 바인딩) 855,740 칸 · 1,010 s · 1.18 GB. 공중 칸 둘 다 0, 계단 커버리지 40 % / 44 % (우리 D 47 %, A 89 %), held-out 윗면 미응답 35.2 % / 34.1 % (D 24.9 %, A 10.4 %), 로봇지도 5 cm 안 93.3 / 93.5 % (A 96.9 %). 즉 라이브러리 = 우리 D 와 같은 경향인데 조금 더 깎음. 칸마다 독립 판정하면 바닥이 깎이는 건 구현 문제가 아니라 방식 자체의 성질.
+- 2026-10-15 실제 라이브러리 비교(165753, 2.5 cm · hit .70/miss .40 · max_range 30, 같은 cloud_registered 스캔 1,944 개). 작업 폴더 `/data2/users/gw.park/libcmp_165753/` (scans_*.bin, run_octomap.py, lib2npz.py, stairs_cmp.py, eval_*.json), 그림 `compiled/stairs_libcmp.png`. Bonxai 벤치 `~/bonxai_novnc/bench/bonxai_bench` (컨테이너에서 /data2 는 읽기 전용 → 출력은 /work/bench/out 에 쓰고 복사; 안 그러면 fopen NULL 로 segfault). 결과: Bonxai 점유 862,851 칸 · 45.6 s · 261 MB / OctoMap(python 바인딩) 855,740 칸 · 1,010 s · 1.18 GB. 공중 칸 둘 다 0, 계단 커버리지 40 % / 44 % (우리 D 47 %, A 89 %), held-out 윗면 미응답 35.2 % / 34.1 % (D 24.9 %, A 10.4 %), 로봇지도 5 cm 안 93.3 / 93.5 % (A 96.9 %). 즉 라이브러리 = 우리 D 와 같은 경향인데 조금 더 깎음. 칸마다 독립 판정하면 바닥이 깎이는 건 구현 문제가 아니라 방식 자체의 성질.
 - 2026-10-15 Bonxai .85/.45 (2.5 cm): 점유 1,190,371 · 37.9 s · 공중 8 · 계단 커버리지 69 % · 윗면 미응답 16.2 % · |Δh| 1.76 cm · 로봇지도 5 cm 안 97.2 % (우리 B 13·74 %·11.7 %·97.9 %). 포털 변형 이름 bonxai070 / bonxai085 (compiled/session_voxel3d_bonxai*.npz, voxel3d_bonxai*_view.rrd).
 - 2026-10-16 핸드헬드 20261016_141825 기하 전용 빌드 (`sessions/session_t2_handheld_1016_141825.yaml`, 38 s): 스캔 1,243 (앞 19 센서 프레임·뒤 45 위치추정 모드 제외), 세부 셀 1.31 M · 31.5 MB · 타일 23. export_registered_scans 에 /Odometry/base frame_id 전환 구간 자동 제외 추가 (녹화 중 저장 맵 '1015_1' 위치추정으로 바뀌면 cloud_registered frame_id 는 그대로인데 좌표계가 바뀜). PGO=오도메트리(루프 보정 0) 이지만 재방문 구역 최근접 중앙 1.9–2.8 cm 로 이중 벽 없음. 카메라 외부 파라미터 ~3° 어긋남 의심 → 의미 단계 보류. 녹화 점검 스크립트 /data2/hh_check*.py, hh_calib*.py.
 - 2026-10-16 핸드헬드 20261016_151520 (노트북 PC 취득) 전체 빌드 `sessions/session_t3_handheld_1016_151520.yaml` 652 s: 녹화 깨끗(IMU 200 Hz·cloud_registered 10 Hz·지연 60 ms·프레임 전환 없음), 캘리브레이션 141825 와 동일(카메라 fx 만 645.5→644.3). 스캔 1,656 · 경로 70.7 m · 세부 셀 2.17 M(LiDAR 1.74 M + depth 0.42 M) · 52 MB · 타일 22 · 객체 74 · 라벨 30 %. 계단 단 높이 17.0–17.9 cm(12단, 141825 는 16.3–20.0). 루프 보정 0 이지만 출발=도착 7 cm, 재방문 최근접 중앙 2.5–3.1 cm.
@@ -558,6 +558,6 @@
 - **2026-10-21 노트북 빌드 (docker/laptop/)**: 세션 옵션 `objects: false` = 3D scene graph(D·E) 생략, semantic 복셀·점유·코스트맵·보행 맵까지(beolzip 8 분, 전체 13 분). 이미지 `offline-map-laptop`(python 3.11 + torch 2.7.1 cu128, 14.9 GB, RTX 50 지원), 실행 `docker/laptop/run.sh <yaml>`. ConceptGraphs 단계 GPU ~10.2 GB 라 8 GB 노트북은 불가. SegFormer 단계 GPU batch 8 ~7.0 GB / batch 2 ~2.4 GB (`options.seg_batch`). 이미지 빌드 결과는 서버 컨테이너와 동일(batch 8 기준; open3d 0.19 고정 — 0.20 은 PCD rgb 를 U 로 씀). batch 를 바꾸면 fp16 연산 경로가 달라져 세그 픽셀 1.4 % 다름 → voxel3d 셀 0.009 %·코스트맵 0.006 % 차이(동적 클래스 제거 경유). 기하 전용은 이미지 없이 `requirements-geometry.txt` venv 로도 동일 결과.
 - **2026-10-21 코드 디렉터리를 `scripts/` 아래로**: apps · common · dev · locomotion_map · package · pipeline · preprocess · semantic 과 진입점 `build_map_package.py` 를 `scripts/` 로 이동. 루트에는 sessions(yaml) · tools(포털·서비스·Potree) · docker · docs · classdicts · gt · third_party. 실행 `cd sessions && python ../scripts/build_map_package.py session_x.yaml` (`sessions/build_map_package.py` 는 호환용 전달 파일이라 예전 명령도 동작). `pipeline/env.py` 는 `CODE`(=scripts/) 와 `REPO`(=저장소 루트, output/ 기준) 를 구분. 스크립트 상단 sys.path 부트스트랩은 scripts/ 를 넣는다.
 - **2026-10-24 실제 스틸그레이팅 계단 prior map controller 떨림 원인 (10/23 로봇 녹화)**: 보고서 output/_grating_1023/REPORT.md. 원인 2개 — (1) 사전맵 디딤판 뒤쪽 구멍(실제 한 프레임·컨트롤러 규칙: 빈 칸 11–12.5 %, 25 cm 넘게 낮은 칸 13–18 %; 뚫린 단차+5 m 제한+빠른 스캔) → 등반 시 발이 단차 틈에 빠짐, (2) 희소 위치추정 맵(2,588점) 정렬 점프 1–3 cm → 단 모서리 높이 깜빡임 → 계단 위 떨림. 실제 녹화 재생으로 깜빡임 재현(14–18 % vs 평지 2–6 %), α0.2 스무딩으로 4 %. 시뮬 실제 수준 재현: 그대로 정지 0.065 rad/s(실제 0.061–0.080)·뚫린 단차 0/6(2단) → 구멍 채움 도구 scripts/locomotion_map/voxel3d_tiles_fill_pits.py + aligner_smoothing_alpha 0.2(브랜치 feat/prior-map-aligner-smoothing) 정지 0.019·등반 6/8. 둘 다 미커밋, 실제 로봇 미검증. depth 노이즈 모델 depth/d455_grating_noise.py. 10/22 워크스페이스 빌드 우회 log/prior_eval/build_workaround.sh, raisim 2.8.0.
-- 2026-10-26 KAIST DTIPS 20261023 (핸드헬드, 실외 야간 보도) `sessions/session_t3_handheld_1023_kaist_dtips.yaml` 7,122 s: 원본 log_013–018·session_window·log_manifest·config_snapshot 가 0 바이트(빈 파일), log_012 끝 잘림(38.6 s 복구). LIO 가 ~560 s 부터 발산(초당 10–80 m 순간이동, z +12→−34 m) → 0–558 s 만(log_009 를 558 s 에서 자름, 나머지는 /data2/20261023/kaist_dtips/excluded_diverged/). calibration 은 10/16 dungok_2f_office 복사(tf_static 리그 동일). 경로 ~550 m 한 방향(루프 보정 없음), 스캔 5,472, Mapillary 라벨 8 %(도로 30만·인도 11만 칸), 보행 맵 16.3 M 셀(LiDAR 7.27 M + depth 9.07 M — prob_res 0.025 라 depth 채움이 LiDAR 보다 많음) · 392 MB · 타일 143(최대 10.9 MB), lidaronly 7.27 M · 174 MB. F 단계만 64 분.
-- 2026-11-03 **오프라인 lidar_slam 재생** (브랜치 feat/offline-slam-replay, scripts/offline_slam/README.md): 녹화의 /livox/lidar·/livox/imu 를 raisin_lidar_slam_plugin.so 에 그대로 넣는 호스트(raisin_novnc 에서 빌드, -march=x86-64-v3 필수). raisin 재생 시계(simulatedClockMode)로 PGO 주기 작업을 녹화 시각에 맞추고 스캔마다 응답을 기다려 누락 없음. 함정: lidar·imu 스레드 분리(같으면 매 스캔 Bad time sync), base→IMU TF 는 plugin init() 뒤에(앞이면 항등으로 덮임), raisin_novnc 는 /data2·저장소 ro → 출력은 raisin_master/log/offline_slam 거쳐 /data2/offline_slam.
+- 2026-10-26 KAIST DTIPS 20261023 (핸드헬드, 실외 야간 보도) `sessions/session_t3_handheld_1023_kaist_dtips.yaml` 7,122 s: 원본 log_013–018·session_window·log_manifest·config_snapshot 가 0 바이트(빈 파일), log_012 끝 잘림(38.6 s 복구). LIO 가 ~560 s 부터 발산(초당 10–80 m 순간이동, z +12→−34 m) → 0–558 s 만(log_009 를 558 s 에서 자름, 나머지는 /data3/mcap-logging-data/20261023/kaist_dtips/excluded_diverged/). calibration 은 10/16 dungok_2f_office 복사(tf_static 리그 동일). 경로 ~550 m 한 방향(루프 보정 없음), 스캔 5,472, Mapillary 라벨 8 %(도로 30만·인도 11만 칸), 보행 맵 16.3 M 셀(LiDAR 7.27 M + depth 9.07 M — prob_res 0.025 라 depth 채움이 LiDAR 보다 많음) · 392 MB · 타일 143(최대 10.9 MB), lidaronly 7.27 M · 174 MB. F 단계만 64 분.
+- 2026-11-03 **오프라인 lidar_slam 재생** (브랜치 feat/offline-slam-replay, scripts/offline_slam/README.md): 녹화의 /livox/lidar·/livox/imu 를 raisin_lidar_slam_plugin.so 에 그대로 넣는 호스트(raisin_novnc 에서 빌드, -march=x86-64-v3 필수). raisin 재생 시계(simulatedClockMode)로 PGO 주기 작업을 녹화 시각에 맞추고 스캔마다 응답을 기다려 누락 없음. 함정: lidar·imu 스레드 분리(같으면 매 스캔 Bad time sync), base→IMU TF 는 plugin init() 뒤에(앞이면 항등으로 덮임), raisin_novnc 는 /data2·저장소 ro → 출력은 raisin_master/log/offline_slam 거쳐 /data2/users/gw.park/offline_slam.
   검증: 151520 키프레임 50/50·정렬 후 위치 차 중앙 0.71 cm·맵 ICP 후 최근접 중앙 3.1 cm(출발 자세 0.88° 차), 두 번 실행 차 중앙 0.85 cm. KAIST 758 s 전 구간: 실시간은 560 s 발산, 오프라인은 순간이동 0·출력 간격 최대 0.12 s, 0–540 s 실시간과 중앙 3.5 cm, 경사 보정 바닥 두께 전 구간 1.5–1.8 cm(뒤쪽은 실제 오르막 7–10 %). 처리 5.6 분. 세션 t3_offslam_1016_151520(빌드 완료), t3_offslam_1023_kaist_dtips.

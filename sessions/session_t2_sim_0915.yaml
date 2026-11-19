@@ -1,7 +1,7 @@
 # 2026-09-15 트랙 2 첫 시도 — sim(dungok 2F) 20260915_065435. 기하 = 로봇 lidar_slam 저장 지도(260915_test.pcd, 0.1 m), 자세 = 260915_test.txt(키프레임) + /Odometry/base 보간,
 # 의미 = SegFormer(indoor_v1) 를 지도 점에 투영 + ConceptGraphs 객체. /cloud_registered 로 occupancy. sim 이라 lidar_extrinsic: slam, LiDAR depth 융합 끔.
 root: t2_sim_0915
-mcap_dir: /data2/20260915/railab_raibo_20260915_065435
+mcap_dir: /data3/mcap-logging-data/20260915/railab_raibo_20260915_065435
 logs:
 - 0
 - 1
@@ -9,8 +9,8 @@ logs:
 options:
   map_id: "sim dungok 2F 20260915 · track 2: robot saved map + SegFormer(indoor_v1) + ConceptGraphs"
   robot_map:
-    pcd: /data2/20260915/260915_test/260915_test.pcd
-    traj: /data2/20260915/260915_test/260915_test.txt
+    pcd: /data3/mcap-logging-data/20260915/260915_test/260915_test.pcd
+    traj: /data3/mcap-logging-data/20260915/260915_test/260915_test.txt
   lidar_extrinsic: slam
   livox_flip: false
   lidar_fusion: false

@@ -1,6 +1,6 @@
 # 2026-09-16 실로봇 트랙 2 — 260916_yeoksam_office_nearblock_2 · geometry=all_scans · classdict=outdoor_v2. raisin_config 는 20260911(같은 로봇 KR-RRT-2604-008) 복사. lidar_extrinsic calib(실로봇 확정값).
 root: t2_nearblock2_all_scans
-mcap_dir: /data2/20260916/260916_yeoksam_office_nearblock_2
+mcap_dir: /data3/mcap-logging-data/20260916/260916_yeoksam_office_nearblock_2
 logs:
 - 0
 - 1
@@ -10,8 +10,8 @@ logs:
 options:
   map_id: "260916_yeoksam_office_nearblock_2 · track 2 · geometry=all_scans · outdoor_v2"
   robot_map:
-    pcd: /data2/20260916/260916_yeoksam_office_nearblock_2/map_260916_yeoksam_office_nearblock_2/20260916132144.pcd
-    traj: /data2/20260916/260916_yeoksam_office_nearblock_2/map_260916_yeoksam_office_nearblock_2/20260916132144.txt
+    pcd: /data3/mcap-logging-data/20260916/260916_yeoksam_office_nearblock_2/map_260916_yeoksam_office_nearblock_2/20260916132144.pcd
+    traj: /data3/mcap-logging-data/20260916/260916_yeoksam_office_nearblock_2/map_260916_yeoksam_office_nearblock_2/20260916132144.txt
     geometry: all_scans
   lidar_extrinsic: calib
   lidar_fusion: false

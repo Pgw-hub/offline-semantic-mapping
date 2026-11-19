@@ -9,7 +9,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ap = argparse.ArgumentParser(); ap.add_argument("root"); ap.add_argument("--stride", type=int, default=1); ap.add_argument("--panels", type=int, default=8); ap.add_argument("--video", help="프레임별 4분할(RGB|pred|GT|errors) 영상 mp4 경로"); ap.add_argument("--fps", type=int, default=10)
 ap.add_argument("--write-labels", help="학습용 2D GT 라벨 PNG 저장 디렉터리 (0 sidewalk 1 road 2 crosswalk 3 grass, 255 = GT 없음)")
 ap.add_argument("--write-oracle", help="2D GT 를 사전 채널 one-hot npz 로 저장할 sem_dir (오라클 맵 빌드용: sem/ 에 npz, classes.json·rgb_index.npz·rgb 는 원본 링크)")
-ap.add_argument("--calib", default="/data2/20261002/railab_raibo_20261002_054154/config_snapshot/raisin_root/calibration")
+ap.add_argument("--calib", default="/data3/mcap-logging-data/20261002/railab_raibo_20261002_054154/config_snapshot/raisin_root/calibration")
 a = ap.parse_args(); root = os.path.abspath(a.root)
 g = np.load(os.path.join(root, "compiled", "gt_map_frame.npz") if os.path.exists(os.path.join(root, "compiled", "gt_map_frame.npz")) else os.path.join(HERE, "gt_map_frame.npz"), allow_pickle=True); gt = g["label"]; GCL = list(g["classes"]); gx0, gy0, R = float(g["x0"]), float(g["y0"]), float(g["res"])
 EVAL = ["sidewalk", "road", "crosswalk", "grass"]; gid = {n: GCL.index(n) for n in EVAL}

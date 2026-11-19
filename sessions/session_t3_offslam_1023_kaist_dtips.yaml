@@ -3,14 +3,14 @@
 # (t3_handheld_1023_kaist_dtips). 오프라인은 스캔을 버리지 않아 끝까지 발산 없음(순간이동 0, 최대 출력 간격 0.12 s).
 # lidar_slam 설정은 10/16 151520 config_snapshot(설치본과 동일) — 이 녹화의 config_snapshot 은 비어 있었음. calibration 은 10/16 핸드헬드 것.
 root: t3_offslam_1023_kaist_dtips
-mcap_dir: /data2/offline_slam/kaist/mcap
-calib: /data2/offline_slam/kaist/mcap/config_snapshot/raisin_root/calibration
+mcap_dir: /data2/users/gw.park/offline_slam/kaist/mcap
+calib: /data2/users/gw.park/offline_slam/kaist/mcap/config_snapshot/raisin_root/calibration
 logs: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
 options:
   map_id: "handheld KAIST DTIPS 20261023 전 구간 758 s · OFFLINE lidar_slam replay · Mask2Former Mapillary · track 2 all_scans · locomotion map"
   robot_map:
     geometry: all_scans
-    traj: /data2/offline_slam/kaist/mcap/offline_slam_map/offline.txt
+    traj: /data2/users/gw.park/offline_slam/kaist/mcap/offline_slam_map/offline.txt
   lidar_extrinsic: calib
   livox_flip: false
   lidar_fusion: false

@@ -2,8 +2,8 @@
 # 카메라는 녹화된 캘리브레이션 그대로 (LiDAR 와 ~3° 어긋남 의심, docs/HANDOFF.md 2026-10-16). depth 는 640×360 원시(color 정렬 아님).
 # 367 s 이후 저장 맵 "1016_dungok_1" 위치추정 모드 → robot_graph·export_registered_scans 가 자동 제외.
 root: t3_handheld_1016_174024
-mcap_dir: /data2/20261016/railab_raibo_20261016_174024
-calib: /data2/20261016/railab_raibo_20261016_174024/config_snapshot/raisin_root/calibration
+mcap_dir: /data3/mcap-logging-data/20261016/railab_raibo_20261016_174024
+calib: /data3/mcap-logging-data/20261016/railab_raibo_20261016_174024/config_snapshot/raisin_root/calibration
 logs:
 - 0
 - 1

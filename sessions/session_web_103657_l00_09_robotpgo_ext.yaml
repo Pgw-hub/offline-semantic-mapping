@@ -1,7 +1,7 @@
 # 2026-09-14 web_103657_l00_09_robotpgo 와 동일 (자세=로봇 PGO graph 복사, sem=심볼릭링크 재사용) + LiDAR 외부파라미터를 SLAM 값으로 (lidar_extrinsic: slam).
 # 비교 대상: web_103657_l00_09_robotpgo (calib 값, 4.4 cm 차이). A/S/C/D/E/F/G/H/V 재실행.
 root: web_103657_l00_09_robotpgo_ext
-mcap_dir: /data2/20260911/KR-RRT-2604-008_20260911_103657
+mcap_dir: /data3/mcap-logging-data/20260911/KR-RRT-2604-008_20260911_103657
 logs:
 - 0
 - 1

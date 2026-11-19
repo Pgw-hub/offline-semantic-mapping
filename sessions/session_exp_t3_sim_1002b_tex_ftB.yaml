@@ -4,8 +4,8 @@
 # sim: livox_flip false, lidar_extrinsic slam, rgb/depth 비동기 → pair_ms 250. 저장 지도 없음, 이 녹화는 /path/pgo 가 항상 pose 2개라 키프레임 복원 불가
 # → /Odometry/base(루프클로저 점프 0) 를 geometry/odom_traj.py 로 TUM 화해 robot_map.traj 로 사용(PGO 보정 Δ=0). 기하는 /cloud_registered 전체 스캔.
 root: exp_t3_sim_1002b_tex_ftB
-mcap_dir: /data2/20261002/railab_raibo_20261002_105020
-calib: /data2/20261002/railab_raibo_20261002_105020/config_snapshot/raisin_root/calibration
+mcap_dir: /data3/mcap-logging-data/20261002/railab_raibo_20261002_105020
+calib: /data3/mcap-logging-data/20261002/railab_raibo_20261002_105020/config_snapshot/raisin_root/calibration
 logs:
 - 0
 - 1
@@ -15,7 +15,7 @@ options:
   map_id: "sim road 20261002 10:50 텍스처(연석·차도/인도) 버전 · Mask2Former Mapillary (sidewalk/crosswalk/road) · track 2 all_scans (odom traj)"
   robot_map:
     geometry: all_scans
-    traj: /data2/20261002/railab_raibo_20261002_105020/odom_traj.txt    # geometry/odom_traj.py 산출 (every 4 ≈ 0.4 s)
+    traj: /data3/mcap-logging-data/20261002/railab_raibo_20261002_105020/odom_traj.txt    # geometry/odom_traj.py 산출 (every 4 ≈ 0.4 s)
   lidar_extrinsic: slam
   livox_flip: false
   lidar_fusion: false

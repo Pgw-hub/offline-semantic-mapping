@@ -9,7 +9,7 @@
 `raisin_navigation_plugin` 의 costmap 이 이 격자를 반영하게 한다. 로봇은 파일을 읽기만 하며 추론은 하지 않는다.
 
 ## 2. 넘기는 파일
-위치: 서버 `/data2/semantic_nav_handoff/t3_sim_1002b_tex/` (컨테이너에 /data2 가 없으면 이 폴더를 통째로 복사)
+위치: 서버 `/data2/users/gw.park/semantic_nav_handoff/t3_sim_1002b_tex/` (컨테이너에 /data2 가 없으면 이 폴더를 통째로 복사)
 
 | 파일 | 내용 |
 |---|---|

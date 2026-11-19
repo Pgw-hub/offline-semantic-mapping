@@ -1,7 +1,7 @@
 # 2026-09-11 신규 데이터셋 log0-9 (0~600s) — raw /livox/lidar + deskew, 자세 = 로봇 lidar_slam 최종 PGO(/path/pgo, 시각은 오도메트리 매칭 복원; 636s 이후 루프클로저 창에서 복원 불확실 → 제외).
 # graph/ 는 geometry/robot_graph.py 로 미리 생성(단계 P 건너뜀). <name>.txt 확보 시 전 구간 재빌드.
 root: web_103657_l00_09_robotpgo
-mcap_dir: /data2/20260911/KR-RRT-2604-008_20260911_103657
+mcap_dir: /data3/mcap-logging-data/20260911/KR-RRT-2604-008_20260911_103657
 logs:
 - 0
 - 1
