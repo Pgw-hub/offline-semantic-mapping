@@ -161,6 +161,20 @@ options:
 - 계단을 못 찾으면 build.log 에 `계단 채움 실패(빌드는 계속…)` 한 줄이 남고 나머지 빌드는 그대로 진행된다. 이때는 `logs/F_voxel3d_stair.log` 를 사용자에게 보여 준다.
 - 둔곡 그레이팅 계단 기준값(10/16 녹화): 디딤판 9–10 개, 단 높이 약 20–20.5 cm, 단 너비 약 24 cm, 폭 약 85 cm. 크게 다르면 사용자에게 보고한다.
 
+### 3.5 녹화에 SLAM 출력이 없을 때 (센서만 있는 mcap)
+
+Q 단계 로그나 `mcap_quality` 결과에 `/Odometry/base` · `/cloud_registered` · `/path/pgo` 가 0 이면 녹화 때 매핑을 켜지 않은 것이다. 이 녹화는 그대로 빌드할 수 없고,
+노트북에서 lidar_slam 을 다시 돌려 SLAM 출력을 만든 뒤 빌드한다 (코드 수정 없음, `scripts/offline_slam` 을 노트북 경로로 도는 러너):
+
+```bash
+docker/laptop/offline_slam.sh ~/logger_data/<날짜>/<녹화> output/_offline_slam/<이름> [--t-end-s N]   # 백그라운드로, 로그 output/_offline_slam/<이름>/offline_slam.log
+```
+
+- 조건: `~/raisin_ws_handheld/install/lib/libraisin_lidar_slam_plugin.so` 와 호스트 `cmake` · `g++`. 없으면 사용자에게 알리고 서버로 넘긴다.
+- 끝나면 세션 yaml 에 `mcap_dir: output/_offline_slam/<이름>/mcap`(절대 경로), `calib:` 는 원본 녹화의 `config_snapshot/raisin_root/calibration`, `options.robot_map.traj: .../mcap/offline_slam_map/offline.txt` 를 적는다 (템플릿 `sessions/session_TEMPLATE_laptop_offline_slam.yaml`). 그다음은 4 와 같다.
+- `--t-end-s N` 은 녹화 끝부분이 맵을 뒤틀 때 사용자가 정한 시각 이후를 빼는 것. 다른 `<이름>` 으로 돌린다.
+- 자세한 것: [docker/laptop/README.md](../docker/laptop/README.md) '센서만 녹화한 데이터'.
+
 ## 4. 빌드 실행
 
 ```bash
@@ -186,6 +200,7 @@ docker/laptop/run.sh sessions/<세션>.yaml                # 실제 빌드
 | 단계 B 에서 `CUDA out of memory` | 세그멘테이션 batch 8 은 GPU 약 7 GB 를 쓴다. yaml `options` 에 `seg_batch: 4` (또는 2, 약 2.4 GB) 를 넣고 `--steps B --force B` 후 이어서 빌드. 결과는 batch 8 과 세그 픽셀 약 1 % 다르고 맵 차이는 0.01 % 수준이라 써도 된다. 바꿨으면 사용자에게 보고한다. |
 | 단계 H 로그에 `Potree 생성 실패(빌드는 계속)` · `PotreeConverter 없음` | 이미지가 변환기를 넣기 전(2026-10-21 이전) 버전. `git pull` 후 2.2 의 `docker build` 를 다시 하고, `docker/laptop/container.sh rm && docker/laptop/container.sh up` 으로 컨테이너를 새 이미지로 다시 만든 뒤 `--steps H --force H` 로 Potree 만 다시 만든다. |
 | 포털의 Potree 화면이 비어 있음 | 뷰어 파일이 없음. `tools/potree/fetch_viewer.sh` 실행 (2.3). |
+| Q 단계 결과에 `/Odometry/base` · `/cloud_registered` 가 0 (P 단계가 자세를 못 찾음) | 녹화 때 매핑이 꺼져 있던 센서 전용 녹화. 3.5 의 `docker/laptop/offline_slam.sh` 로 SLAM 출력을 만든 뒤 그 `mcap` 으로 빌드. |
 | `mcap_dir 가 없습니다` | yaml 의 `mcap_dir` 가 노트북 경로가 아님. 서버 경로(`/data2/...`)를 그대로 복사하지 않았는지 확인. |
 | calibration 관련 파일 없음 | `<mcap_dir>/config_snapshot/raisin_root/calibration` 이 없는 녹화. 사용자에게 알린다 (yaml 에 `calib:` 로 다른 경로를 줄 수는 있다). |
 | `docker: permission denied` | 사용자가 docker 그룹에 없음. 사용자에게 묻는다. |

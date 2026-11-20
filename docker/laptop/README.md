@@ -48,6 +48,27 @@ mcap 을 서버로 옮기지 않고, 데이터를 받은 노트북에서 바로 
 3. 결과는 `<root>/compiled/` (기본 `output/<root>/compiled/`). 서버 포털로 보내려면 이 폴더째 복사한다.
    run.sh 는 빌드가 끝나면 LiDAR 전용 보행 맵 변형 `session_voxel3d_lidaronly`(depth·평탄 채움 셀 제외, 포털 다운로드의 "LiDAR 만")도 만든다 — 서버에서 `scripts/locomotion_map/voxel3d_drop_fill.py <compiled> --drop-source 2 3 --suffix lidaronly` 로 수동으로 하던 것. 이미 있으면 건너뛴다.
 
+## 센서만 녹화한 데이터 (SLAM 출력 없음) — 오프라인 lidar_slam 재생
+
+녹화 때 매핑을 켜지 않아 `/Odometry/base` · `/cloud_registered` · `/path/pgo` 가 없는 mcap(센서 `/livox/lidar` · `/livox/imu` · 카메라 · `tf_static` 만 있는 것)은
+그대로는 빌드가 안 된다. 노트북에서 lidar_slam 플러그인을 다시 돌려(`scripts/offline_slam`, 플러그인 코드 수정 없음) SLAM 출력을 만들고 그걸로 빌드한다.
+
+**필요한 것**: 호스트에 빌드된 raisin 워크스페이스(`$RAISIN_ROOT`, 기본 `~/raisin_ws_handheld` — `install/lib/libraisin_lidar_slam_plugin.so` 가 있어야 함)와 `cmake` · `g++`.
+이게 없는 노트북에서는 못 하고 서버(`scripts/offline_slam/offline_slam.sh`)로 보낸다. 재생에 쓰는 플러그인은 그 워크스페이스에 설치된 버전이라 서버·로봇의 버전과 다를 수 있다.
+
+```
+docker/laptop/offline_slam.sh ~/logger_data/<날짜>/<녹화> output/_offline_slam/<이름> [--t-end-s 743] [--logs 0 1 2] [--config <lidar_slam 설정 폴더>]
+```
+
+- 단계: 센서 추출(컨테이너) → lidar_slam 재생(호스트, 처음 한 번 `scripts/offline_slam/host` 를 raisin 과 같은 `-march` 로 `~/offline_slam_build` 에 빌드) → SLAM 토픽을 넣은 mcap 으로 변환(컨테이너) → 녹화에 실시간 SLAM 이 있으면 비교(`compare.json`).
+  43 GB · 761 s 녹화 기준 추출 2 분 · 재생 1 분 · 변환 4 분. 로그 `<work_dir>/offline_slam.log`, 플러그인 로그 `<work_dir>/replay/host.log`.
+- `--t-end-s N`: 녹화 끝부분이 맵을 뒤틀 때 N 초 이후를 재생에서 뺀다. 다른 N 으로 다시 할 때는 다른 `<work_dir>` 를 쓴다. `--resume` 은 이미 있는 단계 결과를 건너뛴다.
+- lidar_slam 설정은 녹화의 `config_snapshot/base/raisin_lidar_slam_plugin/config`, 없으면 `$RAISIN_ROOT/install/config/...` (`<work_dir>/slam_config/SOURCE.txt` 에 출처).
+- 용량: `<work_dir>` 에 녹화 mcap 과 비슷한 크기가 더 생긴다(43 GB 녹화 → 21 GB: 다시 쓴 mcap 17 GB, `sensors.bin` 2.8 GB, `replay/slam_out.bin` 1.1 GB). 맵을 만든 뒤 `sensors.bin` 과 `replay/slam_out.bin` 은 지워도 된다(`mcap/` 과 `mcap/offline_slam_map/` 은 세션이 계속 읽는다).
+- 끝나면 세션 yaml 에 적을 값을 출력한다: `mcap_dir: <work_dir>/mcap`, `calib:` 는 **원본 녹화**의 `config_snapshot/raisin_root/calibration`, `options.robot_map.traj: <work_dir>/mcap/offline_slam_map/offline.txt` (재생의 최종 PGO 궤적). 나머지는 보통 세션과 같고 `docker/laptop/run.sh` 로 빌드한다 (템플릿 `sessions/session_TEMPLATE_laptop_offline_slam.yaml`).
+- 실시간 SLAM 과 다른 점(스캔 누락 없음, IMU 보정을 다시 해 기울기 0.5–0.9° 차이 가능 등)은 [scripts/offline_slam/README.md](../../scripts/offline_slam/README.md).
+- 검증(2026-11-20, 이 노트북): 실시간 SLAM 이 있는 20261016_151520(166 s, 3 로그, 9.5 GB) 을 돌려 키프레임 50 / 50, 경로 68.72 / 68.70 m, 강체 정렬 후 위치 차 중앙 0.75 cm — 서버 검증값(0.71 cm)과 같은 수준. 추출·재생·변환 2 분.
+
 ## 컨테이너 안에서 작업
 
 ```

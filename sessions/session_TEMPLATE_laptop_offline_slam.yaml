@@ -1,0 +1,37 @@
+# 템플릿: 센서만 녹화한 mcap(SLAM 출력 없음)을 노트북에서 오프라인 lidar_slam 재생으로 빌드 (2026-11-20).
+# 쓰는 법: 먼저 docker/laptop/offline_slam.sh <녹화 mcap_dir> output/_offline_slam/<이름> [--t-end-s N] 을 돌린 뒤
+#   이 파일을 sessions/session_laptop_offslam_<이름>.yaml 로 복사해 CHANGE_ME 를 채우고 docker/laptop/run.sh 로 빌드한다.
+#   mcap_dir 는 재생 결과 <work_dir>/mcap, calib 는 원본 녹화의 calibration, robot_map.traj 는 재생의 최종 PGO 궤적 (offline_slam.sh 가 끝에 출력).
+# 보행 맵만이면 options 를 geometry_only 템플릿(session_TEMPLATE_geometry_only.yaml)처럼 하고 mcap_dir · calib · robot_map.traj 만 이 파일대로.
+root: session_laptop_offslam_CHANGE_ME
+mcap_dir: /home/CHANGE_ME/offline-semantic-mapping/output/_offline_slam/CHANGE_ME/mcap
+calib: /home/CHANGE_ME/logger_data/CHANGE_ME_date/CHANGE_ME_recording/config_snapshot/raisin_root/calibration
+logs: [0, 1, 2]
+options:
+  map_id: "CHANGE_ME · OFFLINE lidar_slam replay (노트북) · SegFormer indoor_v1 · all_scans · voxel3d prior + stair_complete"
+  objects: false                # 노트북 이미지: 3D scene graph(D·E) 제외, semantic 맵까지
+  robot_map:
+    geometry: all_scans
+    traj: /home/CHANGE_ME/offline-semantic-mapping/output/_offline_slam/CHANGE_ME/mcap/offline_slam_map/offline.txt   # 오프라인 재생의 최종 PGO 궤적
+  stair_complete: true          # 계단이 없으면 '계단 채움 실패' 한 줄만 남기고 빌드는 계속
+  lidar_extrinsic: calib
+  livox_flip: false             # 핸드헬드 리그 · 레코더 v2 실기체
+  lidar_fusion: false
+  mask_bottom_px: 0
+  drop_classes: person
+  vlm_edges: false
+  occupancy_res: 0.2
+  prob_hit: 0.85
+  prob_miss: 0.45
+  costmap: {h_ground: 2, h_obs: 3, clearance: 1.4, band_min: 0.3}
+  view_cubes: false
+  view_coarse: 0.3
+  video_speed: 15
+  video_pipeline: false
+  classdict: indoor_v1
+  label_edge_px: 4
+  require_depth: 1
+  pose_graph: true
+  depth_fill_range: 4.0
+  depth_fill_gap: 0.15
+  aux_lidar: "off"

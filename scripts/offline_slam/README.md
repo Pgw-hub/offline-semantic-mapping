@@ -26,9 +26,13 @@
 scripts/offline_slam/offline_slam.sh <녹화 mcap_dir> /data2/users/gw.park/offline_slam/<이름> [lidar_slam 설정 폴더]
 ```
 
+노트북(상주 컨테이너 `offline-map` + 호스트에 빌드된 raisin 워크스페이스)에서는 `docker/laptop/offline_slam.sh <녹화 mcap_dir> output/_offline_slam/<이름> [--t-end-s N]` — 같은 네 단계를 노트북 경로로 돈다.
+재생 단계만은 `docker/laptop/offline_slam_run.sh` (이 폴더 `run.sh` 의 노트북판, `RAISIN_ROOT` 기본 `~/raisin_ws_handheld`). 자세한 것은 [docker/laptop/README.md](../../docker/laptop/README.md).
+
 - lidar_slam 설정: 기본은 녹화의 `config_snapshot/base/raisin_lidar_slam_plugin/config/{params.yaml,mid360.yaml}`, 없으면 raisin 설치본.
 - 결과: `<work>/mcap` (맵 파이프라인 입력), `<work>/host.log` (플러그인 로그), `<work>/compare.json` (녹화에 실시간 SLAM 출력이 있으면 비교).
 - 호스트 빌드는 처음 실행 때 자동(`/tmp/osl_build`, raisin 과 같은 `-march=x86-64-v3` 필수 — 다르면 Eigen 정렬 차이로 tf 에서 segfault).
+- `--t-end-s N`(export_sensor_dump.py): 녹화 시작 기준 N 초 이후 스캔은 재생하지 않는다 — 녹화 끝부분이 PGO 를 뒤틀 때 (2026-11-19 노트북 녹화 155339: 끝 17 s 제외).
 
 ## 실시간 SLAM 과 다른 점
 
