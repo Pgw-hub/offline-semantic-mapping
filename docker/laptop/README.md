@@ -64,7 +64,7 @@ docker/laptop/offline_slam.sh ~/logger_data/<날짜>/<녹화> output/_offline_sl
   43 GB · 761 s 녹화 기준 추출 2 분 · 재생 1 분 · 변환 4 분. 로그 `<work_dir>/offline_slam.log`, 플러그인 로그 `<work_dir>/replay/host.log`.
 - `--t-end-s N`: 녹화 끝부분이 맵을 뒤틀 때 N 초 이후를 재생에서 뺀다. 다른 N 으로 다시 할 때는 다른 `<work_dir>` 를 쓴다. `--resume` 은 이미 있는 단계 결과를 건너뛴다.
 - lidar_slam 설정은 녹화의 `config_snapshot/base/raisin_lidar_slam_plugin/config`, 없으면 `$RAISIN_ROOT/install/config/...` (`<work_dir>/slam_config/SOURCE.txt` 에 출처).
-- 용량: `<work_dir>` 에 녹화 mcap 과 비슷한 크기가 더 생긴다(43 GB 녹화 → 21 GB: 다시 쓴 mcap 17 GB, `sensors.bin` 2.8 GB, `replay/slam_out.bin` 1.1 GB). 맵을 만든 뒤 `sensors.bin` 과 `replay/slam_out.bin` 은 지워도 된다(`mcap/` 과 `mcap/offline_slam_map/` 은 세션이 계속 읽는다).
+- 용량: `<work_dir>` 에 녹화 mcap 의 절반쯤이 더 생긴다(43 GB 녹화 → 21 GB: 다시 쓴 mcap 17 GB, `sensors.bin` 2.8 GB, `replay/slam_out.bin` 1.1 GB · 9.5 GB 녹화 → 5.3 GB). 스크립트는 녹화 크기만큼 여유가 있어야 시작한다. 맵을 만든 뒤 `sensors.bin` 과 `replay/slam_out.bin` 은 지워도 된다(`mcap/` 과 `mcap/offline_slam_map/` 은 세션이 계속 읽는다).
 - 끝나면 세션 yaml 에 적을 값을 출력한다: `mcap_dir: <work_dir>/mcap`, `calib:` 는 **원본 녹화**의 `config_snapshot/raisin_root/calibration`, `options.robot_map.traj: <work_dir>/mcap/offline_slam_map/offline.txt` (재생의 최종 PGO 궤적). 나머지는 보통 세션과 같고 `docker/laptop/run.sh` 로 빌드한다 (템플릿 `sessions/session_TEMPLATE_laptop_offline_slam.yaml`).
 - 실시간 SLAM 과 다른 점(스캔 누락 없음, IMU 보정을 다시 해 기울기 0.5–0.9° 차이 가능 등)은 [scripts/offline_slam/README.md](../../scripts/offline_slam/README.md).
 - 검증(2026-11-20, 이 노트북): 실시간 SLAM 이 있는 20261016_151520(166 s, 3 로그, 9.5 GB) 을 돌려 키프레임 50 / 50, 경로 68.72 / 68.70 m, 강체 정렬 후 위치 차 중앙 0.75 cm — 서버 검증값(0.71 cm)과 같은 수준. 추출·재생·변환 2 분.

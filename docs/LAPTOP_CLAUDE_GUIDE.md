@@ -163,7 +163,8 @@ options:
 
 ### 3.5 녹화에 SLAM 출력이 없을 때 (센서만 있는 mcap)
 
-Q 단계 로그나 `mcap_quality` 결과에 `/Odometry/base` · `/cloud_registered` · `/path/pgo` 가 0 이면 녹화 때 매핑을 켜지 않은 것이다. 이 녹화는 그대로 빌드할 수 없고,
+Q 단계 결과(`compiled/data_quality.json`)에 `/Odometry/base` · `/cloud_registered` · `/path/pgo` 가 없고(0 개) `/livox/lidar` · `/livox/imu` · 카메라만 있으면 녹화 때 매핑을 켜지 않은 것이다 (2026-11-19 155339 녹화: 노드 로그에 lidar_slam 플러그인은 초기화됐지만 mapping start 를 누르지 않음).
+이 녹화는 그대로 빌드하면 P 단계가 `AssertionError: /path/pgo 없음` 으로 멈춘다.
 노트북에서 lidar_slam 을 다시 돌려 SLAM 출력을 만든 뒤 빌드한다 (코드 수정 없음, `scripts/offline_slam` 을 노트북 경로로 도는 러너):
 
 ```bash
@@ -200,7 +201,7 @@ docker/laptop/run.sh sessions/<세션>.yaml                # 실제 빌드
 | 단계 B 에서 `CUDA out of memory` | 세그멘테이션 batch 8 은 GPU 약 7 GB 를 쓴다. yaml `options` 에 `seg_batch: 4` (또는 2, 약 2.4 GB) 를 넣고 `--steps B --force B` 후 이어서 빌드. 결과는 batch 8 과 세그 픽셀 약 1 % 다르고 맵 차이는 0.01 % 수준이라 써도 된다. 바꿨으면 사용자에게 보고한다. |
 | 단계 H 로그에 `Potree 생성 실패(빌드는 계속)` · `PotreeConverter 없음` | 이미지가 변환기를 넣기 전(2026-10-21 이전) 버전. `git pull` 후 2.2 의 `docker build` 를 다시 하고, `docker/laptop/container.sh rm && docker/laptop/container.sh up` 으로 컨테이너를 새 이미지로 다시 만든 뒤 `--steps H --force H` 로 Potree 만 다시 만든다. |
 | 포털의 Potree 화면이 비어 있음 | 뷰어 파일이 없음. `tools/potree/fetch_viewer.sh` 실행 (2.3). |
-| Q 단계 결과에 `/Odometry/base` · `/cloud_registered` 가 0 (P 단계가 자세를 못 찾음) | 녹화 때 매핑이 꺼져 있던 센서 전용 녹화. 3.5 의 `docker/laptop/offline_slam.sh` 로 SLAM 출력을 만든 뒤 그 `mcap` 으로 빌드. |
+| P 단계 `AssertionError: /path/pgo 없음`, Q 결과에 `/Odometry/base` · `/cloud_registered` · `/path/pgo` 가 0 개 | 녹화 때 매핑이 꺼져 있던 센서 전용 녹화. 3.5 의 `docker/laptop/offline_slam.sh` 로 SLAM 출력을 만든 뒤 그 `mcap` 으로 빌드. |
 | `mcap_dir 가 없습니다` | yaml 의 `mcap_dir` 가 노트북 경로가 아님. 서버 경로(`/data2/...`)를 그대로 복사하지 않았는지 확인. |
 | calibration 관련 파일 없음 | `<mcap_dir>/config_snapshot/raisin_root/calibration` 이 없는 녹화. 사용자에게 알린다 (yaml 에 `calib:` 로 다른 경로를 줄 수는 있다). |
 | `docker: permission denied` | 사용자가 docker 그룹에 없음. 사용자에게 묻는다. |

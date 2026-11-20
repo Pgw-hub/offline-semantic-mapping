@@ -13,7 +13,7 @@
 #     --resume   : 이미 있는 단계 결과(sensors.bin, replay/, mcap/)는 건너뛴다
 #   필요: 상주 컨테이너 offline-map (없으면 만든다), 호스트에 빌드된 raisin 워크스페이스 $RAISIN_ROOT (기본 ~/raisin_ws_handheld) 와 cmake·g++.
 #   단계: [1/4] 센서 추출(컨테이너) → [2/4] lidar_slam 재생(호스트, docker/laptop/offline_slam_run.sh) → [3/4] mcap 변환(컨테이너) → [4/4] 실시간 SLAM 과 비교(있으면).
-#   용량: work_dir 에 녹화 mcap 과 비슷한 크기가 더 생긴다 (sensors.bin + 재생 출력 + 다시 쓴 mcap). 맵을 만든 뒤 sensors.bin 과 replay/slam_out.bin 은 지워도 된다.
+#   용량: work_dir 에 녹화 mcap 의 절반쯤이 더 생긴다 (sensors.bin + 재생 출력 + 다시 쓴 mcap; 시작 조건은 녹화 크기만큼 여유). 맵을 만든 뒤 sensors.bin 과 replay/slam_out.bin 은 지워도 된다.
 #   로그: <work_dir>/offline_slam.log. 오래 걸리니(43 GB 녹화: 추출 2 분 · 재생 1 분 · 변환 4 분) 백그라운드로 돌리고 로그를 본다.
 set -euo pipefail
 NAME="${CONTAINER:-offline-map}"
