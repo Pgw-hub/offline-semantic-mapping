@@ -32,3 +32,5 @@ tools/potree/viewer/libs/
 # 로봇 목록(비밀번호 포함)·로봇 접속 전용 열쇠 — PC 마다 다름
 tools/robots.json
 .robot_ssh/
+# raisin_navigation3d_plugin 의 navigation3d_build_graph 실행 파일·params 사본 (비공개 raisin 쪽, 빌드 N 단계가 찾음)
+tools/bin/

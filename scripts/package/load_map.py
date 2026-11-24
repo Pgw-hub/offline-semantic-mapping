@@ -167,13 +167,14 @@ def to_rerun(mp, out, sub=2, cubes=False, edges=True, alpha=1.0, occ_view_res=0.
         fr = np.where(st == 0)[0][::max(4, sub * 4)]
         rr.log("map/occupancy/free", rr.Points3D(oc[fr], colors=[[80, 160, 255, 40]], radii=O["res"] * 0.25))
     # costmap → 지면 위 색 점 (row=x, col=y)
-    c = mp.costmap; ii, jj = np.where(c < 255)
-    cx = mp.cm_x0 + (ii + 0.5) * mp.cm_res; cy = mp.cm_y0 + (jj + 0.5) * mp.cm_res
-    # 지면 z: 해당 xy 의 최저 복셀 근사 → 간단히 전역 복셀 z 최소 percentile 사용
-    zg = np.percentile(ctr[:, 2], 5)
-    cpal = {10: (170, 140, 110), 90: (95, 150, 95), 60: (120, 120, 120), 150: (120, 130, 150), 200: (220, 120, 40), 254: (200, 40, 40)}
-    cc = np.array([cpal.get(int(v), (255, 255, 255)) for v in c[ii, jj]], np.uint8)
-    rr.log("map/costmap2d", rr.Points3D(np.stack([cx, cy, np.full_like(cx, zg)], -1)[::sub], colors=cc[::sub], radii=mp.cm_res * 0.5))
+    if mp.costmap is not None:                                          # 2026-11-24 구조 빌드는 코스트맵 없음 (옛 O 단계를 돌렸을 때만)
+        c = mp.costmap; ii, jj = np.where(c < 255)
+        cx = mp.cm_x0 + (ii + 0.5) * mp.cm_res; cy = mp.cm_y0 + (jj + 0.5) * mp.cm_res
+        # 지면 z: 해당 xy 의 최저 복셀 근사 → 간단히 전역 복셀 z 최소 percentile 사용
+        zg = np.percentile(ctr[:, 2], 5)
+        cpal = {10: (170, 140, 110), 90: (95, 150, 95), 60: (120, 120, 120), 150: (120, 130, 150), 200: (220, 120, 40), 254: (200, 40, 40)}
+        cc = np.array([cpal.get(int(v), (255, 255, 255)) for v in c[ii, jj]], np.uint8)
+        rr.log("map/costmap2d", rr.Points3D(np.stack([cx, cy, np.full_like(cx, zg)], -1)[::sub], colors=cc[::sub], radii=mp.cm_res * 0.5))
     # 객체
     byid = {}
     for i, o in enumerate(mp.objects):

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>__TITLE__ · Potree</title>
+<link rel="stylesheet" href="/tools/potree/viewer/build/potree/potree.css">
+<link rel="stylesheet" href="/tools/potree/viewer/libs/jquery-ui/jquery-ui.min.css">
+<link rel="stylesheet" href="/tools/potree/viewer/libs/openlayers3/ol.css">
+<link rel="stylesheet" href="/tools/potree/viewer/libs/spectrum/spectrum.css">
+<link rel="stylesheet" href="/tools/potree/viewer/libs/jstree/themes/mixed/style.css">
+<style>
+#panel{position:absolute;right:10px;top:10px;z-index:20;width:300px;max-height:calc(100% - 20px);overflow:auto;background:rgba(18,22,26,.90);color:#e6eaee;
+  font:13px/1.45 system-ui,-apple-system,"Noto Sans KR",sans-serif;border-radius:10px;box-shadow:0 4px 18px rgba(0,0,0,.35)}
+#panel header{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid rgba(255,255,255,.08);position:sticky;top:0;background:rgba(18,22,26,.97)}
+#panel header b{flex:1;font-size:14px;word-break:break-all}
+#panel header button,#panel .row button{background:#2a323a;color:#dfe6ec;border:1px solid #3a444e;border-radius:6px;padding:2px 8px;font:12px system-ui;cursor:pointer}
+#panel header button:hover,#panel .row button:hover{background:#36404a}
+#panel section{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.06)}
+#panel h3{margin:0 0 4px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8fa1b0;font-weight:600}
+#panel label{display:flex;align-items:center;gap:6px;cursor:pointer;padding:1px 0}
+#panel label.dis{opacity:.4;cursor:default}
+#panel .sub{margin-left:22px}
+#panel .seg{display:flex;gap:4px;margin:3px 0 2px 22px;flex-wrap:wrap}
+#panel .seg button{background:#232a31;color:#c4ced6;border:1px solid #38424c;border-radius:5px;padding:1px 7px;font:12px system-ui;cursor:pointer}
+#panel .seg button.on{background:#3d6f8c;border-color:#5b93b3;color:#fff}
+#panel .n{margin-left:auto;color:#8c99a4;font-size:11px;font-variant-numeric:tabular-nums}
+#panel .sw{width:11px;height:11px;border-radius:3px;flex:none;border:1px solid rgba(255,255,255,.25)}
+#panel .cls{display:grid;grid-template-columns:1fr;gap:0;margin:2px 0 0 22px}
+#panel .help{color:#9aa7b2;font-size:12px}
+#panel .help b{color:#cfe3ea;font-weight:600}
+#panel .row{display:flex;gap:6px;align-items:center;margin-top:4px}
+#panel input[type=range]{flex:1}
+#panel.min section{display:none}
+.potree_annotation{font-size:11px}
+</style>
+</head>
+<body>
+<script src="/tools/potree/viewer/libs/jquery/jquery-3.1.1.min.js"></script>
+<script src="/tools/potree/viewer/libs/spectrum/spectrum.js"></script>
+<script src="/tools/potree/viewer/libs/jquery-ui/jquery-ui.min.js"></script>
+<script src="/tools/potree/viewer/libs/other/BinaryHeap.js"></script>
+<script src="/tools/potree/viewer/libs/tween/tween.min.js"></script>
+<script src="/tools/potree/viewer/libs/d3/d3.js"></script>
+<script src="/tools/potree/viewer/libs/proj4/proj4.js"></script>
+<script src="/tools/potree/viewer/libs/openlayers3/ol.js"></script>
+<script src="/tools/potree/viewer/libs/i18next/i18next.js"></script>
+<script src="/tools/potree/viewer/libs/jstree/jstree.js"></script>
+<script src="/tools/potree/viewer/build/potree/potree.js"></script>
+<div class="potree_container" style="position:absolute;width:100%;height:100%;left:0;top:0">
+  <div id="potree_render_area"></div>
+  <div id="potree_sidebar_container"></div>
+</div>
+<div id="panel">
+  <header><b>__TITLE__</b><button id="bTop" title="위에서 보기">Top</button><button id="bFit" title="전체 보기">Fit</button><button id="bMin" title="패널 접기">–</button></header>
+  <section id="sMain"></section>
+  <section id="sGraph"></section>
+  <section id="sLoco"></section>
+  <section id="sView"></section>
+</div>
+<script type="module">
+import * as THREE from "/tools/potree/viewer/libs/three.js/build/three.module.js";
+const LAYERS = __LAYERS__;
+const LEGEND = __LEGEND__;
+const OV = __OVERLAYS__;
+const L = Object.fromEntries(LAYERS.map(l => [l.name, l]));
+const fmt = n => (n == null ? "–" : n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? (n / 1e3).toFixed(0) + "k" : String(n));
+
+window.viewer = new Potree.Viewer(document.getElementById("potree_render_area"));
+viewer.setEDLEnabled(true); viewer.setFOV(60); viewer.setPointBudget(8_000_000); viewer.setBackground("gradient");
+viewer.setClassifications(__CLASSES__);
+viewer.loadGUI(() => { viewer.setLanguage("en"); $("#menu_tools").next().show(); });
+
+// ── 점 레이어 ──
+const PC = {};
+const STYLE = {main: {size: 2, attr: "classification", vis: true}, loc: {size: 3, attr: "rgba", vis: false}, loco: {size: 2, attr: "rgba", vis: false},
+               nav: {size: 3, attr: "rgba", vis: false}, raw: {size: 1, attr: "elevation", vis: false}};
+let fitted = false;
+const ready = Promise.all(LAYERS.map(Ld => new Promise(res => Potree.loadPointCloud(Ld.path, Ld.name, e => {
+  const pc = e.pointcloud, m = pc.material, st = STYLE[Ld.name] || {size: 2, attr: "elevation", vis: false};
+  viewer.scene.addPointCloud(pc); PC[Ld.name] = pc;
+  m.pointSizeType = Potree.PointSizeType.FIXED; m.size = st.size; m.shape = Potree.PointShape.SQUARE; m.activeAttributeName = st.attr;
+  if (Ld.name === "nav") m.intensityRange = [0, Math.max(50, Ld.clearance_max_cm || 100)];
+  pc.visible = st.vis;
+  if (Ld.name === "main" && !fitted) { viewer.fitToScreen(); fitted = true; }
+  res();
+}))));
+ready.then(() => { if (!fitted) viewer.fitToScreen(); syncAll(); });
+
+// ── 겹쳐 그리기 (three.js) ──
+const groups = {};
+function group(name) { const g = new THREE.Group(); g.visible = false; g.name = name; viewer.scene.scene.add(g); groups[name] = g; return g; }
+function lines(pairs, color, opacity = 0.9) {
+  const pos = new Float32Array(pairs.length * 6); pairs.forEach((p, i) => pos.set([...p[0], ...p[1]], i * 6));
+  const g = new THREE.BufferGeometry(); g.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+  const mat = new THREE.LineBasicMaterial({color, transparent: true, opacity, depthTest: false});
+  const o = new THREE.LineSegments(g, mat); o.renderOrder = 10; return o;
+}
+const hue = s => { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return new THREE.Color().setHSL((h % 360) / 360, 0.75, 0.6); };
+// 토폴로지: 포털 → 양쪽 장소 중심 선 + 포털 표시
+const PORTAL_COL = {door: 0x4aa3ff, stair_entry: 0xff5050, opening: 0x50d080};
+if (OV.portals.length) {
+  const g = group("portals"), pc = Object.fromEntries(OV.places.map(p => [p.id, p.c]));
+  for (const [type, col] of Object.entries(PORTAL_COL)) {
+    const P = OV.portals.filter(p => p.type === type); if (!P.length) continue;
+    const pairs = []; P.forEach(p => p.places.forEach(id => pc[id] && pairs.push([p.c, pc[id]]))); g.add(lines(pairs, col, 0.95));
+    const s = 0.12, cross = []; P.forEach(p => { const [x, y, z] = p.c; cross.push([[x - s, y, z], [x + s, y, z]], [[x, y - s, z], [x, y + s, z]], [[x, y, z - s], [x, y, z + s]]); });
+    g.add(lines(cross, col, 1.0));
+  }
+}
+// 토폴로지 장소 라벨 (Potree 주석)
+const ann = {places: [], objects: []};
+function addAnn(kind, pos, title, desc) {
+  const a = new Potree.Annotation({position: pos, title, description: desc || ""}); a.visible = false; viewer.scene.annotations.add(a); ann[kind].push(a); return a;
+}
+let nRoom = 0, nStair = 0;
+OV.places.forEach(p => addAnn("places", p.c, p.type === "stair" ? `Stair ${++nStair}` : `Room ${++nRoom}`, `${p.type} #${p.id} · ${fmt(p.nodes)} nodes`));
+// 3D scene graph: 객체 상자 · 관계 엣지 · 라벨
+if (OV.objects.length) {
+  const g = group("objects"); const byCol = {};
+  for (const o of OV.objects) {
+    const [cx, cy, cz] = o.c, [ex, ey, ez] = o.e.map(v => Math.max(v, 0.05) / 2);
+    const c = [[cx - ex, cy - ey, cz - ez], [cx + ex, cy - ey, cz - ez], [cx + ex, cy + ey, cz - ez], [cx - ex, cy + ey, cz - ez],
+               [cx - ex, cy - ey, cz + ez], [cx + ex, cy - ey, cz + ez], [cx + ex, cy + ey, cz + ez], [cx - ex, cy + ey, cz + ez]];
+    const E = [[0, 1], [1, 2], [2, 3], [3, 0], [4, 5], [5, 6], [6, 7], [7, 4], [0, 4], [1, 5], [2, 6], [3, 7]];
+    (byCol[o.tag] = byCol[o.tag] || []).push(...E.map(([a, b]) => [c[a], c[b]]));
+  }
+  for (const [tag, pairs] of Object.entries(byCol)) g.add(lines(pairs, hue(tag), 0.95));
+  const terr = {}; OV.terrain.forEach(t => { terr[t.c.join(",")] = t.on; });
+  OV.objects.forEach(o => addAnn("objects", o.c, o.tag, `${terr[o.c.join(",")] ? "on " + terr[o.c.join(",")] + " · " : ""}${o.n || 0} detections`));
+}
+if (OV.edges.length) group("edges").add(lines(OV.edges.map(e => [e.a, e.b]), 0xffd23c, 0.85));
+
+// ── 패널 ──
+const $id = id => document.getElementById(id);
+const state = {main: true, mainAttr: "classification", loc: false, loco: false, locoAttr: "rgba", nav: false, navAttr: "rgba",
+               places: false, portals: false, objects: false, objLabels: false, edges: false, raw: false};
+if (!L.main || !L.main.semantic) state.mainAttr = "elevation";
+function chk(key, text, n, enabled = true, cls = "") {
+  return `<label class="${enabled ? "" : "dis"} ${cls}"><input type="checkbox" data-k="${key}" ${state[key] ? "checked" : ""} ${enabled ? "" : "disabled"}>${text}<span class="n">${n ?? ""}</span></label>`;
+}
+function seg(key, opts) { return `<div class="seg" data-seg="${key}">${opts.map(([v, t]) => `<button data-v="${v}" class="${state[key] === v ? "on" : ""}">${t}</button>`).join("")}</div>`; }
+const nObjEdges = OV.edges.length;
+$id("sMain").innerHTML = `<h3>① Main map · 5 cm</h3>` +
+  chk("main", "Main map points", fmt(L.main && L.main.points), !!L.main) +
+  seg("mainAttr", (L.main && L.main.semantic ? [["classification", "Semantic"], ["rgba", "Camera"]] : []).concat([["elevation", "Height"]])) +
+  (L.main && L.main.semantic ? `<div class="cls">${LEGEND.filter(g => g.points).map(g => `<label><input type="checkbox" data-cls="${g.code}" checked><span class="sw" style="background:rgb(${g.color})"></span>${g.name}<span class="n">${fmt(g.points)}</span></label>`).join("")}</div>` : "") +
+  chk("loc", "Localization map (0.25 m)", fmt(L.loc && L.loc.points), !!L.loc);
+$id("sGraph").innerHTML = `<h3>Graphs on main map</h3>` +
+  chk("nav", "Traversability graph (nodes)", fmt(L.nav && L.nav.points), !!L.nav) +
+  (L.nav ? seg("navAttr", [["rgba", "Place"], ["intensity", "Clearance"]]) : "") +
+  chk("places", "Topology: places", `${OV.places.filter(p => p.type !== "stair").length} rooms · ${OV.places.filter(p => p.type === "stair").length} stairs`, OV.places.length > 0) +
+  chk("portals", "Topology: portals ↔ places", OV.portals.length, OV.portals.length > 0) +
+  chk("objects", "3D scene graph: objects", OV.objects.length, OV.objects.length > 0) +
+  chk("objLabels", "3D scene graph: object labels", "", OV.objects.length > 0, "sub") +
+  chk("edges", "3D scene graph: relations", nObjEdges, nObjEdges > 0);
+$id("sLoco").innerHTML = `<h3>② Locomotion map · ${L.loco ? (L.loco.res * 100).toFixed(1) : "–"} cm</h3>` +
+  chk("loco", "Locomotion map cells", fmt(L.loco && L.loco.points), !!L.loco) +
+  (L.loco ? seg("locoAttr", [["rgba", "Source"], ["elevation", "Height"]]) + `<div class="cls">${Object.entries(L.loco.source_colors || {}).map(([k, c]) => `<label class="dis"><span class="sw" style="background:rgb(${c})"></span>${k}<span class="n">${fmt(L.loco.sources[k])}</span></label>`).join("")}</div>` : "") +
+  (L.raw ? chk("raw", "Raw LiDAR (registered)", fmt(L.raw.points)) : "");
+$id("sView").innerHTML = `<h3>View</h3><div class="row">Point size<input type="range" id="pSize" min="1" max="8" step="0.5" value="2"></div>
+  <div class="help" style="margin-top:6px"><b>Double-click</b> a point to orbit around it · wheel zoom · left drag rotate · right drag pan.<br>
+  Clipping box, profile and distance tools are in the left sidebar (☰).</div>`;
+function syncAll() {
+  for (const [name, pc] of Object.entries(PC)) {
+    pc.visible = !!state[name];
+    if (name === "main") pc.material.activeAttributeName = state.mainAttr;
+    if (name === "loco") pc.material.activeAttributeName = state.locoAttr;
+    if (name === "nav") pc.material.activeAttributeName = state.navAttr;
+  }
+  for (const k of ["portals", "objects", "edges"]) if (groups[k]) groups[k].visible = state[k];
+  ann.places.forEach(a => a.visible = state.places);
+  ann.objects.forEach(a => a.visible = state.objLabels);
+  document.querySelectorAll("input[data-k]").forEach(el => { el.checked = !!state[el.dataset.k]; });          // 패널 표시도 상태에 맞춤
+  document.querySelectorAll(".seg[data-seg]").forEach(sg => sg.querySelectorAll("button").forEach(b => b.classList.toggle("on", state[sg.dataset.seg] === b.dataset.v)));
+}
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.dataset.k) { state[t.dataset.k] = t.checked; syncAll(); }
+  if (t.dataset.cls) viewer.setClassificationVisibility(Number(t.dataset.cls), t.checked);
+});
+document.addEventListener("click", e => {
+  const b = e.target.closest(".seg button"); if (!b) return;
+  const key = b.parentNode.dataset.seg; state[key] = b.dataset.v;
+  b.parentNode.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); syncAll();
+});
+$id("pSize").addEventListener("input", e => { const s = Number(e.target.value); for (const [n, pc] of Object.entries(PC)) pc.material.size = n === "nav" || n === "loc" ? s * 1.5 : s; });
+$id("bFit").onclick = () => viewer.fitToScreen();
+$id("bTop").onclick = () => viewer.setTopView();
+$id("bMin").onclick = () => { $id("panel").classList.toggle("min"); $id("bMin").textContent = $id("panel").classList.contains("min") ? "+" : "–"; };
+window.__mapViewer = {state, syncAll, PC, groups, ann, ready};
+</script>
+</body>
+</html>

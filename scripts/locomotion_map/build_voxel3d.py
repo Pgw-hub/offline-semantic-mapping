@@ -36,6 +36,9 @@ ap.add_argument("--fill-flat", type=float, default=0.0, help="평탄 채움: 확
 ap.add_argument("--tile-m", type=float, default=10.0); ap.add_argument("--no-tiles", action="store_true")
 ap.add_argument("--skip-every", type=int, default=0); ap.add_argument("--skip-phase", type=int, default=0)
 ap.add_argument("--batch", type=int, default=40)
+ap.add_argument("--workers", type=int, default=min(8, os.cpu_count() or 1), help="스캔 레이캐스팅 프로세스 수 (결과는 1 과 같음)")
+ap.add_argument("--only-hit-cells", action="store_true", help="확률 격자에서 한 번이라도 hit 된 칸만 누적 (먼저 스캔을 한 번 훑어 hit 칸 목록을 만든다). 세부 셀·점유 판정 결과는 같고 "
+                "free 만인 칸(긴 free_range 에서 수천만 개)을 안 쌓아 빠르다. 대신 coarse_* 배열에 free 전용 칸이 없다 — depth 채움(빈 곳 판정)과 함께 쓰지 말 것")
 ap.add_argument("--crop", default=None, help="저장할 영역만 남김 (레이캐스팅은 전체 스캔으로): 'cx,cy,axx,axy,t0,t1,l0,l1[,z0,z1]' — 중심(cx,cy)·축(axx,axy) 기준 회전 사각형 t∈[t0,t1](축 방향)·l∈[l0,l1](왼쪽 수직), 선택 z∈[z0,z1] (world z)")
 ap.add_argument("--occupancy", choices=["own", "bonxai"], default="own", help="확률 격자(prob_res) 점유 판정: own = 이 스크립트의 레이캐스팅 · bonxai = Bonxai ProbabilisticMap (tools/bonxai). 세부 격자 통계·채움·타일은 같다")
 ap.add_argument("--bonxai-bin", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "bonxai", "bonxai_occupancy"))
@@ -79,22 +82,52 @@ bx_f = None
 if a.occupancy == "bonxai":
     import struct, subprocess, tempfile
     bx_dir = tempfile.mkdtemp(prefix="voxel3d_bonxai_"); bx_scans = os.path.join(bx_dir, "scans.bin"); bx_f = open(bx_scans, "wb")
+HIT = None
+if a.only_hit_cells:                                                                        # 1차: hit 칸 목록 (같은 거리 필터)
+    hl = []
+    for f in files:
+        d = np.load(f); P = d["xyz"].astype(np.float64); rr = np.linalg.norm(P - d["origin"].astype(np.float64), axis=1); hl.append(np.unique(coarse_key(P[(rr > 0.05) & (rr <= a.max_range)])))
+        if len(hl) >= 200: hl = [np.unique(np.concatenate(hl))]
+    HIT = np.unique(np.concatenate(hl)); del hl
+    print(f"hit 칸 {len(HIT):,} (free 전용 칸은 누적하지 않음) · {time.time()-t0:.0f}s")
 steps = (np.arange(int(np.ceil(a.free_range / (RP * 0.5)))) + 0.5) * RP * 0.5          # 레이 표본 간격 0.5·prob_res (대각선 셀 누락 방지)
-for si, f in enumerate(files):
+def scan_work(f):
+    """스캔 하나: 확률 격자 hit/통과 칸 키 + 세부 격자 통계 (프로세스 여러 개로 나눠 돌림 — 누적은 본 프로세스가 파일 순서대로 해서 결과는 같다)."""
     d = np.load(f); P = d["xyz"].astype(np.float64); org = d["origin"].astype(np.float64)
-    vec = P - org; rng = np.linalg.norm(vec, axis=1); ok = (rng > 0.05) & (rng <= a.max_range); P, vec, rng = P[ok], vec[ok], rng[ok]; n_pts_tot += len(P)
-    if bx_f is not None:                                                                    # Bonxai 가 점유 판정: 스캔을 넘기기만 한다
-        bx_f.write(struct.pack("<I3f", len(P), *org)); bx_f.write(P.astype("<f4").tobytes())
+    vec = P - org; rng = np.linalg.norm(vec, axis=1); ok = (rng > 0.05) & (rng <= a.max_range); P, vec, rng = P[ok], vec[ok], rng[ok]
+    bci = bx = None
+    if a.occupancy == "bonxai":                                                             # Bonxai 가 점유 판정: 스캔을 넘기기만 한다
+        bx = (P.astype("<f4"), org)
     else:
         # 확률 격자: hit 셀(스캔당 1회) + 통과 셀(끝점 셀 제외)
         hk = np.unique(coarse_key(P)); L = np.minimum(rng, a.free_range); dirs = vec / rng[:, None]
-        valid = steps[None, :] < L[:, None]; S = org[None, None, :] + dirs[:, None, :] * steps[None, :, None]
-        mk = np.unique(coarse_key(S.reshape(-1, 3))[valid.ravel()]); mk = mk[~np.isin(mk, hk, assume_unique=True)]
-        bc.append((np.concatenate([hk, mk]), np.r_[np.ones(len(hk)), np.zeros(len(mk))], np.r_[np.zeros(len(hk)), np.ones(len(mk))]))
+        # 표본은 이 스캔의 최장 레이 길이까지만, 점은 묶음으로 (긴 free_range 에서 점 × 표본 × 3 배열이 GB 단위가 되지 않게). 결과는 한 번에 한 것과 같다
+        st = steps[:max(1, int(np.searchsorted(steps, L.max() if len(L) else 0.0)))]; ch = max(1, 4_000_000 // len(st)); mks = []
+        for c0 in range(0, len(P), ch):
+            Lc, dc = L[c0:c0 + ch], dirs[c0:c0 + ch]
+            valid = st[None, :] < Lc[:, None]; S = org[None, None, :] + dc[:, None, :] * st[None, :, None]
+            mks.append(np.unique(coarse_key(S.reshape(-1, 3))[valid.ravel()]))
+        mk = np.unique(np.concatenate(mks)) if mks else np.zeros(0, np.int64); mk = mk[~np.isin(mk, hk, assume_unique=True)]
+        if HIT is not None and len(mk):
+            q = np.minimum(np.searchsorted(HIT, mk), len(HIT) - 1); mk = mk[HIT[q] == mk]
+        bci = (np.concatenate([hk, mk]), np.r_[np.ones(len(hk)), np.zeros(len(mk))], np.r_[np.zeros(len(hk)), np.ones(len(mk))])
     # 세부 격자: count / Σz / Σz² / 스캔 수(스캔당 1)
     fi = fine_idx(P); fk = key3(fi); uk, inv_ = np.unique(fk, return_inverse=True); cnt, sz, sz2 = [np.bincount(inv_, weights=c, minlength=len(uk)) for c in (np.ones(len(fk)), P[:, 2], P[:, 2] ** 2)]
     mxz = np.full(len(uk), -np.inf); np.maximum.at(mxz, inv_, P[:, 2])                       # 셀 안 최대 z (계단 코처럼 두 표면이 섞인 셀에서 보수적 높이)
-    bf.append((uk, cnt, sz, sz2, np.ones(len(uk)), mxz))
+    return len(P), bci, (uk, cnt, sz, sz2, np.ones(len(uk)), mxz), bx
+
+
+pool = None
+if a.workers > 1 and a.occupancy != "bonxai" and len(files) > 1:
+    import multiprocessing as mp
+    pool = mp.get_context("fork").Pool(a.workers); results = pool.imap(scan_work, files, chunksize=2)
+else:
+    results = map(scan_work, files)
+for si, (npt, bci, bfi, bx) in enumerate(results):
+    n_pts_tot += npt
+    if bx is not None: bx_f.write(struct.pack("<I3f", len(bx[0]), *bx[1])); bx_f.write(bx[0].tobytes())
+    if bci is not None: bc.append(bci)
+    bf.append(bfi)
     if (si + 1) % a.batch == 0 or si == len(files) - 1:
         if bc:
             K = np.concatenate([b[0] for b in bc]); u, c = reduce_sum(K, [np.concatenate([b[1] for b in bc]), np.concatenate([b[2] for b in bc])]); acc_c = merge_prob(acc_c, u, c[0], c[1], lh, lm)
@@ -103,6 +136,7 @@ for si, f in enumerate(files):
         bc, bf = [], []
         if (si + 1) % (a.batch * 10) == 0 or si == len(files) - 1: print(f"  {si+1}/{len(files)} · 확률 셀 {len(acc_c[0]) if acc_c else 0:,} · 세부 셀 {len(acc_f[0]):,} · {time.time()-t0:.0f}s", flush=True)
 
+if pool is not None: pool.close(); pool.join()
 bonxai_stats = None
 if bx_f is not None:
     bx_f.close(); src_cpp = os.path.join(os.path.dirname(a.bonxai_bin), "bonxai_occupancy.cpp")

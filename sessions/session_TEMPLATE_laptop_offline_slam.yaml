@@ -8,30 +8,22 @@ mcap_dir: /home/CHANGE_ME/offline-semantic-mapping/output/_offline_slam/CHANGE_M
 calib: /home/CHANGE_ME/logger_data/CHANGE_ME_date/CHANGE_ME_recording/config_snapshot/raisin_root/calibration
 logs: [0, 1, 2]
 options:
-  map_id: "CHANGE_ME · OFFLINE lidar_slam replay (노트북) · SegFormer indoor_v1 · all_scans · voxel3d prior + stair_complete"
-  objects: false                # 노트북 이미지: 3D scene graph(D·E) 제외, semantic 맵까지
+  map_id: "CHANGE_ME · OFFLINE lidar_slam replay (노트북) · SegFormer indoor_v1 · main map 5 cm + locomotion 2.5 cm"
+  objects: false                # 노트북 이미지: 3D scene graph(D·E) 제외 (메인 맵 의미 라벨까지)
   robot_map:
-    geometry: all_scans
     traj: /home/CHANGE_ME/offline-semantic-mapping/output/_offline_slam/CHANGE_ME/mcap/offline_slam_map/offline.txt   # 오프라인 재생의 최종 PGO 궤적
-  stair_complete: true          # 계단이 없으면 '계단 채움 실패' 한 줄만 남기고 빌드는 계속
   lidar_extrinsic: calib
   livox_flip: false             # 핸드헬드 리그 · 레코더 v2 실기체
   lidar_fusion: false
   mask_bottom_px: 0
   drop_classes: person
   vlm_edges: false
-  occupancy_res: 0.2
   prob_hit: 0.85
   prob_miss: 0.45
-  costmap: {h_ground: 2, h_obs: 3, clearance: 1.4, band_min: 0.3}
-  view_cubes: false
-  view_coarse: 0.3
   video_speed: 15
   video_pipeline: false
   classdict: indoor_v1
   label_edge_px: 4
   require_depth: 1
   pose_graph: true
-  depth_fill_range: 4.0
-  depth_fill_gap: 0.15
   aux_lidar: "off"

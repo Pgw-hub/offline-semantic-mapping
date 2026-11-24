@@ -20,8 +20,10 @@ class BuildCore:
                     "vlm_model": "Qwen/Qwen2.5-VL-32B-Instruct", "occupancy_res": 0.2, "prob_hit": 0.85, "prob_miss": 0.45,
                     "costmap": {"h_ground": 2, "h_obs": 3, "clearance": 1.4, "band_min": 0.3}, "view_coarse": 0.3, "view_cubes": False, "view_sub": 1, "video_speed": 15, "video_width": 960, "video_pipeline": True, "quality_img_stride": 15, "classdict": "default", "label_edge_px": 4, "require_depth": True, "map_id": os.path.basename(self.root),
                     "frame": "SLAM world (/Odometry/base)", "pose_graph": False, "lidar_extrinsic": "calib", "livox_flip": True, "depth_fill_range": 4.0, "depth_fill_gap": 0.15,
-                    "voxel3d": {"res_xy": 0.025, "res_z": 0.025, "prob_res": 0.025, "max_range": 5.0, "free_range": 5.0, "tile_m": 10.0, "fill_flat": 0.0, "depth": True, "variants": []}}
+                    "main_map": True, "locomotion": True, "nav3d": True, "potree": True, "rerun": False}   # main_map/locomotion 세부값: main_map_steps · locomotion_map_steps 의 opt_default_*
         self.opt.update(cfg.get("options", {}))
+        for k in ("voxel3d", "stair_complete"):                                    # 2026-11-24 구조 변경 전 보행 맵 옵션 — 이제 options.locomotion
+            if k in cfg.get("options", {}): print(f"[주의] options.{k} 는 더 이상 쓰지 않음 → options.locomotion (보행 맵: res·max_range·stair) 로", flush=True)
         self.graph = os.path.join(self.root, "graph")
         self.geo_only = bool(self.opt.get("geometry_only"))                     # 카메라 없는 기하 전용 빌드 (보행 맵만)
         self.with_objects = bool(self.opt.get("objects", True)) and not self.geo_only   # false: 3D scene graph(D·E) 없이 semantic 맵까지만 (GPU 메모리 작은 PC용)
@@ -79,7 +81,7 @@ class BuildCore:
             self.say(f"  chown 실패(무시): {e}")
     # go — 단계 문자열 순서대로 step_<X> 를 호출. 각 단계는 산출물이 있으면 건너뛰므로(멱등) 중단된 빌드를 같은 명령으로 재개할 수 있다.
     #      --force X 는 그 단계 산출물만 지우고 다시 만든다. 끝나면 컨테이너(root)가 만든 파일 소유권을 호스트 사용자로 돌린다.
-    GEOMETRY_STEPS = ("Q", "P", "S", "F", "G", "H")
+    GEOMETRY_STEPS = ("Q", "P", "S", "M", "N", "L", "F", "G", "H")
     OBJECT_STEPS = ("D", "E")                                               # 3D Scene Graph builder (ConceptGraphs, GPU 메모리 ~10 GB)
     def go(self, steps):
         if self.geo_only:
