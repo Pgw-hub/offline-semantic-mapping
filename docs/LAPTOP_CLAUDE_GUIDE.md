@@ -3,6 +3,13 @@
 이 문서는 **노트북에서 실행 중인 Claude Code 세션**에게 주는 작업 안내다.
 사용자가 "이 문서 읽고 진행해줘" 라고 하면 아래 순서대로 진행한다.
 
+> **2026-11-24 구조 변경 — 먼저 읽을 것.** 빌드 출력이 두 개로 정리됐다 (자세한 표는 [README.md](../README.md) 맨 위).
+> ① **메인 맵** `compiled/main_map/` — 5 cm 확률 복셀(LiDAR 전부, 거리 제한 없음): `main_map.pcd`, 점별 의미 `main_map_semantic.pcd`, 위치추정 지도 `localization_map.pcd`(0.25 m), 통행성 그래프·토폴로지 `compiled/nav3d/`.
+> ② **보행 맵** `compiled/locomotion/tiles/` — 2.5 cm 정육면체, LiDAR 5 m 이내, 계단 보완(여러 계단 자동) 기본 켬, 의미 없음, depth 채움 없음.
+> 단계: Q,P,A,S,**M**,R,B,C,D,E,N,**L**,G,H,V (옛 F → L). 0.2 m 점유·코스트맵·voxel3d 변형(lidaronly·stair 등)·rerun 기본 보기는 없어졌다. 보기는 포털 **Open map (Potree)**.
+> 세션 옵션 `voxel3d:` · `stair_complete:` 는 더 이상 안 쓴다 → `locomotion: {res, max_range, stair: {...}}` · `main_map: {...}` (기본값 그대로 두면 됨).
+> 아래 본문의 `session_voxel3d_*` · `F` 단계 · `stair_complete` 설명은 옛 빌드(그 날짜 이전 결과 폴더) 기준이다.
+
 ## 0. 배경 — 왜 노트북에서 빌드하나
 
 - 이 저장소는 로봇 `.mcap` 녹화로 오프라인 맵 패키지를 만든다. 구조는 [README.md](../README.md) 에 있다.
@@ -13,8 +20,8 @@
 
   | 종류 | 세션 옵션 | 산출물 |
   |---|---|---|
-  | 기하 전용 (보행용 맵만) | `geometry_only: true` | locomotion map (`session_voxel3d_tiles/`) |
-  | semantic 맵까지 | `objects: false` | 위 + semantic 복셀 PCD · 0.2 m 점유 · 코스트맵 |
+  | 기하 전용 | `geometry_only: true` | 메인 맵 기하 + 위치추정 지도 + 통행성 그래프 · 보행 맵 (`compiled/locomotion/tiles/`) |
+  | 의미 라벨까지 | `objects: false` | 위 + 메인 맵 점별 의미 라벨 (`main_map_semantic.pcd`) |
 
   **3D scene graph(ConceptGraphs, 단계 D·E)는 GPU 메모리가 약 10 GB 필요해서 노트북에서 돌리지 않는다.** 세션 yaml 에 `objects: false` 나 `geometry_only: true` 가 없으면 D·E 를 돌리려 하니 반드시 둘 중 하나를 넣는다.
 
@@ -22,7 +29,7 @@
 
 - 사용자에게는 **한국어로** 답한다.
 - **보행용 맵 기본값을 바꾸지 않는다.** 확률 격자 0.025 m, LiDAR 점과 빈 공간 레이 모두 센서 5 m 이내(`max_range 5`, `free_range 5`)는 사용자가 정한 값이고, 코드 기본값이다.
-  세션 yaml 에 `voxel3d:` 를 적을 때도 `prob_res: 0.025, max_range: 5.0, free_range: 5.0` 을 유지한다.
+  (2026-11-24~ `options.locomotion` 기본값 `res: 0.025, max_range: 5, free_range: 5` — 세션 yaml 에 적지 않는다.)
 - 코드(`scripts/`)는 고치지 않는다. 빌드가 코드 문제로 실패하면 고치기 전에 원인과 로그를 사용자에게 보고하고 지시를 받는다. 서버와 같은 코드여야 결과가 같다.
 - mcap 원본 폴더에는 아무것도 쓰지 않는다 (`run.sh` 도 읽기 전용으로 마운트한다).
 - 오래 걸리는 빌드는 백그라운드로 돌리고, 진행 상황은 `<root>/logs/build.log` 로 확인한다.
@@ -97,8 +104,7 @@ options:
   aux_lidar: "off"
   prob_hit: 0.85
   prob_miss: 0.45
-  voxel3d: {res_xy: 0.025, res_z: 0.025, prob_res: 0.025, max_range: 5.0, free_range: 5.0, tile_m: 10.0, fill_flat: 0.0}
-  stair_complete: true                 # 계단 디딤판 채움 + 앞면 판. 아래 3.4 참고
+  # 보행 맵(2.5 cm, 5 m, 계단 보완)·메인 맵(5 cm) 은 기본값 — 적지 않는다 (2026-11-24~)
 ```
 
 ### 3.2 semantic 맵까지
@@ -135,7 +141,6 @@ options:
   depth_fill_range: 4.0
   depth_fill_gap: 0.15
   aux_lidar: "off"
-  stair_complete: true                 # 계단 녹화면 (3.4)
   # seg_batch: 2                       # GPU 메모리 부족(OOM) 때만. 아래 5 참고
 ```
 
@@ -188,7 +193,7 @@ docker/laptop/run.sh sessions/<세션>.yaml                # 실제 빌드
   컨테이너는 저장소(읽기·쓰기) · `$HOME` 전체(읽기 전용) · 모델 캐시를 호스트와 **같은 경로**로 마운트한다. 그래서 yaml 에는 노트북의 실제 절대 경로를 쓰고, `mcap_dir` 는 `$HOME` 아래에 있어야 한다 (홈 밖이면 `EXTRA_RO=<경로> container.sh rm && up`).
   컨테이너 안에서 직접 작업하려면 `docker/laptop/container.sh shell`.
 - 처음 semantic 빌드 때 SegFormer 모델(약 0.5 GB)을 `~/.cache/offline_map_hf` 로 내려받는다 (인터넷 필요, 이후 재사용).
-- 일부 단계만 다시: `--steps F,G` / 지우고 다시: `--force F`. 이미 있는 산출물은 건너뛴다.
+- 일부 단계만 다시: `--steps L,G,H` / 지우고 다시: `--force L`. 이미 있는 산출물은 건너뛴다.
 - 진행 확인: `tail -f output/<결과 이름>/logs/build.log`, 단계별 로그는 같은 폴더의 `<단계>*.log`.
 
 서버 기준 시간 (beolzip 168 s 녹화, 로그 3개): 기하 전용 약 2 분, semantic 맵까지 약 8 분. 노트북은 이보다 느릴 수 있다.
@@ -217,8 +222,12 @@ docker/laptop/run.sh sessions/<세션>.yaml                # 실제 빌드
 
 ```bash
 ls output/<결과 이름>/compiled/
-cat output/<결과 이름>/compiled/session_voxel3d_summary.json   # 셀 수 · 타일 수
+cat output/<결과 이름>/compiled/summary.json   # 메인 맵 점 수 · 의미 라벨 비율 · 통행성 그래프 · 보행 맵 셀/타일 · 계단 · 출력별 파일 크기
 ```
+
+- (2026-11-24~ 빌드) `compiled/main_map/{main_map.pcd, localization_map.pcd, main_map_semantic.pcd}`, `compiled/nav3d/{nav3d_graph.bin, nav3d_graph_check.png}`,
+  `compiled/locomotion/{tiles/, tiles_stair.json, stair_check.png}`, `compiled/potree/`, `bev.png`. build.log 의 `계단 N 개 (직선 구간)` 줄과 `stair_check.png`(계단마다 한 줄: 측면 전·후, 윗면) 를 사용자에게 보여 준다.
+  로봇에 넣기는 포털 **Robot map package** (위치추정 pcd + 보행 타일 + 내비 그래프 한 폴더). 아래 목록은 옛 빌드.
 
 - 기하 전용: `map_manifest.json`, `session_voxel3d.npz`, `session_voxel3d_tiles/`, `voxel3d_bev.png`, `voxel3d_view.rrd`, `data_quality.json`, `potree/`
 - semantic 맵까지: 위 + `robot_map_semantic.pcd`, `session_occupancy.npz`, `session_costmap_occ.npz`, `bev.png`, `map_package.rrd`

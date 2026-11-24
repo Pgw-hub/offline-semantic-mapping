@@ -17,6 +17,7 @@ ap.add_argument("--require-depth", type=int, default=1, help="1: depth 없는 �
 ap.add_argument("--zbuf-px", type=int, default=3, help="require-depth 2 의 z-buffer 픽셀 블록"); ap.add_argument("--zbuf-tol", type=float, default=0.3, help="블록 최소 거리 + tol + 0.05·z 안이면 보임")
 ap.add_argument("--zbuf-range", type=float, default=40.0, help="require-depth 2: depth 없는 점은 이 거리(m) 안에서만 투표 (원거리 지면이 지평선 픽셀의 하늘/건물 라벨을 받는 것 방지)")
 ap.add_argument("--max-range", type=float, default=40.0); ap.add_argument("--pcd-out")
+ap.add_argument("--points-out", help="점별 결과 npz (xyz·label·conf·cam_rgb·n_sem, 지도 점과 같은 순서) — Potree 메인 맵 레이어가 읽음")
 ap.add_argument("--depth-fill-range", type=float, default=0.0, help="depth 카메라 점으로 LiDAR 빈 곳 채우기 (카메라 거리 상한 m, 0=끔)")
 ap.add_argument("--depth-gap", type=float, default=0.15, help="LiDAR 지도 점이 이 거리 안에 있으면 depth 점 추가 안 함 (표면 이중화 방지)")
 ap.add_argument("--depth-px-stride", type=int, default=3); ap.add_argument("--depth-frame-stride", type=int, default=2); ap.add_argument("--depth-edge", type=float, default=0.12, help="이웃 픽셀과 depth 차 (m) 이상이면 경계(flying pixel) 로 버림")
@@ -131,7 +132,23 @@ np.savez_compressed(a.out, ijk=ijk, n_pts=n_pts.astype(np.int32), rgb=rgb_v, sem
 lab = int(has.sum()); am = sem_mean_pt[has].argmax(1)
 print(f"지도 점 {N:,} 중 라벨 받음 {lab:,} ({100*lab/N:.0f}%) · 프레임 {n_frames} · 프레임당 보이는 점 평균 {n_vis_tot/max(n_frames,1):,.0f}")
 print("라벨 분포:", {c: int((am == i).sum()) for i, c in enumerate(CLASSES)}); print("복셀", n, "저장:", a.out)
-if a.pcd_out:
+lab_pt = np.where(has, sem_mean_pt.argmax(1), 255).astype(np.uint8); conf_pt = np.where(has, sem_mean_pt.max(1), 0).astype(np.float16)
+lab_pt[has & (conf_pt < 0.3)] = 254                                                             # 점별 라벨: 클래스 id · 254 other(확신 < 0.3) · 255 라벨 없음 (voxel3d cls 와 같은 부호)
+if a.points_out:
+    np.savez_compressed(a.points_out, xyz=M.astype(np.float32), label=lab_pt, conf=conf_pt, cam_rgb=rgb_pt, n_sem=np.minimum(n_sem, 65535).astype(np.uint16), classes=np.array(CLASSES),
+                        **({"classdict": np.array(json.dumps(classdict, ensure_ascii=False))} if classdict else {}))
+    print("점별 라벨:", a.points_out)
+if a.pcd_out and not (source_v == 2).any():                                                     # 지도 점 그대로 1:1 — x y z rgb(의미 색, PCL packed float) label(u32: 클래스 id, 254 other, 255 없음)
+    pal = np.array([CD.hex2rgb(c["color"]) for c in classdict["classes"]], np.uint32) if classdict else np.zeros((0, 3), np.uint32)
+    lut = np.full((256, 3), 160, np.uint32); lut[:len(pal)] = pal; lut[254] = CD.hex2rgb(CD.OTHER_COLOR); lut[255] = CD.hex2rgb(CD.UNKNOWN_COLOR)
+    c = lut[lab_pt]; packed = ((c[:, 0] << 16) | (c[:, 1] << 8) | c[:, 2]).astype(np.uint32)
+    rec = np.zeros(N, np.dtype([("x", "<f4"), ("y", "<f4"), ("z", "<f4"), ("rgb", "<u4"), ("label", "<u4")]))
+    rec["x"], rec["y"], rec["z"] = M[:, 0], M[:, 1], M[:, 2]; rec["rgb"] = packed; rec["label"] = lab_pt
+    with open(a.pcd_out + ".tmp", "wb") as f:
+        f.write((f"# .PCD v0.7\nVERSION 0.7\nFIELDS x y z rgb label\nSIZE 4 4 4 4 4\nTYPE F F F F U\nCOUNT 1 1 1 1 1\nWIDTH {N}\nHEIGHT 1\n"
+                 f"VIEWPOINT 0 0 0 1 0 0 0\nPOINTS {N}\nDATA binary\n").encode()); rec.tofile(f)
+    os.replace(a.pcd_out + ".tmp", a.pcd_out); print("semantic pcd (점별 라벨):", a.pcd_out, "· classes", CLASSES)
+elif a.pcd_out:
     pal = np.array([CD.hex2rgb(c["color"]) for c in classdict["classes"]] + [CD.hex2rgb(CD.OTHER_COLOR), CD.hex2rgb(CD.UNKNOWN_COLOR)], np.float64) / 255.0 if classdict else None
     lab_all = np.where(has, sem_mean_pt.argmax(1), NCH + 1); lab_all[has & (sem_mean_pt.max(1) < 0.3)] = NCH
     col = pal[lab_all] if pal is not None else np.tile([0.5, 0.5, 0.5], (N, 1))

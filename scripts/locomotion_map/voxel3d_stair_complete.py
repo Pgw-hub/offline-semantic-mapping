@@ -89,7 +89,31 @@ def chain(segs):
     return max(best.values(), key=lambda c: (c[0], c[1]))[2]
 
 
+def split_path(segs, path, max_turn_deg=60.0):
+    """사슬을 오르는 방향이 크게 꺾이는 곳(계단참에서 되돌아 오르는 계단 등)에서 나눈다. 각 조각이 직선 계단 후보."""
+    P = [i for i in path if segs[i]["area"] <= WIDE_AREA]
+    if len(P) < 4: return [path]
+    ct = np.cos(np.radians(max_turn_deg)); pieces = [[P[0], P[1]]]
+    for b_ in P[2:]:
+        q = pieces[-1]; d = segs[b_]["c"] - segs[q[-1]]["c"]; ref = segs[q[-1]]["c"] - segs[q[0]]["c"]
+        if len(q) >= 2 and np.linalg.norm(d) > 1e-6 and np.linalg.norm(ref) > 1e-6 and float(d @ ref) / (np.linalg.norm(d) * np.linalg.norm(ref)) < ct:
+            pieces.append([b_])
+        else: q.append(b_)
+    pieces = [q for q in pieces if len(q) >= 3]
+    return pieces if len(pieces) > 1 else [path]
+
+
 def fit_model(segs, path):
+    """축을 연이은 디딤판 중심 방향의 중앙값으로 먼저 맞추고, 재맞춤이 실패하면 디딤판 중심 (x, y) 를 높이에 대해 최소제곱 직선으로 맞춘
+    방향(디딤판이 좌우로 쪼개져 연이은 중심이 옆으로 튀는 계단에서 안정)으로 한 번 더."""
+    try:
+        return fit_model_axis(segs, path, "median")
+    except SystemExit as ex:
+        try: return fit_model_axis(segs, path, "regress")
+        except SystemExit as ex2: raise SystemExit(f"{ex} / 회귀 축: {ex2}")
+
+
+def fit_model_axis(segs, path, axis_mode):
     """사슬로 계단 축·단 높이·단 너비를 잡고, 직선에서 벗어난 판을 빼고, 예측 자리(높이 ±4 cm, 앞모서리 ±8 cm)에 맞는 판을
     전체 후보에서 다시 모아(같은 디딤판 조각은 합침) 다시 맞춤 — 2회."""
     chain_treads = [segs[i] for i in path if segs[i]["area"] <= WIDE_AREA]
@@ -97,7 +121,10 @@ def fit_model(segs, path):
     # 축 = 연이은 디딤판 중심 사이 방향들의 중앙값 (옆 구조물이 사슬에 몇 개 섞여도 흔들리지 않게)
     C = np.array([s["c"] for s in chain_treads]); Z = np.array([s["z"] for s in chain_treads])
     d = np.diff(C, axis=0); d = d[np.linalg.norm(d, axis=1) > 1e-6]; d /= np.linalg.norm(d, axis=1)[:, None]
-    u = np.median(d, axis=0); u /= np.linalg.norm(u)
+    u = np.median(d, axis=0)
+    if axis_mode == "regress":                                                        # 중심 xy 를 높이에 대한 직선으로 (오르는 방향)
+        u = np.array([np.polyfit(Z, C[:, 0], 1)[0], np.polyfit(Z, C[:, 1], 1)[0]])
+    u /= np.linalg.norm(u)
     v = np.array([-u[1], u[0]])
 
     def stats(idx_list):
@@ -122,7 +149,7 @@ def fit_model(segs, path):
             if st["l1"] < lc - lw / 2 or st["l0"] > lc + lw / 2: continue      # 계단 띠 밖(옆 구조물)
             groups.setdefault(kk, []).append(s["idx"])
         rows = [stats(g) for kk, g in sorted(groups.items())]; k = np.array(sorted(groups))
-        if len(rows) < 3: raise SystemExit("계단 모델 재맞춤 실패")
+        if len(rows) < 3: raise SystemExit(f"계단 모델 재맞춤 실패 (맞춘 단 높이 {rise:.3f}, 단 너비 {run:.3f}, 사슬 판 {len(chain_treads)} → 걸러진 판 {len(hs)}, 다시 모은 단 {len(rows)})")
     rise, h0 = np.polyfit(k, [r["h"] for r in rows], 1); run, t00 = np.polyfit(k, [r["t0"] for r in rows], 1)
     depth = max(float(np.median([r["t1"] - r["t0"] for r in rows])), run); depth = min(depth, 1.6 * run)
     l0 = float(np.median([r["l0"] for r in rows])); l1 = float(np.median([r["l1"] for r in rows]))
@@ -130,7 +157,7 @@ def fit_model(segs, path):
     byk = {int(kk): r for kk, r in zip(k, rows)}; k0 = int(k.min())
     treads = [dict(k=kk - k0, h=byk[kk]["h"], nose=byk[kk]["t0"], observed_depth=byk[kk]["t1"] - byk[kk]["t0"], inferred=False) if kk in byk else
               dict(k=kk - k0, h=float(h0 + rise * kk), nose=float(t00 + run * kk), observed_depth=0.0, inferred=True) for kk in range(k0, int(k.max()) + 1)]
-    return dict(u=u.tolist(), v=v.tolist(), rise=float(rise), run=float(run), depth=float(depth), l0=l0, l1=l1, treads=treads,
+    return dict(axis=axis_mode, u=u.tolist(), v=v.tolist(), rise=float(rise), run=float(run), depth=float(depth), l0=l0, l1=l1, treads=treads,
                 fit_residual_cm=dict(h=float(np.abs(res_h).max() * 100), nose=float(np.abs(res_t).max() * 100)))
 
 
@@ -164,6 +191,9 @@ def main():
     ap.add_argument("--clean", action="store_true", help="디딤판 위 떠 있는 셀(halo) 제거 (보기용)")
     ap.add_argument("--risers", action="store_true", help="디딤판 앞모서리 아래에 앞면 판(수직 셀)을 넣어 뚫린 단차를 막힌 계단처럼 만듦")
     ap.add_argument("--maxz-rule", type=float, default=0.03)
+    ap.add_argument("--min-treads", type=int, default=5, help="받아들일 계단의 최소 디딤판 수 (가구 오검출 방지; 2–4 단짜리 짧은 계단은 놓침)")
+    ap.add_argument("--min-width", type=float, default=0.7, help="받아들일 계단의 최소 폭 (m)")
+    ap.add_argument("--max-stairs", type=int, default=30, help="찾을 계단(직선 구간) 최대 수. 한 계단을 찾으면 그 자리의 판을 빼고 다시 찾는다 (다층 건물). 1 = 예전처럼 가장 긴 것 하나")
     a = ap.parse_args()
     idx, R = read_tiles(a.in_dir); r, rz = idx["res_xy"], idx["res_z"]; CELL_AREA = r * r
     x = (R["ix"] + 0.5) * r; y = (R["iy"] + 0.5) * r
@@ -172,42 +202,83 @@ def main():
     top = top_cells(x, y, z, r) & roi
     TOP = np.c_[x[top], y[top], z[top]]
     sup = planar_support(TOP); PTS = TOP[sup >= SUPPORT_MIN]
-    segs = segments(PTS); path = chain(segs); M = fit_model(segs, path); extend(M, TOP)
-    u, v = np.array(M["u"]), np.array(M["v"]); t_all = np.c_[x, y] @ u; l_all = np.c_[x, y] @ v
-    print(f"계단: 디딤판 {len(M['treads'])} 개, 단 높이 {M['rise'] * 100:.1f} cm, 단 너비 {M['run'] * 100:.1f} cm, 디딤판 깊이 {M['depth'] * 100:.1f} cm, "
-          f"폭 {(M['l1'] - M['l0']) * 100:.0f} cm, 축 ({u[0]:.3f}, {u[1]:.3f}), 직선 맞춤 잔차 높이 {M['fit_residual_cm']['h']:.1f} / 앞모서리 {M['fit_residual_cm']['nose']:.1f} cm")
-    heights = np.array([tr["h"] for tr in M["treads"]])
+    # 계단 찾기: 가장 긴 사슬 → 모델 → 그 계단 자리(축 방향 범위 × 폭 × 높이 범위)의 판을 후보에서 빼고 다시 (다층 건물의 여러 계단)
+    segs_all = segments(PTS); alive = np.ones(len(segs_all), bool); models = []; tries = 0
+    C_ = np.array([sg["c"] for sg in segs_all]); Z_ = np.array([sg["z"] for sg in segs_all])
+
+    def try_fit(segs, piece):
+        """조각 하나 → 받아들일 계단 모델 또는 SystemExit(이유)."""
+        M_ = fit_model(segs, piece); extend(M_, TOP)
+        # 받아들이는 계단: 디딤판 ≥ min_treads, 폭 ≥ min_width, 단 높이·너비가 건축 계단 범위, 직선 맞춤 잔차 작음 (가구·잡동사니의 층층 판 거름)
+        why = [w for w, bad in ((f"디딤판 {len(M_['treads'])} < {a.min_treads}", len(M_["treads"]) < a.min_treads),
+                                (f"폭 {M_['l1'] - M_['l0']:.2f} < {a.min_width} m", M_["l1"] - M_["l0"] < a.min_width),
+                                (f"단 높이 {M_['rise']:.3f} m 범위 밖", not 0.12 <= M_["rise"] <= 0.23), (f"단 너비 {M_['run']:.3f} m 범위 밖", not 0.20 <= M_["run"] <= 0.40),
+                                (f"직선 잔차 {M_['fit_residual_cm']['h']:.1f} cm", M_["fit_residual_cm"]["h"] > 3.0),
+                                (f"디딤판 깊이/단 너비 {M_['depth'] / M_['run']:.2f} > 1.3", M_["depth"] > 1.3 * M_["run"])) if bad]
+        if why: raise SystemExit(", ".join(why))
+        return M_
+
+    def footprint(M_):
+        """이 계단 자리(축 방향 범위 × 폭 × 높이 범위)에 있는 판 — 다음 계단 찾기에서 뺀다."""
+        u_, v_ = np.array(M_["u"]), np.array(M_["v"]); hs_ = [tr["h"] for tr in M_["treads"]]; ns_ = [tr["nose"] for tr in M_["treads"]]; tc, lc_ = C_ @ u_, C_ @ v_
+        return (tc >= min(ns_) - 0.1) & (tc <= max(ns_) + M_["depth"] + 0.1) & (lc_ >= M_["l0"] - 0.1) & (lc_ <= M_["l1"] + 0.1) & (Z_ >= min(hs_) - 0.06) & (Z_ <= max(hs_) + 0.06)
+
+    while len(models) < a.max_stairs and alive.sum() >= 3 and tries < 4 * a.max_stairs:
+        tries += 1; ids = np.flatnonzero(alive); segs = [segs_all[i] for i in ids]
+        path = chain(segs)
+        if len(path) < 3: break
+        alive[ids[path]] = False                                                     # 이 사슬은 어떻게 되든 다시 안 씀
+        pieces = split_path(segs, path)
+        if len(pieces) > 1: print(f"  사슬 {len(path)} 판을 방향이 꺾이는 곳에서 {len(pieces)} 조각으로: {[len(q) for q in pieces]}")
+        for piece in pieces:
+            try:
+                M_ = try_fit(segs, piece)
+            except (SystemExit, Exception) as ex:                                     # 맞춤 실패·퇴화 → 계단 아님
+                if a.max_stairs == 1 and not models: raise
+                zz = [segs[i]["z"] for i in piece]; cc = np.mean([segs[i]["c"] for i in piece], 0)
+                print(f"  후보 {len(piece)} 판 (z {min(zz):+.2f}..{max(zz):+.2f}, 중심 {cc[0]:+.1f},{cc[1]:+.1f}) 버림: {ex}"); continue
+            alive &= ~footprint(M_); models.append(M_)
+            if len(models) >= a.max_stairs: break
+    if not models: raise SystemExit("계단을 찾지 못함 (--roi 확인)")
+    M = dict(models[0]); M["stairs"] = models                                         # 맨 위 키는 첫 계단 (옛 읽기 코드 호환), stairs = 전부
+    for si_, M_ in enumerate(models):
+        u_ = np.array(M_["u"])
+        print(f"계단 {si_ + 1}: 디딤판 {len(M_['treads'])} 개, 단 높이 {M_['rise'] * 100:.1f} cm, 단 너비 {M_['run'] * 100:.1f} cm, 디딤판 깊이 {M_['depth'] * 100:.1f} cm, "
+              f"폭 {(M_['l1'] - M_['l0']) * 100:.0f} cm, 축 ({u_[0]:.3f}, {u_[1]:.3f}), 높이 {M_['treads'][0]['h']:+.2f}–{M_['treads'][-1]['h']:+.2f} m, "
+              f"직선 맞춤 잔차 높이 {M_['fit_residual_cm']['h']:.1f} / 앞모서리 {M_['fit_residual_cm']['nose']:.1f} cm")
     # 셀 → 열 키, 열마다 z 목록 (채움 판정)
     col = R["ix"].astype(np.int64) * 2000003 + R["iy"]; o = np.argsort(col); cs = col[o]; zs_sorted = z[o]
-    add = []; keep = np.ones(len(R), bool)
-    for tr in M["treads"]:
-        t0, t1 = tr["nose"], tr["nose"] + M["depth"]
-        # 사각형 안 열 중심 격자
-        corners = np.array([[t0, M["l0"]], [t0, M["l1"]], [t1, M["l0"]], [t1, M["l1"]]]) @ np.array([u, v])
-        ix0, iy0 = np.floor(corners.min(0) / r).astype(int) - 1; ix1, iy1 = np.floor(corners.max(0) / r).astype(int) + 1
-        gi, gj = np.meshgrid(np.arange(ix0, ix1 + 1), np.arange(iy0, iy1 + 1), indexing="ij"); cx = (gi.ravel() + 0.5) * r; cy = (gj.ravel() + 0.5) * r
-        tt = np.c_[cx, cy] @ u; ll = np.c_[cx, cy] @ v; inside = (tt >= t0) & (tt < t1) & (ll >= M["l0"]) & (ll <= M["l1"])
-        gi, gj, cx, cy = gi.ravel()[inside], gj.ravel()[inside], cx[inside], cy[inside]
-        q = gi.astype(np.int64) * 2000003 + gj; lo = np.searchsorted(cs, q, "left"); hi = np.searchsorted(cs, q, "right")
-        has = np.array([np.any(np.abs(zs_sorted[a_:b_] - tr["h"]) <= TOL_FILL) for a_, b_ in zip(lo, hi)])
-        tr["columns"] = int(inside.sum()); tr["covered_before"] = float(has.mean()); tr["added"] = int((~has).sum())
-        add += [(i_, j_, tr["h"]) for i_, j_ in zip(gi[~has], gj[~has])]
-        if a.clean:
-            inr = (t_all >= t0) & (t_all < t1) & (l_all >= M["l0"]) & (l_all <= M["l1"])
-            halo = inr & (z > tr["h"] + TOL_KEEP) & (z < tr["h"] + HALO_TOP) & (np.abs(z[:, None] - heights[None, :]).min(1) > TOL_KEEP)
-            tr["halo_removed"] = int(halo.sum()); keep &= ~halo
-    if a.risers:   # 디딤판 k 앞모서리 바로 앞 한 칸 두께의 수직 판: 아래 디딤판(맨 아래는 h_0 - 단 높이) 위 3 cm 부터 h_k 아래 3 cm 까지
-        n_r = 0
-        for i_, tr in enumerate(M["treads"]):
-            lo_z = (M["treads"][i_ - 1]["h"] if i_ > 0 else tr["h"] - M["rise"]) + TOL_FILL; hi_z = tr["h"] - TOL_FILL
-            t0, t1 = tr["nose"] - r, tr["nose"]
-            corners = np.array([[t0, M["l0"]], [t0, M["l1"]], [t1, M["l0"]], [t1, M["l1"]]]) @ np.array([u, v])
-            ix0, iy0 = np.floor(corners.min(0) / r).astype(int) - 1; ix1, iy1 = np.floor(corners.max(0) / r).astype(int) + 1
-            gi, gj = np.meshgrid(np.arange(ix0, ix1 + 1), np.arange(iy0, iy1 + 1), indexing="ij"); cx = (gi.ravel() + 0.5) * r; cy = (gj.ravel() + 0.5) * r
-            tt = np.c_[cx, cy] @ u; ll = np.c_[cx, cy] @ v; ins = (tt >= t0) & (tt < t1) & (ll >= M["l0"]) & (ll <= M["l1"])
-            for zz in np.arange(lo_z, hi_z + 1e-9, rz):
-                add += [(i2, j2, zz) for i2, j2 in zip(gi.ravel()[ins], gj.ravel()[ins])]; n_r += int(ins.sum())
-        print(f"앞면 판 셀 {n_r:,}")
+    add = []; keep = np.ones(len(R), bool); n_r = 0
+    for M_ in models:
+      M = M_; u, v = np.array(M["u"]), np.array(M["v"]); t_all = np.c_[x, y] @ u; l_all = np.c_[x, y] @ v
+      heights = np.array([tr["h"] for tr in M["treads"]])
+      for tr in M["treads"]:
+          t0, t1 = tr["nose"], tr["nose"] + M["depth"]
+          # 사각형 안 열 중심 격자
+          corners = np.array([[t0, M["l0"]], [t0, M["l1"]], [t1, M["l0"]], [t1, M["l1"]]]) @ np.array([u, v])
+          ix0, iy0 = np.floor(corners.min(0) / r).astype(int) - 1; ix1, iy1 = np.floor(corners.max(0) / r).astype(int) + 1
+          gi, gj = np.meshgrid(np.arange(ix0, ix1 + 1), np.arange(iy0, iy1 + 1), indexing="ij"); cx = (gi.ravel() + 0.5) * r; cy = (gj.ravel() + 0.5) * r
+          tt = np.c_[cx, cy] @ u; ll = np.c_[cx, cy] @ v; inside = (tt >= t0) & (tt < t1) & (ll >= M["l0"]) & (ll <= M["l1"])
+          gi, gj, cx, cy = gi.ravel()[inside], gj.ravel()[inside], cx[inside], cy[inside]
+          q = gi.astype(np.int64) * 2000003 + gj; lo = np.searchsorted(cs, q, "left"); hi = np.searchsorted(cs, q, "right")
+          has = np.array([np.any(np.abs(zs_sorted[a_:b_] - tr["h"]) <= TOL_FILL) for a_, b_ in zip(lo, hi)])
+          tr["columns"] = int(inside.sum()); tr["covered_before"] = float(has.mean()); tr["added"] = int((~has).sum())
+          add += [(i_, j_, tr["h"]) for i_, j_ in zip(gi[~has], gj[~has])]
+          if a.clean:
+              inr = (t_all >= t0) & (t_all < t1) & (l_all >= M["l0"]) & (l_all <= M["l1"])
+              halo = inr & (z > tr["h"] + TOL_KEEP) & (z < tr["h"] + HALO_TOP) & (np.abs(z[:, None] - heights[None, :]).min(1) > TOL_KEEP)
+              tr["halo_removed"] = int(halo.sum()); keep &= ~halo
+      if a.risers:   # 디딤판 k 앞모서리 바로 앞 한 칸 두께의 수직 판: 아래 디딤판(맨 아래는 h_0 - 단 높이) 위 3 cm 부터 h_k 아래 3 cm 까지
+          for i_, tr in enumerate(M["treads"]):
+              lo_z = (M["treads"][i_ - 1]["h"] if i_ > 0 else tr["h"] - M["rise"]) + TOL_FILL; hi_z = tr["h"] - TOL_FILL
+              t0, t1 = tr["nose"] - r, tr["nose"]
+              corners = np.array([[t0, M["l0"]], [t0, M["l1"]], [t1, M["l0"]], [t1, M["l1"]]]) @ np.array([u, v])
+              ix0, iy0 = np.floor(corners.min(0) / r).astype(int) - 1; ix1, iy1 = np.floor(corners.max(0) / r).astype(int) + 1
+              gi, gj = np.meshgrid(np.arange(ix0, ix1 + 1), np.arange(iy0, iy1 + 1), indexing="ij"); cx = (gi.ravel() + 0.5) * r; cy = (gj.ravel() + 0.5) * r
+              tt = np.c_[cx, cy] @ u; ll = np.c_[cx, cy] @ v; ins = (tt >= t0) & (tt < t1) & (ll >= M["l0"]) & (ll <= M["l1"])
+              for zz in np.arange(lo_z, hi_z + 1e-9, rz):
+                  add += [(i2, j2, zz) for i2, j2 in zip(gi.ravel()[ins], gj.ravel()[ins])]; n_r += int(ins.sum())
+    if a.risers: print(f"앞면 판 셀 {n_r:,}")
     A = np.array(add).reshape(-1, 3)
     I = np.c_[A[:, 0], A[:, 1], np.floor(A[:, 2] / rz)].astype(np.int64)
     R2 = R[keep]
@@ -219,8 +290,9 @@ def main():
     write_tiles(a.out_dir, Iall, cat("count", 0, np.int64), np.concatenate([R2["mean_z"], A[:, 2]]).astype(np.float32),
                 np.concatenate([R2["max_z"], A[:, 2]]).astype(np.float32), cat("cls", 255, np.uint8), cat("src", 5, np.uint8),
                 np.concatenate([R2["logodds"].astype(np.float32), np.zeros(len(I), np.float32)]), params)
-    json.dump(M, open(a.out_dir.rstrip("/") + "_stair.json", "w"), indent=1, ensure_ascii=False)
-    for tr in M["treads"]:
+    M0 = dict(models[0]); M0["stairs"] = models
+    json.dump(M0, open(a.out_dir.rstrip("/") + "_stair.json", "w"), indent=1, ensure_ascii=False)
+    for tr in (t_ for M_ in models for t_ in M_["treads"]):
         print(f"  디딤판 {tr['k']:2d}{' (모델)' if tr['inferred'] else '       '}  h {tr['h']:+.3f}  앞모서리 {tr['nose']:+.3f}  관측 깊이 {tr['observed_depth'] * 100:4.1f} cm  채워진 칸 {tr['covered_before'] * 100:5.1f} % → 100 %  (+{tr['added']})"
               + (f"  halo 제거 {tr['halo_removed']}" if a.clean else ""))
     print(f"added {len(I):,} cells, removed {int((~keep).sum()):,} → {a.out_dir}")

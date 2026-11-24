@@ -62,14 +62,15 @@ def top(a, M, R, r, x, y, z):
 
 def main():
     js, out, before, after = sys.argv[1:5]
-    M = json.load(open(js))
-    fig = plt.figure(figsize=(13, 9.5)); gs = fig.add_gridspec(2, 2, height_ratios=[1.2, 1])
-    for c, (d, title) in enumerate([(before, "before (map as built)"), (after, "after (stair fill + risers)")]):
-        R, r, x, y, z = load(d); side(fig.add_subplot(gs[0, c]), M, R, x, y, z, title)
-    top(fig.add_subplot(gs[1, :]), M, R, r, x, y, z)
-    fig.suptitle(f"{len(M['treads'])} treads, rise {M['rise'] * 100:.1f} cm, run {M['run'] * 100:.1f} cm, depth {M['depth'] * 100:.1f} cm, "
-                 f"width {(M['l1'] - M['l0']) * 100:.0f} cm, line-fit residual h {M['fit_residual_cm']['h']:.1f} / nose {M['fit_residual_cm']['nose']:.1f} cm", fontsize=12)
-    fig.tight_layout(); fig.savefig(out, dpi=100)
+    J = json.load(open(js)); flights = J.get("stairs") or [J]                       # 여러 계단(stairs) 이면 계단마다 한 줄: 측면 전 · 측면 후 · 윗면
+    B = load(before); A = load(after); n = len(flights)
+    fig, ax = plt.subplots(n, 3, figsize=(19, 4.6 * n), squeeze=False, gridspec_kw={"width_ratios": [1, 1, 1.1]})
+    for i, M in enumerate(flights):
+        side(ax[i, 0], M, *B[:1], *B[2:], f"#{i + 1} before"); side(ax[i, 1], M, *A[:1], *A[2:], f"#{i + 1} after")
+        top(ax[i, 2], M, A[0], A[1], *A[2:])
+        ax[i, 0].set_title(f"#{i + 1} before · {len(M['treads'])} treads, rise {M['rise'] * 100:.1f} cm, run {M['run'] * 100:.1f} cm, z {M['treads'][0]['h']:+.2f}..{M['treads'][-1]['h']:+.2f} m", fontsize=10)
+    fig.suptitle(f"stair completion: {n} flight(s), {sum(len(M['treads']) for M in flights)} treads", fontsize=13)
+    fig.tight_layout(); fig.savefig(out, dpi=80)
     print(f"→ {out}")
 
 

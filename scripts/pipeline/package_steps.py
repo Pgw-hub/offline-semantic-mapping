@@ -1,4 +1,4 @@
-"""산출물 블록: G Map package(매니페스트) · H 뷰어(rerun · summary · Potree) · V 영상."""
+"""산출물 블록: G 매니페스트(메인 맵 · 보행 맵) · H 뷰어(Potree · summary) · V 영상."""
 import glob, json, os, shutil, subprocess, sys, time
 import yaml
 
@@ -7,104 +7,111 @@ from pipeline.env import CODE, REPO, PY, CGREPO, HF_HOME, CD
 
 class PackageSteps:
     # ───────────────────────────────────────────────────────────────────────────────────────────
-    # G (package) — 지금까지의 산출물을 "맵 패키지" 하나로 묶는 매니페스트를 쓴다. 이후 소비자(load_map, verify_requests,
-    #   localize, export_pcd, 포털)는 재계산 없이 이 JSON 만 읽는다.
-    #   ① compiled/map_manifest.json : map_id, frame(좌표계 설명), geometry_source, classdict 전체, 빌드 옵션, files{키: 경로·크기·설명}
-    #      files 키: terrain_voxels(C) / occupancy_probabilistic(F) / objects, objects_clip, edges_*(E) / voxel3d_prior, voxel3d_tiles(F3d)
-    #      경로는 <root> 기준 상대경로 (load_map 규약). 파일이 하나라도 없으면 실패시킨다.
-    #   ② Application 코스트맵 변환 (pipeline/app_steps.py · apps/costmap_from_occupancy.py --register): F 의 occupancy + C 의 라벨 → nav2 등급 코스트맵.
-    #      지면 = hits ≥ h_ground 인 가장 낮은 셀, 장애물 = 지면 위 [band_min, clearance] 밴드의 hits ≥ h_obs 셀,
-    #      지면 코스트 = 클래스 사전의 role/cost. → compiled/session_costmap_occ.npz, 매니페스트에 costmap_2d(_occ) 등록.
+    # G (package) — 두 출력(메인 맵 · 보행 맵)의 파일 목록을 매니페스트 하나로. 소비자(포털, 로봇 맵 패키지, load_map, export_pcd)는 이 JSON 만 읽는다.
+    #   compiled/map_manifest.json : map_id, frame, classdict, 빌드 옵션,
+    #     files{키: 경로(<root> 기준)·크기·형식 설명}  — 필수 파일이 없으면 실패
+    #     maps{main_map: [키…], locomotion_map: [키…]} — 어느 파일이 어느 출력에 속하는지
+    #   옛 0.2 m occupancy(O 단계)가 있으면 nav2 코스트맵(Application, app_steps)도 만들어 등록한다 (기본 빌드에는 없음).
     # ───────────────────────────────────────────────────────────────────────────────────────────
+    MAIN_FILES = [   # (키, 경로, 필수 조건, 설명)
+        ("main_map", "compiled/main_map/main_map.pcd", "always", "메인 맵 기하: PCD x y z (float32 binary). 5 cm 확률 복셀 점유 칸마다 점 하나(칸 중심 xy + 칸 안 최고 z)"),
+        ("localization_map", "compiled/main_map/localization_map.pcd", "always", "위치추정 지도: 메인 맵 0.25 m 칸 평균, PCD x y z intensity (lidar_slam 이 읽는 필드)"),
+        ("main_map_semantic", "compiled/main_map/main_map_semantic.pcd", "semantic", "점별 의미: PCD x y z rgb(의미 색) label(u32 클래스 id, 254 other, 255 없음) — main_map 과 같은 점·순서"),
+        ("main_map_semantic_points", "compiled/main_map/main_map_semantic.npz", "semantic", "점별 label·확신도·카메라 색·관측 수 (npz)"),
+        ("terrain_voxels", "voxel/session_voxsem.npz", "semantic", "0.1 m semantic 복셀 (ijk, sem_mean, n_sem …) — 객체-지형 관계·옛 도구용"),
+        ("objects", "compiled/session_objects.json", "objects", "3D scene graph 노드: 객체 bbox center/extent/tag/num_det (JSON)"),
+        ("objects_clip", "compiled/session_objects_clip.npz", "objects", "객체 CLIP ViT-H/14 임베딩 1024D (objects 와 같은 순서)"),
+        ("edges_heuristic", "compiled/session_edges.json", "objects", "3D scene graph 엣지: 기하 휴리스틱 (on top of / next to)"),
+        ("edges_object_terrain", "compiled/voxel_session_relations.json", "objects", "3D scene graph 엣지: 객체-지형 (bbox 발자국 아래 지배 지형)"),
+        ("edges_vlm", "compiled/session_edges_vlm.json", "objects", "3D scene graph 엣지: VLM 판정 (Qwen2.5-VL, 꺼져 있으면 빈 목록)"),
+        ("nav3d_navigation_map", "compiled/nav3d/navigation_map.pcd", "optional", "3D 내비 입력 = main_map.pcd 와 같은 바이트 (로봇 log/map/<맵>/ 에 이 이름으로)"),
+        ("nav3d_graph", "compiled/nav3d/nav3d_graph.bin", "optional", "통행성 그래프 + 토폴로지 (raisin_navigation3d_plugin GraphFile, 원본 pcd 해시·파라미터 포함)"),
+        ("nav3d_summary", "compiled/nav3d/nav3d_graph_summary.json", "optional", "통행성 그래프 요약: 노드 수, 장소(방·계단), 포털"),
+        ("nav3d_nodes", "compiled/nav3d/nav3d_nodes.csv", "optional", "통행성 그래프 노드 x y z clearance place component (CSV)"),
+    ]
+    LOCO_FILES = [
+        ("locomotion_tiles", "compiled/locomotion/tiles/index.json", "always", "보행 맵 (최종): voxel3d_tiles v2 — 10 m 타일, 24 B/셀, 2.5 cm 정육면체, 계단 보완 포함. 로봇 voxel3d_tiles/"),
+        ("locomotion_stair_model", "compiled/locomotion/tiles_stair.json", "always", "계단 모델 (디딤판 높이·앞모서리·채움 수; 계단 없으면 stair: null)"),
+        ("locomotion_base_tiles", "compiled/locomotion/base_tiles/index.json", "always", "보행 맵 바탕: 2.5 cm 확률 복셀 그대로 (계단 보완 전)"),
+        ("locomotion_points", "compiled/locomotion/locomotion.npz", "always", "최종 보행 맵 셀 배열 (npz: ijk, mean_z, max_z, source …) — Potree·PCD 내보내기"),
+    ]
+
     def step_G(self):
         man = os.path.join(self.D["compiled"], "map_manifest.json")
-        rel = lambda p: os.path.relpath(p, self.root)
-        files = {"terrain_voxels": ("voxel/session_voxsem.npz", "0.1m semantic 복셀 (ijk, n_pts, rgb, sem_mean[grass,path,tree,person], n_sem)"),
-                 "occupancy_probabilistic": ("compiled/session_occupancy.npz", f"{self.opt['occupancy_res']}m 레이캐스팅 log-odds + 표면 하이브리드 (state/source/surf_removed)"),
-                 "objects": ("compiled/session_objects.json", "ConceptGraphs 객체 (로그 간 병합), bbox center/extent/tag/num_det"),
-                 "objects_clip": ("compiled/session_objects_clip.npz", "객체 CLIP ViT-H/14 임베딩 1024D (objects 와 같은 순서)"),
-                 "edges_heuristic": ("compiled/session_edges.json", "기하 휴리스틱 엣지 (on top of / next to)"),
-                 "edges_object_terrain": ("compiled/voxel_session_relations.json", "객체-지형 관계 (bbox 발자국 아래 지배 지형)"),
-                 "edges_vlm": ("compiled/session_edges_vlm.json", "VLM 판정 엣지 (Qwen2.5-VL)")}
-        if self.geo_only: files = {}                                       # 기하 전용: 보행 맵(voxel3d)만
-        elif not self.with_objects:                                        # objects: false — semantic 맵까지만 (객체·엣지 항목 없음)
-            files = {k: v for k, v in files.items() if k in ("terrain_voxels", "occupancy_probabilistic")}
-        if self.opt.get("voxel3d") and os.path.exists(os.path.join(self.root, "compiled", "session_voxel3d.npz")):
-            files["voxel3d_prior"] = ("compiled/session_voxel3d.npz", "보행용 3D 확률 복셀 사전맵: 로봇 VoxelMap 격자(0.025×0.025×0.1 m) ijk/mean_z/logodds/cls/source + 확률 격자(0.1 m) 전체")
-            files["voxel3d_tiles"] = ("compiled/session_voxel3d_tiles/index.json", "voxel3d 타일 바이너리(10 m, 20 B/셀) 인덱스 — 로봇은 창 주변 3×3 타일만 적재")
-        if os.path.exists(os.path.join(self.root, "compiled", "session_voxel3d_stair_tiles", "index.json")):
-            files["voxel3d_stair_tiles"] = ("compiled/session_voxel3d_stair_tiles/index.json", "voxel3d 타일 + 계단 디딤판·앞면 채움(src 5, options.stair_complete) — 계단 모델은 session_voxel3d_stair_tiles_stair.json")
+        need = {"always": True, "optional": False, "semantic": not self.geo_only, "objects": self.with_objects}
+        groups = {"main_map": self.MAIN_FILES, "locomotion_map": self.LOCO_FILES if self.loco_opts() else []}
         cdj = os.path.join(self.D["sem"], "classes.json"); cdict = json.load(open(cdj)) if os.path.exists(cdj) else None
-        m = {"map_id": self.opt["map_id"], "frame": self.opt["frame"], "pose_graph": ("graph/graph.json" if self.opt["pose_graph"] else None), "geometry_source": ((f"robot_map:{self.robot_map.get('geometry','keyframe_scans')}:" + os.path.basename(self.robot_map.get("pcd") or "path_pgo")) if self.robot_map else "raw scans"), "voxel_m": 0.1, "grid_axes": "row=x, col=y", "occupancy_res_m": self.opt["occupancy_res"], "classdict": cdict,
-             "built": time.strftime("%Y-%m-%d %H:%M"), "source": {"mcap_dir": self.mcap_dir, "logs": self.logs, "calib": self.calib}, "options": self.opt, "files": {}}
-        v3s = os.path.join(self.root, "compiled", "session_voxel3d_summary.json")
-        if os.path.exists(v3s):
-            try: js = json.load(open(v3s)); m["voxel3d"] = {k: js.get(k) for k in ("cells", "cells_lidar", "cells_depth", "cells_flat_fill", "total_mb", "tiles", "tile_mb_max", "removed_prob_free", "removed_dynamic")}; m["voxel3d"]["params"] = {k: js["params"].get(k) for k in ("res_xy", "res_z", "prob_res", "tile_m", "frame")}
-            except Exception as ex: self.say(f"  voxel3d 요약 읽기 실패: {ex}")
-        for k, (p, desc) in files.items():
-            full = os.path.join(self.root, p)
-            if not os.path.exists(full):
-                if self.dry: self.say(f"  (dry) {k} ← {p}"); continue
-                raise RuntimeError(f"매니페스트 항목 {k} 의 파일이 없음: {full}")
-            m["files"][k] = {"path": p, "bytes": os.path.getsize(full), "desc": desc}
-        if not self.dry:
-            json.dump(m, open(man, "w"), ensure_ascii=False, indent=1); self.say(f"  매니페스트 작성: {man} ({len(m['files'])} 항목)")
-        self.app_costmap(man)                                              # Application: 코스트맵 변환 (pipeline/app_steps.py)
-        if not self.dry:   # 로더 기본 키(costmap_2d)도 같은 파일을 가리키게
+        m = {"map_id": self.opt["map_id"], "frame": self.opt["frame"], "pose_graph": ("graph/graph.json" if self.opt["pose_graph"] else None),
+             "geometry_source": "main_map (5 cm LiDAR 확률 복셀, compiled/main_map/main_map.pcd)", "layout": "2026-11-24 main_map + locomotion_map",
+             "voxel_m": 0.1, "grid_axes": "row=x, col=y", "classdict": cdict, "built": time.strftime("%Y-%m-%d %H:%M"),
+             "source": {"mcap_dir": self.mcap_dir, "logs": self.logs, "calib": self.calib}, "options": self.opt, "files": {}, "maps": {}}
+        missing = []
+        for g, lst in groups.items():
+            m["maps"][g] = []
+            for k, p, cond, desc in lst:
+                full = os.path.join(self.root, p)
+                if not os.path.exists(full):
+                    if need.get(cond, False): missing.append(p)
+                    continue
+                e = {"path": p, "bytes": os.path.getsize(full), "desc": desc}
+                if p.endswith("index.json"):                                     # 타일 폴더: 폴더 전체 크기
+                    td = os.path.dirname(full); e["dir_bytes"] = sum(os.path.getsize(os.path.join(td, f)) for f in os.listdir(td)); e["tiles"] = len(glob.glob(os.path.join(td, "t_*.bin")))
+                m["files"][k] = e; m["maps"][g].append(k)
+        occ = os.path.join(self.D["compiled"], "session_occupancy.npz")
+        if os.path.exists(occ):
+            m["files"]["occupancy_probabilistic"] = {"path": "compiled/session_occupancy.npz", "bytes": os.path.getsize(occ), "desc": "(옛) 0.2 m 확률 점유 — O 단계"}
+        for f, key in (("main_map/main_map_summary.json", "main_map"), ("locomotion/base_summary.json", "locomotion")):
+            fp = os.path.join(self.D["compiled"], f)
+            if os.path.exists(fp):
+                js = json.load(open(fp)); m.setdefault("stats", {})[key] = {k: js.get(k) for k in ("cells", "removed_prob_free", "n_points", "seconds")} | {"params": {k: js["params"].get(k) for k in ("res_xy", "res_z", "max_range", "free_range")}}
+        if missing:
+            if self.dry: self.say(f"  (dry) 아직 없는 파일: {missing}")
+            else: raise RuntimeError(f"매니페스트 필수 파일 없음: {missing}")
+        if self.dry: return
+        json.dump(m, open(man, "w"), ensure_ascii=False, indent=1)
+        sz = lambda g: sum(m["files"][k].get("dir_bytes", m["files"][k]["bytes"]) for k in m["maps"][g])
+        self.say(f"  매니페스트: 메인 맵 {len(m['maps']['main_map'])} 파일 {sz('main_map') / 1e6:.1f} MB · 보행 맵 {len(m['maps']['locomotion_map'])} 파일 {sz('locomotion_map') / 1e6:.1f} MB")
+        if os.path.exists(occ):
+            self.app_costmap(man)                                              # (옛) Application: 코스트맵 변환
             m = json.load(open(man))
             if "costmap_2d_occ" in m["files"] and "costmap_2d" not in m["files"]:
                 m["files"]["costmap_2d"] = dict(m["files"]["costmap_2d_occ"]); json.dump(m, open(man, "w"), ensure_ascii=False, indent=1)
-            tot = sum(v["bytes"] for v in m["files"].values()); self.say(f"  패키지 {len(m['files'])} 파일 · {tot/1e6:.1f} MB")
+
     # ───────────────────────────────────────────────────────────────────────────────────────────
-    # H (view) — 사람이 볼 것. 패키지를 load_map.py 로 읽어 rerun 파일과 요약을 만든다 (CPU).
-    #   ① compiled/map_package.rrd : 복셀·객체·엣지·occupancy 를 한 장면에 (기본 0.1 m 점, view_cubes 면 큐브)
-    #   ② compiled/summary.json + bev.png : 셀 수·객체 수·크기 등 통계와 상단 뷰 썸네일 — 웹 포털 카드가 읽는다. 항상 갱신.
+    # H (view) — 사람이 볼 것.
+    #   ① compiled/potree/ : Potree 웹 뷰어 (package/potree_export.py) — 포털의 기본 보기. 메인 맵(의미 색·카메라 색·높이)·위치추정 지도·
+    #      보행 맵·통행성 그래프 노드를 점 레이어로, 토폴로지(장소·포털)와 3D scene graph(객체 상자·라벨·엣지)를 겹쳐 그리는 선·라벨로. 패널에서 클릭으로 켜고 끔.
+    #   ② compiled/summary.json + bev.png : 포털 카드용 통계·윗면 썸네일 (package/map_summary.py). 항상 갱신.
+    #   ③ (options.rerun: true) compiled/map_package.rrd — 옛 rerun 보기 (load_map.py)
     # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_H(self):
-        if self.geo_only: self.step_H_geometry()
-        else: self.step_H_package()
-        self.step_H_potree()
-    def step_H_package(self):
-        man = os.path.join(self.D["compiled"], "map_manifest.json"); rrd = os.path.join(self.D["compiled"], "map_package.rrd")
-        if not self.done("H", rrd):
-            cmd = [PY, f"{CODE}/package/load_map.py", man, "--rrd", rrd, "--sub", str(self.opt.get("view_sub", 1))]
-            if self.opt.get("view_cubes", False):                  # 기본은 0.1m 점(구) 표현; 큐브(OctoMap 풍)는 옵션
-                cmd += ["--coarse", str(self.opt["view_coarse"]), "--cubes"]
-            self.run(cmd, env={"CUDA_VISIBLE_DEVICES": ""}, logname="H.log")
-        # 요약 JSON + BEV 썸네일 (웹 포털이 읽음) — 항상 갱신
-        if not self.dry:
-            e = dict(os.environ); e["CUDA_VISIBLE_DEVICES"] = ""
-            p = subprocess.run([PY, f"{CODE}/package/load_map.py", man, "--bev", os.path.join(self.D["compiled"], "bev.png")], env=e, capture_output=True, text=True)
-            out = p.stdout
-            try:                                   # JSON 뒤에 다른 출력(bev …)이 붙어도 첫 JSON 객체만 읽는다
-                summ = json.JSONDecoder().raw_decode(out[out.index("{"):])[0]
-            except Exception:
-                summ = {"error": "summary parse failed", "stdout_tail": out[-300:]}
-            summ["build_seconds_total"] = round(time.time() - self.t0)
-            json.dump(summ, open(os.path.join(self.D["compiled"], "summary.json"), "w"), ensure_ascii=False, indent=1)
-            self.say("  summary.json 갱신")
-    def step_H_geometry(self):
-        """기하 전용: map_package.rrd(semantic 복셀·객체용) 대신 voxel3d 요약·BEV 를 포털 카드용 summary.json/bev.png 로."""
         if self.dry: return
-        comp = self.D["compiled"]; summ = {"geometry_only": True, "build_seconds_total": round(time.time() - self.t0)}
-        v3s = os.path.join(comp, "session_voxel3d_summary.json")
-        if os.path.exists(v3s):
-            js = json.load(open(v3s)); summ["voxel3d"] = {k: js.get(k) for k in ("cells", "cells_lidar", "cells_flat_fill", "total_mb", "tiles", "tile_mb_max", "removed_prob_free")}
-        if os.path.exists(os.path.join(comp, "voxel3d_bev.png")): shutil.copyfile(os.path.join(comp, "voxel3d_bev.png"), os.path.join(comp, "bev.png"))
-        json.dump(summ, open(os.path.join(comp, "summary.json"), "w"), ensure_ascii=False, indent=1); self.say("  summary.json 갱신 (기하 전용)")
-    # ③ compiled/potree/ : Potree 웹 뷰어 (보행 맵 voxel3d·변형 + 정합된 원시 LiDAR 점) — 포털 'Potree' 버튼. options.potree: false 면 생략.
-    #    보행 맵이 뷰어보다 새로우면 다시 만든다. 실패해도 빌드는 계속 (뷰어는 검수용).
+        comp = self.D["compiled"]
+        try:
+            self.run([PY, f"{CODE}/package/map_summary.py", self.root, "--build-seconds", str(round(time.time() - self.t0))], env={"CUDA_VISIBLE_DEVICES": "", "MPLCONFIGDIR": "/tmp/mpl"}, logname="H.log")
+        except Exception as ex: self.say(f"  요약 실패(빌드는 계속): {ex}")
+        if self.opt.get("rerun") and not self.geo_only:
+            rrd = os.path.join(comp, "map_package.rrd")
+            if not self.done("H", rrd):
+                try: self.run([PY, f"{CODE}/package/load_map.py", os.path.join(comp, "map_manifest.json"), "--rrd", rrd, "--sub", str(self.opt.get("view_sub", 1))], env={"CUDA_VISIBLE_DEVICES": ""}, logname="H.log")
+                except Exception as ex: self.say(f"  rerun 실패(빌드는 계속): {ex}")
+        self.step_H_potree()
+
     def step_H_potree(self):
-        if not self.opt.get("potree", True) or self.dry: return
+        po = self.opt.get("potree", True)
+        if not po: return
         comp = self.D["compiled"]; idx = os.path.join(comp, "potree", "index.html")
-        srcs = [f for f in glob.glob(os.path.join(comp, "session_voxel3d*.npz")) if not f.endswith("_summary.npz")]
-        if not srcs: self.say("  Potree: voxel3d 없음 → 생략"); return
+        srcs = [os.path.join(comp, f) for f in ("main_map/main_map.pcd", "main_map/main_map_semantic.npz", "locomotion/locomotion.npz", "nav3d/nav3d_nodes.csv", "session_objects.json", "map_manifest.json")]
+        srcs = [f for f in srcs if os.path.exists(f)]
+        if not srcs: self.say("  Potree: 메인 맵 없음 → 생략"); return
         stale = not os.path.exists(idx) or max(os.path.getmtime(f) for f in srcs) > os.path.getmtime(idx)
         if not stale and "H" not in self.force: self.say(f"  건너뜀 (있음): {idx}"); return
         try:
-            self.run([PY, f"{CODE}/package/potree_export.py", self.root, "--force"], env={"CUDA_VISIBLE_DEVICES": ""}, logname="H_potree.log")
+            self.run([PY, f"{CODE}/package/potree_export.py", self.root, "--force"] + (["--layers", "main,loco,nav,loc,raw"] if isinstance(po, dict) and po.get("raw") else []),
+                     env={"CUDA_VISIBLE_DEVICES": ""}, logname="H_potree.log")
         except Exception as ex:
             self.say(f"  Potree 생성 실패(빌드는 계속): {ex}")
+
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # V (video) — 검수용 배속 영상. ① RGB 만 (session_rgb_x<speed>.mp4) ② RGB | 객체 검출 | 세그멘테이션 3분할
     #   (session_pipeline_x<speed>.mp4). 포털에서 자동재생. video_speed 0 이면 생략.

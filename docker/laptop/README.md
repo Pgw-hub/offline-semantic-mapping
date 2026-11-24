@@ -1,14 +1,14 @@
 # 노트북에서 맵 빌드하기
 
 mcap 을 서버로 옮기지 않고, 데이터를 받은 노트북에서 바로 맵을 만든다.
-노트북 이미지는 **기하 전용 보행용 맵**과 **semantic 맵**까지 만든다.
+노트북 이미지는 두 출력(① 메인 맵 5 cm — 의미 라벨·통행성 그래프·위치추정 지도 포함, ② 보행 맵 2.5 cm)을 만든다. 3D scene graph 만 서버에서.
 3D scene graph(ConceptGraphs 객체 검출)는 GPU 메모리 ~10 GB 가 필요해 서버에서만 돌린다.
 노트북의 Claude Code 세션에 작업을 맡길 때는 [docs/LAPTOP_CLAUDE_GUIDE.md](../../docs/LAPTOP_CLAUDE_GUIDE.md) 를 읽게 한다.
 
 | 빌드 종류 | 세션 옵션 | GPU | 산출물 |
 |---|---|---|---|
-| 보행용 맵만 | `geometry_only: true` | 필요 없음 | locomotion map (voxel3d 타일), Potree |
-| semantic 맵까지 | `objects: false` | NVIDIA, 8 GB 이상 | 위 + semantic 복셀 · 0.2 m 점유 맵 · 코스트맵 |
+| 기하 전용 | `geometry_only: true` | 필요 없음 | 메인 맵 기하 + 위치추정 지도 + 통행성 그래프 · 보행 맵 · Potree |
+| 의미 라벨까지 | `objects: false` | NVIDIA, 8 GB 이상 | 위 + 메인 맵 점별 의미 라벨 |
 | 전체 | (기본) | 서버 | 위 + 3D scene graph (객체 · 엣지) |
 
 ## 준비 (한 번)
@@ -30,6 +30,10 @@ mcap 을 서버로 옮기지 않고, 데이터를 받은 노트북에서 바로 
    마운트는 만들 때 고정된다: `$HOME` 전체 읽기 전용(mcap 녹화가 홈 아래 어디 있든 보인다), 저장소 읽기·쓰기, 모델 캐시(`$HF_CACHE`, 기본 `~/.cache/offline_map_hf`) → `/models/hf_cache`.
    이미지를 다시 빌드했으면 `container.sh rm && container.sh up` 으로 컨테이너도 다시 만든다 (기존 컨테이너는 옛 이미지를 계속 쓴다).
    홈 밖(`/data2`, 외장 디스크 등)의 녹화를 쓰려면 `EXTRA_RO="/data2:/mnt/usb" docker/laptop/container.sh up` 처럼 만든다 (이미 있으면 `container.sh rm` 후).
+4. (3D 내비를 쓸 때) 빌드 N 단계가 쓰는 실행 파일과 로봇 파라미터 사본을 `tools/bin/` 에 둔다 (비공개 raisin 쪽이라 git 에 올리지 않음, `tools/bin/` 은 gitignore):
+   - `tools/bin/navigation3d_build_graph` — raisin_plugin `raisin_navigation3d_plugin` 의 같은 이름 대상. 완전 정적(`-static`)으로 빌드한 것이면 Ubuntu 22.04 서버 컨테이너와 노트북 이미지 모두에서 돈다.
+   - `tools/bin/nav3d_params.yaml` — 로봇이 쓰는 `raisin_navigation3d_plugin` params.yaml 사본 (`graph:`·`topology:`·`planner.lethal_clearance` 가 로봇과 같아야 로봇이 이 그래프를 그대로 읽는다).
+   없으면 N 단계는 navigation_map.pcd 만 만들고 그래프는 건너뛴다 (로봇이 시작할 때 계산). 다른 위치는 `$NAV3D_GRAPH_BIN` · `$NAV3D_PARAMS` 또는 세션 `options.nav3d: {bin, params}`.
 
 ## 빌드
 
@@ -46,7 +50,8 @@ mcap 을 서버로 옮기지 않고, 데이터를 받은 노트북에서 바로 
    처음 semantic 빌드 때 SegFormer(약 0.5 GB)를 `~/.cache/offline_map_hf` 로 내려받는다 (`HF_CACHE` 로 변경 가능). 캐시에 있으면 run.sh 가 `HF_HUB_OFFLINE=1` 로 실행해 인터넷 없이도(그리고 접속 재시도 지연 없이) 돈다.
    컨테이너는 root 로 돌지만 파이프라인이 끝날 때 `output/` 산출물을 호스트 사용자 소유로 돌린다 (`PYTHONDONTWRITEBYTECODE=1` 이라 `scripts/` 에 root 소유 `__pycache__` 도 안 생긴다).
 3. 결과는 `<root>/compiled/` (기본 `output/<root>/compiled/`). 서버 포털로 보내려면 이 폴더째 복사한다.
-   run.sh 는 빌드가 끝나면 LiDAR 전용 보행 맵 변형 `session_voxel3d_lidaronly`(depth·평탄 채움 셀 제외, 포털 다운로드의 "LiDAR 만")도 만든다 — 서버에서 `scripts/locomotion_map/voxel3d_drop_fill.py <compiled> --drop-source 2 3 --suffix lidaronly` 로 수동으로 하던 것. 이미 있으면 건너뛴다.
+   구조 (2026-11-24): `compiled/main_map/`(M·C: main_map.pcd · main_map_semantic.pcd · localization_map.pcd) · `compiled/nav3d/`(N: 메인 맵 위 통행성 그래프 —
+   navigation_map.pcd 는 main_map.pcd 와 같은 파일) · `compiled/locomotion/`(L: base_tiles → 계단 보완 → tiles) · `compiled/potree/`(H: 기본 보기). 끄기: `options.nav3d: false`, `options.locomotion: false`.
 
 ## 센서만 녹화한 데이터 (SLAM 출력 없음) — 오프라인 lidar_slam 재생
 
@@ -121,11 +126,12 @@ prior map controller 는 그 이름으로 `log/map/<이름>/voxel3d_tiles` 를 �
    ```
 
    산출 `output/<세션>/compiled/export/robot/<이름>/`:
-   `<이름>.pcd`(위치추정, geometry_all_scans 를 0.25 m 격자 중심점으로 — 대전 실험 2–6 과 같은 방식, `--loc-voxel 0` = dense),
+   `<이름>.pcd`(위치추정 = 빌드 M 단계의 localization_map.pcd: 메인 맵을 0.25 m 칸 평균으로, `--loc-voxel` 을 바꾸면 메인 맵에서 다시 줄임, 0 = 5 cm 그대로),
    `<이름>.txt`(키프레임 궤적), `<이름>_manifest.txt`(voxel_size·새 map_id — 로봇 `relocalization.globalmap_voxel_size` 가 0.25 이하면 다시 줄이지 않음(그보다 크면 로봇이 그 크기로 줄임), 같은 이름으로 다시 넣어도 GUI 가 옛 캐시를 쓰지 않게),
-   `voxel3d_tiles/`(보행 지도: 계단 채움 LiDAR 만 → 계단 채움 → LiDAR 만 → 기본 순으로 있는 것, `--tiles` 로 지정), `map_info.json`(출처).
-   계단 채움 LiDAR 만(`stair_lidaronly`, 대전 11/03 실기 조합)은 run.sh 가 빌드 뒤 만든다. 파이프라인의 계단 채움(`stair`)은 카메라 빌드에서 depth 채움 셀이 섞인 타일 위라, 그것이 골라지면 패키지가 경고한다.
-   기하 전용 빌드라 geometry_all_scans.pcd 가 없으면 S 단계 스캔으로 만든다.
+   `voxel3d_tiles/`(보행 맵 = compiled/locomotion/tiles, 계단 보완 끝난 것. 옛 빌드는 계단 채움 LiDAR 만 → 계단 채움 → LiDAR 만 → 기본 순), `map_info.json`(출처),
+   빌드 N 단계가 있었으면 `navigation_map.pcd`(= 메인 맵 5 cm) + `nav3d_graph.bin`·`nav3d_graph_summary.json`(미리 계산한 통행성 그래프·토폴로지 —
+   로봇 navigation3d 가 원본 pcd 해시와 파라미터가 맞으면 읽고, 아니면 시작할 때 직접 계산. 포털 'Nav3d graph' 그림으로 층·계단·문을 미리 확인).
+   (옛 빌드만) 위치추정 원천은 geometry_all_scans.pcd → 없으면 S 단계 스캔.
 
 2. 로봇에 넣기 — 포털 창에서 로봇을 고르고 **확인** → 로봇 상태(새로 설치 / 같은 이름 맵을 백업하고 교체, 여유 공간)를 보고 **로봇에 넣기**.
    처음 보는 로봇은 '직접 입력…'에 `raion@<주소>` 를 넣고 '목록에 저장할 이름'을 적으면 `tools/robots.json` 에 남는다. 터미널로는:

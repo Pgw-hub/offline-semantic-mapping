@@ -16,7 +16,7 @@ DATASET_ROOTS = [p for p in os.environ.get("DATASET_ROOTS", "/data3/mcap-logging
 CONTAINER = os.environ.get("BUILD_CONTAINER", "offline_3d_semantic_map")
 TOKEN = os.environ.get("PORTAL_TOKEN", "")            # 설정되면 빌드/취소 POST 에 X-Portal-Token 헤더 필요
 JOBS_FILE = os.path.join(SESS, "jobs.json")
-STEPS = "Q,A,S,R,B,C,D,E,F,G,H,V".split(",")
+STEPS = "Q,A,S,M,R,B,C,D,E,N,L,G,H,V".split(",")   # 2026-11-24: M 메인 맵 · L 보행 맵 (옛 F 는 L 로 넘어감)
 OPTION_SPEC = {   # 웹 폼에서 받는 옵션: (타입, 기본값, 범위)
     "lidar_fusion": ("bool", True, None), "mask_bottom_px": ("int", 60, (0, 200)), "drop_classes": ("str", "person", None),
     "vlm_edges": ("bool", True, None), "vlm_max_pairs": ("int", 30, (0, 200)),
@@ -195,7 +195,7 @@ def scan_maps():
         rel = lambda f: (f"output/{name}/compiled/{f}" if f and os.path.isfile(os.path.join(comp, f)) else None)   # f="" 면 compiled 디렉터리가 잡혀 빈 <video> 가 뜨던 버그
         vids = sorted(f for f in os.listdir(comp) if f.endswith(".mp4"))
         logs = man.get("source", {}).get("logs", [])
-        size = sum(v.get("bytes", 0) for v in man.get("files", {}).values())
+        size = sum(v.get("dir_bytes", v.get("bytes", 0)) for v in man.get("files", {}).values())
         build_out = os.path.join(ROOT, "sessions", f"{name}_build.out")
         qual = {}
         qp = os.path.join(comp, "data_quality.json")
@@ -241,6 +241,13 @@ def scan_maps():
                      "voxel3d": man.get("voxel3d"), "voxel3d_rrd": rel("voxel3d_view.rrd"), "potree": (f"output/{name}/compiled/potree/index.html" if os.path.exists(os.path.join(comp, "potree", "index.html")) else None),   # tools/potree/potree_export.py
                      "voxel3d_variants": sorted({os.path.basename(f)[len("session_voxel3d_"):-len(".npz")] for f in glob.glob(os.path.join(comp, "session_voxel3d_*.npz")) if not os.path.basename(f).startswith("eval_") and not f.endswith("_summary.npz")}),   # 예: ["iso025"]
                      "voxel3d_tile_variants": sorted({os.path.basename(os.path.dirname(f))[len("session_voxel3d_"):-len("_tiles")] for f in glob.glob(os.path.join(comp, "session_voxel3d_*_tiles", "index.json")) if not os.path.exists(os.path.dirname(f)[:-len("_tiles")] + ".npz")}),   # npz 없이 타일만 (예: ["stair"] = 계단 디딤판 채움)
+                     "nav3d": ({"check_png": rel("nav3d/nav3d_graph_check.png"), "summary": rel("nav3d/nav3d_graph_summary.json")} if os.path.exists(os.path.join(comp, "nav3d", "nav3d_graph_summary.json")) else None),   # 빌드 N 단계
+                     # 2026-11-24 구조: ① 메인 맵 compiled/main_map/ ② 보행 맵 compiled/locomotion/ (없으면 옛 빌드)
+                     "main_map": ({"pcd": rel("main_map/main_map.pcd"), "semantic_pcd": rel("main_map/main_map_semantic.pcd"), "localization_pcd": rel("main_map/localization_map.pcd")}
+                                  if os.path.exists(os.path.join(comp, "main_map", "main_map.pcd")) else None),
+                     "locomotion": ({"tiles": rel("locomotion/tiles/index.json"), "stair_png": rel("locomotion/stair_check.png"), "stair_model": rel("locomotion/tiles_stair.json")}
+                                    if os.path.exists(os.path.join(comp, "locomotion", "tiles", "index.json")) else None),
+                     "maps": man.get("maps"),
                      "voxel3d_stair": ({"model": f"output/{name}/compiled/session_voxel3d_stair_tiles_stair.json", "check_png": rel("voxel3d_stair_check.png")} if os.path.exists(os.path.join(comp, "session_voxel3d_stair_tiles_stair.json")) else None),
                      "voxel3d_variant_rrds": {os.path.basename(f)[len("voxel3d_"):-len("_view.rrd")]: f"output/{name}/compiled/{os.path.basename(f)}" for f in glob.glob(os.path.join(comp, "voxel3d_*_view.rrd"))}, "voxel3d_bev": rel("voxel3d_bev.png"), "voxel3d_tiles": (f"output/{name}/compiled/session_voxel3d_tiles/index.json" if os.path.exists(os.path.join(comp, "session_voxel3d_tiles", "index.json")) else None),
                      "voxel3d_eval": (json.load(open(os.path.join(comp, "voxel3d_eval.json"))) if os.path.exists(os.path.join(comp, "voxel3d_eval.json")) else None),
@@ -350,6 +357,18 @@ class H(http.server.SimpleHTTPRequestHandler):
             man = os.path.join(OUT, name, "compiled", "map_manifest.json")
             if not os.path.exists(man): return self.send_json({"error": "no map"}, 404)
             variant = re.sub(r"[^A-Za-z0-9_]", "", q.get("variant", [""])[0])[:32]; vsuf = ("_" + variant) if variant else ""   # voxel3d 변형 (예: iso025 = 2.5 cm 정육면체)
+            if src == "voxel3d_tiles" and variant == "locomotion":            # 새 구조 보행 맵 (compiled/locomotion/tiles) zip
+                td = os.path.join(OUT, name, "compiled", "locomotion", "tiles")
+                if not os.path.exists(os.path.join(td, "index.json")): return self.send_json({"error": "이 지도에는 보행 맵(compiled/locomotion/tiles)이 없습니다"}, 404)
+                exp = os.path.join(OUT, name, "compiled", "export"); os.makedirs(exp, exist_ok=True); out = os.path.join(exp, f"{name}_locomotion_tiles.zip")
+                if not os.path.exists(out) or os.path.getmtime(out) < os.path.getmtime(os.path.join(td, "index.json")):
+                    import zipfile
+                    with zipfile.ZipFile(out + ".tmp", "w", zipfile.ZIP_DEFLATED) as z:
+                        for f in sorted(os.listdir(td)): z.write(os.path.join(td, f), f"voxel3d_tiles/{f}")
+                        sj = td + "_stair.json"
+                        if os.path.exists(sj): z.write(sj, "voxel3d_tiles/stair.json")
+                    os.replace(out + ".tmp", out)
+                return self.send_json({"ok": True, "path": f"output/{name}/compiled/export/{os.path.basename(out)}", "legend": None, "bytes": os.path.getsize(out)})
             if src == "voxel3d_tiles":                                          # 3D prior 타일 묶음 (zip) — 로봇 적재용
                 idx = os.path.join(OUT, name, "compiled", f"session_voxel3d{vsuf}_tiles", "index.json")
                 if not os.path.exists(idx): return self.send_json({"error": "이 지도에는 3D prior(voxel3d) 가 없습니다 (F 단계 옵션 voxel3d)"}, 404)

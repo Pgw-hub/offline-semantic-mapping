@@ -1,10 +1,18 @@
 # offline_semantic_mapping
 
-로봇 `.mcap` 녹화에서 **오프라인 맵 패키지**를 만든다. 패키지에는 semantic 복셀, 0.2 m 확률 점유·코스트맵, 3D scene graph, 보행용 3D 맵(locomotion map)이 들어가고, `map_manifest.json` 하나로 묶인다.
+로봇 `.mcap` 녹화(LiDAR · RGB · depth)에서 **두 개의 맵**을 만든다 (2026-11-24 구조). 두 맵의 파일은 `compiled/map_manifest.json` 하나에 정리된다.
+
+| 출력 | 폴더 | 만드는 법 | 들어 있는 것 |
+|---|---|---|---|
+| ① **메인 맵** | `compiled/main_map/` (+ `nav3d/`, scene graph 파일) | LiDAR 스캔 전부 → 5 cm 확률 복셀 지도 (거리 제한 없음) | 기하 `main_map.pcd` · 점별 의미 `main_map_semantic.pcd` · 3D scene graph(`session_objects.json`·엣지) · 통행성 그래프 + 토폴로지(`nav3d/nav3d_graph.bin`) · 위치추정 지도 `localization_map.pcd`(메인 맵을 0.25 m 로 줄인 것) |
+| ② **보행 맵** | `compiled/locomotion/` | LiDAR 5 m 이내 → 2.5 cm 확률 복셀 지도 → 계단 인식·디딤판/앞면 채움·halo 제거 | `tiles/` (voxel3d_tiles v2, 로봇 prior map controller 가 읽음). 의미 정보 없음 |
+
+맵 보기는 **Potree** (`compiled/potree/index.html`, 포털의 *Open map (Potree)*) — 메인 맵(의미 색·카메라 색·높이), 위치추정 지도, 보행 맵, 통행성 그래프, 토폴로지, 3D scene graph 를 오른쪽 패널에서 클릭으로 켜고 끈다.
+로봇에 넣을 폴더는 포털 *Robot map package* (`scripts/package/robot_map_package.py`): `<이름>.pcd`(위치추정) + `voxel3d_tiles/`(보행 맵) + `navigation_map.pcd`·`nav3d_graph.bin`.
 
 ![Offline Map Build Pipeline v2](docs/img/pipeline_v2.png)
 
-*파이프라인 구조도 (Miro "Offline Map Build Pipeline v2", 원본 PDF [docs/SystemPipeline.pdf](docs/SystemPipeline.pdf)). 아래 `scripts/` 디렉터리는 이 그림의 블록과 1:1 로 대응한다.*
+*파이프라인 구조도 (Miro "Offline Map Build Pipeline v2", 원본 PDF [docs/SystemPipeline.pdf](docs/SystemPipeline.pdf)). **2026-10-20 기준 그림이라 2026-11-24 구조(메인 맵 + 보행 맵)와 다르다** — 0.2 m 점유·코스트맵은 기본 빌드에서 빠졌고, 보행 맵은 LiDAR 만 + 계단 보완이 기본이다.*
 
 ## 빠른 시작
 
@@ -12,13 +20,13 @@
 # 서버 컨테이너 offline_3d_semantic_map 안에서
 cd sessions
 python ../scripts/build_map_package.py session_<이름>.yaml                # 전체 (이미 있는 산출물은 건너뜀)
-python ../scripts/build_map_package.py session_<이름>.yaml --steps F,G,H  # 일부 단계만
-python ../scripts/build_map_package.py session_<이름>.yaml --force F      # 그 단계를 지우고 다시
+python ../scripts/build_map_package.py session_<이름>.yaml --steps L,G,H  # 일부 단계만 (기본 순서 Q,P,A,S,M,R,B,C,D,E,N,L,G,H,V)
+python ../scripts/build_map_package.py session_<이름>.yaml --force L      # 그 단계를 지우고 다시
 python ../scripts/build_map_package.py session_<이름>.yaml --dry-run      # 실행할 명령만 출력
 ```
 
 - 결과는 `output/<이름>/{graph,dataset,sem,voxel,compiled,logs}` 에 생긴다. 패키지 파일은 `compiled/map_manifest.json`.
-- 패키지 로드와 보기: `python scripts/package/load_map.py output/<이름>/compiled/map_manifest.json --rrd out.rrd`
+- 보기: 포털의 *Open map (Potree)*. 옛 rerun 보기(`map_package.rrd`)는 `options.rerun: true` 일 때만 만든다.
 - 예전 명령 `cd sessions && python build_map_package.py ...` 도 그대로 동작한다. `sessions/build_map_package.py` 가 `scripts/` 로 넘겨준다.
 - 노트북에서 빌드하는 법(기하 전용 · semantic 맵까지, Docker): [docker/laptop/README.md](docker/laptop/README.md)
 
@@ -26,9 +34,15 @@ python ../scripts/build_map_package.py session_<이름>.yaml --dry-run      # �
 
 | 종류 | 옵션 | 단계 | 산출물 |
 |---|---|---|---|
-| 전체 | (기본) | 모든 단계 | 아래 전부 |
-| semantic 맵까지 | `options.objects: false` | D·E 생략 | 3D scene graph 를 뺀 나머지 |
-| 기하 전용 | `options.geometry_only: true` | Q·P·S·F·G·H | 보행용 맵(클래스 없음) + Potree |
+| 전체 | (기본) | 모든 단계 | 메인 맵(의미·scene graph·내비 그래프 포함) + 보행 맵 |
+| scene graph 없이 | `options.objects: false` | D·E 생략 | 메인 맵에서 3D scene graph 만 빠짐 |
+| 기하 전용 | `options.geometry_only: true` | Q·P·S·M·N·L·G·H | 메인 맵 기하(의미 없음) + 내비 그래프 + 보행 맵 |
+
+세부 옵션 (`options.` 아래, 기본값은 `scripts/pipeline/*_steps.py` 의 `opt_default_*`):
+`main_map: {res: 0.05, max_range: 100, free_range: 40, ror: [0.1, 5], loc_voxel: 0.25}` ·
+`locomotion: {res: 0.025, max_range: 5, free_range: 5, tile_m: 10, stair: {risers: true, clean: true, roi: null}}` (`stair: false` 면 계단 보완 없음, `locomotion: false` 면 보행 맵 생략) ·
+`nav3d: {bin, params}` (실행 파일 `tools/bin/navigation3d_build_graph`, 없으면 그래프 생략) · `potree: true` · `rerun: false`.
+옛 옵션 `voxel3d` · `stair_complete` 는 더 이상 쓰지 않는다 (경고만). 2026-11-24 변경 뒤 시험하지 않은 경로: `--steps …,O,G`(옛 점유·코스트맵), `robot_map` 없는 트랙 1(raw 스캔 deskew), 처음부터 끝까지 새로 하는 카메라 빌드(시험은 A·R·B·D 결과 재사용). 옛 0.2 m 점유가 필요하면 `--steps …,O,G` (G 가 코스트맵도 만든다).
 
 새 세션은 기존 세션 yaml(기하 전용은 `sessions/session_TEMPLATE_geometry_only.yaml`)을 복사해 `mcap_dir`, `logs`, `root` 를 고쳐서 만든다.
 
@@ -71,10 +85,12 @@ offline_semantic_mapping/
 | `env.py` | | `CODE`(= scripts/), `REPO`(= 저장소 루트), 파이썬 경로, ConceptGraphs · 모델 캐시 위치 |
 | `core.py` | | 세션 yaml 해석, 출력 폴더, 실행 · 로그 · 건너뛰기 규칙, 단계 순서(`go`) |
 | `preprocess_steps.py` | Q P A S R B | 품질 점검 · 자세 그래프 · RGB-D 데이터셋 · LiDAR 스캔 · RGB 추출 · 세그멘테이션 |
-| `semantic_steps.py` | C D E F | semantic 복셀 · ConceptGraphs 객체 · scene graph 병합/엣지 · 0.2 m 점유 |
-| `locomotion_map_steps.py` | F3d | 보행용 3D 맵 (`options.voxel3d`) |
-| `package_steps.py` | G H V | `map_manifest.json` · rerun/Potree 뷰어 · 영상 |
-| `app_steps.py` | (G 안) | 점유 레이어 → 코스트맵 등록 |
+| `main_map_steps.py` | M C | ① 메인 맵: 5 cm 확률 복셀 → `main_map.pcd` · 위치추정 지도 · 점별 의미 라벨 |
+| `semantic_steps.py` | D E (O) | 3D scene graph: ConceptGraphs 객체 · 병합/엣지 (O = 옛 0.2 m 점유, 기본 아님) |
+| `nav3d_steps.py` | N | 메인 맵 위 통행성 그래프·토폴로지 `nav3d_graph.bin` |
+| `locomotion_map_steps.py` | L (F) | ② 보행 맵: 2.5 cm 확률 복셀 → 계단 보완 → `locomotion/tiles` (F 는 L 로 넘김) |
+| `package_steps.py` | G H V | `map_manifest.json`(두 맵) · Potree 뷰어·summary · 영상 |
+| `app_steps.py` | (G 안) | (옛) 점유 레이어 → 코스트맵 — O 를 돌렸을 때만 |
 
 ### `scripts/preprocess/` — 전처리
 
