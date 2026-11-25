@@ -15,7 +15,9 @@ class MainMapSteps:
     #   free_range   빈 공간 레이(miss) 최대 길이. 사람·문처럼 움직인 것을 지우는 거리. 길수록 깨끗하지만 시간은 길이에 비례
     #   ror          외톨이 칸 지우기 [격자 m, 26-이웃 중 최소 점유 칸 수] (허공의 잡음 점)
     #   loc_voxel    위치추정 지도 격자 (m) — 칸마다 점 평균 하나 (로봇 relocalization.globalmap_voxel_size 이하면 로봇이 다시 줄이지 않음)
-    opt_default_main_map = {"res": 0.05, "max_range": 100.0, "free_range": 40.0, "ror": [0.1, 5], "loc_voxel": 0.25}
+    #   sparse_far   [N, R]: R m 보다 가까이서 본 적 없고 N 스캔 이하에서만 맞은 칸 제거 — 유리창 너머·유리 반사 고스트(건물 밖 점).
+    #                벽에 막혀 다른 스캔의 빈 공간 레이가 닿지 않으니 확률 판정으로는 안 지워진다 (서울 cut715: 건물 밖 점 87 % 제거, 안쪽 0.5 %). null 이면 끔
+    opt_default_main_map = {"res": 0.05, "max_range": 100.0, "free_range": 40.0, "ror": [0.1, 5], "loc_voxel": 0.25, "sparse_far": [2, 10.0]}
 
     def main_opts(self):
         m = self.opt.get("main_map") or {}
@@ -23,6 +25,7 @@ class MainMapSteps:
 
     def main_dir(self): return os.path.join(self.D["compiled"], "main_map")
     def main_pcd(self): return os.path.join(self.main_dir(), "main_map.pcd")
+    def main_elev(self): return os.path.join(self.main_dir(), "main_map_elev.npy")
 
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # M (main map) — S 의 LiDAR 스캔 전부로 5 cm 확률 복셀 지도 (OctoMap 식 log-odds, locomotion_map/build_voxel3d.py 를 5 cm 정육면체로).
@@ -31,6 +34,7 @@ class MainMapSteps:
     #      이 파일이 메인 맵의 기하 — 의미 라벨(C)·3D 내비 그래프(N)·위치추정 지도가 모두 이 점들에서 나온다.
     #   ② compiled/main_map/localization_map.pcd : main_map 을 loc_voxel(0.25 m) 칸 평균으로 (x y z intensity) — 로봇 lidar_slam 위치추정용
     #   ③ main_map_summary.json : 칸 수·제거 수·시간 (확률 격자 npz 는 수백 MB 라 지운다)
+    #   ④ main_map_elev.npy : 점마다 '센서가 그 점보다 가장 높았을 때의 높이'(m, main_map.pcd 와 같은 순서) — N 단계가 천장 윗면을 빼는 데 씀
     # ───────────────────────────────────────────────────────────────────────────────────────────
     def step_M(self):
         o = self.main_opts(); d = self.main_dir(); pcd = self.main_pcd()
@@ -40,8 +44,9 @@ class MainMapSteps:
             scans = [os.path.join(self.ds(l), "lidar_scans") for l in self.logs]
             self.run([PY, f"{CODE}/locomotion_map/build_voxel3d.py", "--scans", *scans, "--out", npz, "--res-xy", r, "--res-z", r, "--prob-res", r,
                       "--max-range", str(o["max_range"]), "--free-range", str(o["free_range"]), "--no-tiles", "--only-hit-cells",
+                      *(["--sparse-far", *map(str, o["sparse_far"])] if o.get("sparse_far") else []),
                       "--prob-hit", str(self.opt["prob_hit"]), "--prob-miss", str(self.opt["prob_miss"])], env={"CUDA_VISIBLE_DEVICES": ""}, logname="M_main_map.log")
-            self.run([PY, f"{CODE}/nav3d/navmap_to_pcd.py", npz + ".npz", pcd] + (["--ror", *map(str, o["ror"])] if o["ror"] else []), logname="M_main_map.log")
+            self.run([PY, f"{CODE}/nav3d/navmap_to_pcd.py", npz + ".npz", pcd, "--elev-out", self.main_elev()] + (["--ror", *map(str, o["ror"])] if o["ror"] else []), logname="M_main_map.log")
             if not self.dry:
                 if os.path.exists(npz + "_summary.json"): os.replace(npz + "_summary.json", os.path.join(d, "main_map_summary.json"))
                 if os.path.exists(npz + ".npz"): os.remove(npz + ".npz")

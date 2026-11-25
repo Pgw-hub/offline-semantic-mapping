@@ -36,6 +36,7 @@ ap.add_argument("--fill-flat", type=float, default=0.0, help="평탄 채움: 확
 ap.add_argument("--tile-m", type=float, default=10.0); ap.add_argument("--no-tiles", action="store_true")
 ap.add_argument("--skip-every", type=int, default=0); ap.add_argument("--skip-phase", type=int, default=0)
 ap.add_argument("--batch", type=int, default=40)
+ap.add_argument("--sparse-far", type=float, nargs=2, default=None, metavar=("N", "R"), help="N 스캔 이하에서만, 그것도 R m 보다 먼 곳에서만 맞은 셀 제거 (유리 너머·반사 고스트). 예: 2 10")
 ap.add_argument("--workers", type=int, default=min(8, os.cpu_count() or 1), help="스캔 레이캐스팅 프로세스 수 (결과는 1 과 같음)")
 ap.add_argument("--only-hit-cells", action="store_true", help="확률 격자에서 한 번이라도 hit 된 칸만 누적 (먼저 스캔을 한 번 훑어 hit 칸 목록을 만든다). 세부 셀·점유 판정 결과는 같고 "
                 "free 만인 칸(긴 free_range 에서 수천만 개)을 안 쌓아 빠르다. 대신 coarse_* 배열에 free 전용 칸이 없다 — depth 채움(빈 곳 판정)과 함께 쓰지 말 것")
@@ -62,7 +63,7 @@ def merge(acc, uk, cols, mx=None):
     K = np.concatenate([acc[0], uk]); u2, inv = np.unique(K, return_inverse=True)
     c2 = [np.bincount(inv, weights=np.concatenate([x, y]), minlength=len(u2)) for x, y in zip(acc[1], cols)]
     if mx is None: return u2, c2
-    m2 = np.full(len(u2), -np.inf); np.maximum.at(m2, inv, np.concatenate([acc[2], mx])); return u2, c2, m2
+    m2 = np.full((len(u2),) + mx.shape[1:], -np.inf); np.maximum.at(m2, inv, np.concatenate([acc[2], mx])); return u2, c2, m2
 def merge_prob(acc, uk, h, m, lh, lm, lo_min=-2.0, lo_max=3.5):
     """확률 격자 누적: 총 hits/misses 합 + log-odds 는 배치(≈batch 스캔)마다 순차 클램프 갱신 — OctoMap 의 스캔별 클램프 갱신 근사.
     (합산 후 한 번 클램프하면 오래 free 였다가 나중에 생긴 물체가 영원히 free 로 남는다; 순차 클램프는 '최근 상태가 이긴다')"""
@@ -113,7 +114,7 @@ def scan_work(f):
         bci = (np.concatenate([hk, mk]), np.r_[np.ones(len(hk)), np.zeros(len(mk))], np.r_[np.zeros(len(hk)), np.ones(len(mk))])
     # 세부 격자: count / Σz / Σz² / 스캔 수(스캔당 1)
     fi = fine_idx(P); fk = key3(fi); uk, inv_ = np.unique(fk, return_inverse=True); cnt, sz, sz2 = [np.bincount(inv_, weights=c, minlength=len(uk)) for c in (np.ones(len(fk)), P[:, 2], P[:, 2] ** 2)]
-    mxz = np.full(len(uk), -np.inf); np.maximum.at(mxz, inv_, P[:, 2])                       # 셀 안 최대 z (계단 코처럼 두 표면이 섞인 셀에서 보수적 높이)
+    mxz = np.full((len(uk), 3), -np.inf); np.maximum.at(mxz, inv_, np.c_[P[:, 2], -rng, org[2] - P[:, 2]])     # [셀 안 최대 z (계단 코처럼 두 표면이 섞인 셀에서 보수적 높이), −(가장 가까이서 본 거리), 센서가 점보다 높았던 최대 높이]
     return len(P), bci, (uk, cnt, sz, sz2, np.ones(len(uk)), mxz), bx
 
 
@@ -132,7 +133,7 @@ for si, (npt, bci, bfi, bx) in enumerate(results):
         if bc:
             K = np.concatenate([b[0] for b in bc]); u, c = reduce_sum(K, [np.concatenate([b[1] for b in bc]), np.concatenate([b[2] for b in bc])]); acc_c = merge_prob(acc_c, u, c[0], c[1], lh, lm)
         K = np.concatenate([b[0] for b in bf]); u, inv_ = np.unique(K, return_inverse=True); c = [np.bincount(inv_, weights=np.concatenate([b[j] for b in bf]), minlength=len(u)) for j in range(1, 5)]
-        mx = np.full(len(u), -np.inf); np.maximum.at(mx, inv_, np.concatenate([b[5] for b in bf])); acc_f = merge(acc_f, u, c, mx)
+        mx = np.full((len(u), 3), -np.inf); np.maximum.at(mx, inv_, np.concatenate([b[5] for b in bf])); acc_f = merge(acc_f, u, c, mx)
         bc, bf = [], []
         if (si + 1) % (a.batch * 10) == 0 or si == len(files) - 1: print(f"  {si+1}/{len(files)} · 확률 셀 {len(acc_c[0]) if acc_c else 0:,} · 세부 셀 {len(acc_f[0]):,} · {time.time()-t0:.0f}s", flush=True)
 
@@ -151,7 +152,7 @@ if bx_f is not None:
     import shutil; shutil.rmtree(bx_dir, ignore_errors=True)
 else:
     ck, c_hits, c_miss, c_lo = acc_c; c_lo = c_lo.astype(np.float32)
-fk, (f_cnt, f_sz, f_sz2, f_ns), f_mx = acc_f
+fk, (f_cnt, f_sz, f_sz2, f_ns), f_mx2 = acc_f; f_mx = f_mx2[:, 0]; f_rmin = -f_mx2[:, 1]; f_elev = f_mx2[:, 2]   # f_rmin: 이 셀을 가장 가까이서 본 센서 거리, f_elev: 센서가 이 셀보다 가장 높았을 때 높이 (천장 윗면 = 위에서 본 적 없음 → 음수)
 # 세부 셀 → 부모 확률 셀 log-odds (Bonxai 는 점유 셀만 있으므로 없는 부모 = 점유 아님)
 fI = unkey(fk); fc = fine_center(fI); pk = coarse_key(fc); pos = np.searchsorted(ck, pk); pos = np.minimum(pos, len(ck) - 1); p_found = ck[pos] == pk
 if a.occupancy == "own": assert p_found.all(), "부모 셀 누락"
@@ -159,6 +160,11 @@ f_lo = np.where(p_found, c_lo[pos], -2.0).astype(np.float32); f_miss = np.where(
 mean_z = f_sz / f_cnt; std_z = np.sqrt(np.maximum(f_sz2 / f_cnt - mean_z ** 2, 0))
 occ = (f_lo > 0) if not a.no_prob else np.ones(len(fk), bool); occ &= f_ns >= a.min_scans
 n_lidar_all = len(fk); n_prob_removed = int((~occ).sum())
+# 멀리서 잠깐만 본 셀 제거 (--sparse-far N R): R m 보다 가까이서 본 적이 없고 N 스캔 이하에서만 맞은 셀. 유리창 너머·유리 반사 고스트(건물 밖에 생기는 점)가
+# 이렇다 — 벽에 막혀 다른 스캔의 빈 공간 레이가 그 칸을 지나지 않아 확률 판정으로는 안 지워진다. 같은 먼 곳이라도 3 스캔 이상 또는 R m 안에서 본 셀은 남는다.
+n_sparse_far = 0; sf = np.zeros(len(fk), bool)
+if a.sparse_far:
+    sf = occ & (f_ns <= int(a.sparse_far[0])) & (f_rmin > float(a.sparse_far[1])); n_sparse_far = int(sf.sum()); occ &= ~sf
 
 # 클래스 (voxsem 0.1 m). 기하 전용(--voxsem 없음)이면 전부 255 — 기하와 의미는 독립 단계라 나중에 의미만 다시 입힐 수 있다
 if a.voxsem:
@@ -176,7 +182,7 @@ f_cls = class_of(fc)
 is_dyn = np.isin(f_cls, dyn_ids)
 n_dyn_removed = int((occ & is_dyn).sum()) if not a.keep_dynamic else 0
 if not a.keep_dynamic: occ &= ~is_dyn
-removed_ijk = fI[~occ].astype(np.int32); removed_why = np.where(is_dyn[~occ], 2, 1).astype(np.uint8)   # 1 확률(free) 2 동적 클래스
+removed_ijk = fI[~occ].astype(np.int32); removed_why = np.where(is_dyn[~occ], 2, np.where(sf[~occ], 3, 1)).astype(np.uint8)   # 1 확률(free) 2 동적 클래스 3 멀리서 잠깐 본 셀(--sparse-far)
 
 # depth 채움 점
 dep_n = dep_added = 0; D = None
@@ -194,7 +200,7 @@ if v is not None and not a.no_depth and "depth_xyz" in v.files and len(v["depth_
         D = (dI, dc, dmz, dsd, np.ones(len(dI)), dlo, dcls, dmx); dep_added = len(dI)
 
 # 최종 배열
-I = fI[occ]; cnt = f_cnt[occ]; mz = mean_z[occ]; sd = std_z[occ]; ns = f_ns[occ]; lo = f_lo[occ]; cls = f_cls[occ]; src = np.ones(len(I), np.uint8); mxz_all = f_mx[occ]
+I = fI[occ]; cnt = f_cnt[occ]; mz = mean_z[occ]; sd = std_z[occ]; ns = f_ns[occ]; lo = f_lo[occ]; cls = f_cls[occ]; src = np.ones(len(I), np.uint8); mxz_all = f_mx[occ]; elev_all = f_elev[occ]
 # 평탄 채움: 같은 (0.1 m 칸 xy — 확률 격자가 그보다 크면 확률 칸, iz) 그룹의 LiDAR 세부 셀 z 퍼짐이 작으면(국소 평면) 4×4 xy 발자국의 빈 세부 셀을 그룹 평균 z 로 채움 (source 3).
 #   LiDAR 점 밀도가 2.5 cm 격자보다 성겨서 생기는 바닥 빈칸을 메운다. 벽·모서리(z 퍼짐 큼)는 채우지 않는다.
 n_fill = 0
@@ -212,9 +218,9 @@ if a.fill_flat > 0:
         fz = gmean[gi]; fcls = class_of(fine_center(cand)); fdyn = np.isin(fcls, dyn_ids) & (not a.keep_dynamic); cand, gi, fz, fcls = cand[~fdyn], gi[~fdyn], fz[~fdyn], fcls[~fdyn]
         n_fill = len(cand)
         I = np.concatenate([I, cand]); cnt = np.concatenate([cnt, np.zeros(n_fill)]); mz = np.concatenate([mz, fz]); sd = np.concatenate([sd, (gmax - gmin)[gi]]); ns = np.concatenate([ns, np.zeros(n_fill)])
-        lo = np.concatenate([lo, glo[gi]]); cls = np.concatenate([cls, fcls]); src = np.concatenate([src, np.full(n_fill, 3, np.uint8)]); mxz_all = np.concatenate([mxz_all, gmax[gi]])
+        lo = np.concatenate([lo, glo[gi]]); cls = np.concatenate([cls, fcls]); src = np.concatenate([src, np.full(n_fill, 3, np.uint8)]); mxz_all = np.concatenate([mxz_all, gmax[gi]]); elev_all = np.concatenate([elev_all, np.full(n_fill, -np.inf)])
 if D is not None:
-    I = np.concatenate([I, D[0]]); cnt = np.concatenate([cnt, D[1]]); mz = np.concatenate([mz, D[2]]); sd = np.concatenate([sd, D[3]]); ns = np.concatenate([ns, D[4]]); lo = np.concatenate([lo, D[5]]); cls = np.concatenate([cls, D[6]]); src = np.concatenate([src, np.full(len(D[0]), 2, np.uint8)]); mxz_all = np.concatenate([mxz_all, D[7]])
+    I = np.concatenate([I, D[0]]); cnt = np.concatenate([cnt, D[1]]); mz = np.concatenate([mz, D[2]]); sd = np.concatenate([sd, D[3]]); ns = np.concatenate([ns, D[4]]); lo = np.concatenate([lo, D[5]]); cls = np.concatenate([cls, D[6]]); src = np.concatenate([src, np.full(len(D[0]), 2, np.uint8)]); mxz_all = np.concatenate([mxz_all, D[7]]); elev_all = np.concatenate([elev_all, np.full(len(D[0]), -np.inf)])
 # 영역 자르기 (--crop): 세부 셀·확률 격자·제거 셀 모두 같은 회전 사각형으로
 def crop_mask(xy, z=None):
     v = [float(q) for q in a.crop.split(",")]; c_ = np.array(v[:2]); ax_ = np.array(v[2:4]) / np.linalg.norm(v[2:4]); la_ = np.array([-ax_[1], ax_[0]])
@@ -223,24 +229,24 @@ def crop_mask(xy, z=None):
     return m_
 if a.crop:
     m = crop_mask((I[:, :2] + 0.5) * RX, mz); n0 = len(I)
-    I, cnt, mz, sd, ns, lo, cls, src, mxz_all = I[m], cnt[m], mz[m], sd[m], ns[m], lo[m], cls[m], src[m], mxz_all[m]
+    I, cnt, mz, sd, ns, lo, cls, src, mxz_all, elev_all = I[m], cnt[m], mz[m], sd[m], ns[m], lo[m], cls[m], src[m], mxz_all[m], elev_all[m]
     cI = unkey(ck); mc = crop_mask((cI[:, :2] + 0.5) * RP, (cI[:, 2] + 0.5) * RP); ck, c_lo, c_hits, c_miss = ck[mc], c_lo[mc], c_hits[mc], c_miss[mc]
     mr = crop_mask((removed_ijk[:, :2] + 0.5) * RX, (removed_ijk[:, 2] + 0.5) * RZ); removed_ijk, removed_why = removed_ijk[mr], removed_why[mr]
     print(f"영역 자르기 {a.crop}: 세부 셀 {n0:,} → {len(I):,}")
 # 타일
 tile_cells = int(round(a.tile_m / RX)); tx = np.floor_divide(I[:, 0], tile_cells); ty = np.floor_divide(I[:, 1], tile_cells)
 tkey = (tx + OFF) * (2 * OFF) + (ty + OFF); order = np.lexsort((I[:, 2], I[:, 1], I[:, 0], tkey))
-I, cnt, mz, sd, ns, lo, cls, src, tkey, mxz_all = I[order], cnt[order], mz[order], sd[order], ns[order], lo[order], cls[order], src[order], tkey[order], mxz_all[order]
+I, cnt, mz, sd, ns, lo, cls, src, tkey, mxz_all, elev_all = I[order], cnt[order], mz[order], sd[order], ns[order], lo[order], cls[order], src[order], tkey[order], mxz_all[order], elev_all[order]
 ut, tstart = np.unique(tkey, return_index=True); tile_id = np.repeat(np.arange(len(ut)), np.diff(np.r_[tstart, len(tkey)])).astype(np.int32)
 tiles = []
 for ti, (s, e) in enumerate(zip(tstart, np.r_[tstart[1:], len(tkey)])):
     txi, tyi = int(ut[ti] // (2 * OFF) - OFF), int(ut[ti] % (2 * OFF) - OFF)
     tiles.append({"tx": txi, "ty": tyi, "x0": txi * a.tile_m, "y0": tyi * a.tile_m, "start": int(s), "n": int(e - s), "z_min": round(float(mz[s:e].min()), 2), "z_max": round(float(mz[s:e].max()), 2)})
-params = {"frame": "robot lidar_slam saved map frame (final PGO) — /cloud_registered at keyframe times", "res_xy": RX, "res_z": RZ, "prob_res": RP, "prob_hit": a.prob_hit, "prob_miss": a.prob_miss,
+params = {"sparse_far": a.sparse_far, "frame": "robot lidar_slam saved map frame (final PGO) — /cloud_registered at keyframe times", "res_xy": RX, "res_z": RZ, "prob_res": RP, "prob_hit": a.prob_hit, "prob_miss": a.prob_miss,
           "free_range": a.free_range, "max_range": a.max_range, "min_scans": a.min_scans, "prob": not a.no_prob, "depth": (not a.no_depth) and bool(a.voxsem), "depth_max_miss": a.depth_max_miss, "drop_dynamic": not a.keep_dynamic,
           "tile_m": a.tile_m, "tile_cells": tile_cells, "semantic": bool(a.voxsem), "occupancy": a.occupancy, "bonxai": bonxai_stats, "n_scans": len(files), "n_points": int(n_pts_tot), "skip_every": a.skip_every, "skip_phase": a.skip_phase, "classes": classes,
           "class_codes": {"254": "other(low confidence)", "255": "unlabeled"}, "source_codes": {"1": "lidar(cloud_registered)", "2": "depth fill", "3": "flat fill (interpolated within 0.1 m cell)"}, "fill_flat": a.fill_flat, "crop": a.crop}
-np.savez_compressed(a.out + ".npz", ijk=I.astype(np.int32), mean_z=mz.astype(np.float32), max_z=mxz_all.astype(np.float32), std_z=sd.astype(np.float16), count=np.minimum(cnt, 65535).astype(np.uint16), n_scans=np.minimum(ns, 65535).astype(np.uint16),
+np.savez_compressed(a.out + ".npz", ijk=I.astype(np.int32), mean_z=mz.astype(np.float32), max_z=mxz_all.astype(np.float32), elev_max=np.maximum(elev_all, -100).astype(np.float16), std_z=sd.astype(np.float16), count=np.minimum(cnt, 65535).astype(np.uint16), n_scans=np.minimum(ns, 65535).astype(np.uint16),
                     logodds=lo.astype(np.float16), cls=cls.astype(np.uint8), source=src, tile=tile_id, res_xy=RX, res_z=RZ, prob_res=RP, classes=np.array(classes),
                     coarse_ijk=unkey(ck).astype(np.int32), coarse_logodds=c_lo.astype(np.float16), coarse_hits=np.minimum(c_hits, 65535).astype(np.uint16), coarse_misses=np.minimum(c_miss, 65535).astype(np.uint16),
                     removed_ijk=removed_ijk, removed_why=removed_why, params=np.array(json.dumps(params, ensure_ascii=False)))
@@ -257,7 +263,7 @@ if not a.no_tiles:
                **params, "n_cells": int(len(I)), "total_bytes": int(len(I) * REC.itemsize), "tiles": tiles}, open(os.path.join(td, "index.json"), "w"), indent=1, ensure_ascii=False)
 # 요약
 byc = {classes[c] if c < NC else ("other" if c == 254 else "unlabeled"): int(n) for c, n in zip(*np.unique(cls, return_counts=True))}
-summ = {"cells": int(len(I)), "cells_lidar": int((src == 1).sum()), "cells_depth": int((src == 2).sum()), "cells_flat_fill": int((src == 3).sum()), "lidar_cells_before_filter": int(n_lidar_all), "removed_prob_free": n_prob_removed, "removed_dynamic": n_dyn_removed,
+summ = {"cells": int(len(I)), "cells_lidar": int((src == 1).sum()), "cells_depth": int((src == 2).sum()), "cells_flat_fill": int((src == 3).sum()), "lidar_cells_before_filter": int(n_lidar_all), "removed_prob_free": n_prob_removed, "removed_dynamic": n_dyn_removed, "removed_sparse_far": n_sparse_far,
         "depth_points": int(dep_n), "coarse_cells": int(bonxai_stats["cells"]) if bonxai_stats else int(len(ck)), "coarse_occupied": int((c_lo > 0).sum()), "coarse_free": int(bonxai_stats["free"]) if bonxai_stats else int((c_lo < 0).sum()), "bytes_per_cell": REC.itemsize, "total_mb": round(len(I) * REC.itemsize / 1e6, 1),
         "tiles": len(tiles), "tile_cells_max": max(t["n"] for t in tiles), "tile_mb_max": round(max(t["n"] for t in tiles) * REC.itemsize / 1e6, 1), "by_class": byc, "std_z_med_cm": round(float(np.median(sd)) * 100, 2), "seconds": round(time.time() - t0)}
 json.dump({**summ, "params": params}, open(a.out + "_summary.json", "w"), indent=1, ensure_ascii=False)

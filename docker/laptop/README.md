@@ -51,7 +51,7 @@ mcap 을 서버로 옮기지 않고, 데이터를 받은 노트북에서 바로 
    컨테이너는 root 로 돌지만 파이프라인이 끝날 때 `output/` 산출물을 호스트 사용자 소유로 돌린다 (`PYTHONDONTWRITEBYTECODE=1` 이라 `scripts/` 에 root 소유 `__pycache__` 도 안 생긴다).
 3. 결과는 `<root>/compiled/` (기본 `output/<root>/compiled/`). 서버 포털로 보내려면 이 폴더째 복사한다.
    구조 (2026-11-24): `compiled/main_map/`(M·C: main_map.pcd · main_map_semantic.pcd · localization_map.pcd) · `compiled/nav3d/`(N: 메인 맵 위 통행성 그래프 —
-   navigation_map.pcd 는 main_map.pcd 와 같은 파일) · `compiled/locomotion/`(L: base_tiles → 계단 보완 → tiles) · `compiled/potree/`(H: 기본 보기). 끄기: `options.nav3d: false`, `options.locomotion: false`.
+   navigation_map.pcd 는 main_map.pcd 에서 위에서 본 적 없는 천장·지붕 윗면을 뺀 것 — 그래프가 천장을 방으로 잡지 않게) · `compiled/locomotion/`(L: base_tiles → 계단 보완 → tiles) · `compiled/potree/`(H: 기본 보기). 끄기: `options.nav3d: false`, `options.locomotion: false`.
 
 ## 센서만 녹화한 데이터 (SLAM 출력 없음) — 오프라인 lidar_slam 재생
 
@@ -129,7 +129,7 @@ prior map controller 는 그 이름으로 `log/map/<이름>/voxel3d_tiles` 를 �
    `<이름>.pcd`(위치추정 = 빌드 M 단계의 localization_map.pcd: 메인 맵을 0.25 m 칸 평균으로, `--loc-voxel` 을 바꾸면 메인 맵에서 다시 줄임, 0 = 5 cm 그대로),
    `<이름>.txt`(키프레임 궤적), `<이름>_manifest.txt`(voxel_size·새 map_id — 로봇 `relocalization.globalmap_voxel_size` 가 0.25 이하면 다시 줄이지 않음(그보다 크면 로봇이 그 크기로 줄임), 같은 이름으로 다시 넣어도 GUI 가 옛 캐시를 쓰지 않게),
    `voxel3d_tiles/`(보행 맵 = compiled/locomotion/tiles, 계단 보완 끝난 것. 옛 빌드는 계단 채움 LiDAR 만 → 계단 채움 → LiDAR 만 → 기본 순), `map_info.json`(출처),
-   빌드 N 단계가 있었으면 `navigation_map.pcd`(= 메인 맵 5 cm) + `nav3d_graph.bin`·`nav3d_graph_summary.json`(미리 계산한 통행성 그래프·토폴로지 —
+   빌드 N 단계가 있었으면 `navigation_map.pcd`(= 메인 맵 5 cm − 천장·지붕 윗면) + `nav3d_graph.bin`·`nav3d_graph_summary.json`(미리 계산한 통행성 그래프·토폴로지 —
    로봇 navigation3d 가 원본 pcd 해시와 파라미터가 맞으면 읽고, 아니면 시작할 때 직접 계산. 포털 'Nav3d graph' 그림으로 층·계단·문을 미리 확인).
    (옛 빌드만) 위치추정 원천은 geometry_all_scans.pcd → 없으면 S 단계 스캔.
 

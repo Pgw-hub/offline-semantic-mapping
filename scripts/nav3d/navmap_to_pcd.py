@@ -5,7 +5,8 @@
 위치추정 지도(<맵>.pcd, 0.25 m)는 스캔 정합용이라 성기고, 이 파일은 같은 좌표계에서 계단 디딤판·문틀을 그래프가 구분할 만큼 촘촘하다.
 로봇 raisin_navigation3d_plugin 은 log/map/<맵>/navigation_map.pcd 가 있으면 그것으로 그래프를 만든다.
 
-사용: navmap_to_pcd.py <in.npz> <out.pcd> [--min-scans N] [--ror VOXEL MIN_NEIGHBOURS]
+사용: navmap_to_pcd.py <in.npz> <out.pcd> [--min-scans N] [--ror VOXEL MIN_NEIGHBOURS] [--elev-out <점별 높이.npy>]
+  --elev-out: 점마다 '센서가 그 점보다 가장 높았을 때의 높이'(m, float16, 같은 순서) — nav3d/drop_unseen_tops.py 가 천장 윗면을 고를 때 씀
 """
 import argparse, os
 import numpy as np
@@ -37,20 +38,24 @@ def drop_isolated(P, vox=0.1, min_nb=5):
                 i = np.searchsorted(u, q); i[i >= len(u)] = 0
                 nb += (u[i] == q)
     keep = nb[inv] >= min_nb
-    return P[keep], int((nb < min_nb).sum()), int((~keep).sum())
+    return keep, int((nb < min_nb).sum()), int((~keep).sum())
 
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("npz"); ap.add_argument("out")
     ap.add_argument("--min-scans", type=int, default=0, help="이 수 미만의 스캔에서만 보인 셀은 버림 (0 = 전부)")
+    ap.add_argument("--elev-out", default=None, help="점별 센서 최대 높이 차(npz elev_max) .npy — 없으면 안 씀")
     ap.add_argument("--ror", type=float, nargs=2, default=None, metavar=("VOXEL", "MIN_NB"), help="외톨이 칸 지우기 (예: 0.1 5)")
     a = ap.parse_args()
     z = np.load(a.npz); r = float(z["res_xy"]); ijk = z["ijk"]; mz = z["max_z"]
     keep = z["n_scans"] >= a.min_scans if a.min_scans else np.ones(len(mz), bool)
     P = np.c_[(ijk[keep, 0] + 0.5) * r, (ijk[keep, 1] + 0.5) * r, mz[keep]].astype(np.float32)
+    E = z["elev_max"][keep] if a.elev_out else None
     msg = ""
     if a.ror:
-        P, nv, npnt = drop_isolated(P, a.ror[0], int(a.ror[1])); msg = f", 외톨이 칸 {nv:,} 개({npnt:,} 점) 제거"
+        k2, nv, npnt = drop_isolated(P, a.ror[0], int(a.ror[1])); P = P[k2]; E = E[k2] if E is not None else None; msg = f", 외톨이 칸 {nv:,} 개({npnt:,} 점) 제거"
     write_xyz_pcd(a.out, P)
+    if a.elev_out:
+        np.save(a.elev_out + ".tmp.npy", E.astype(np.float16)); os.replace(a.elev_out + ".tmp.npy", a.elev_out)
     print(f"{a.out}: {len(P):,} 점 (셀 {r} m{msg})")
