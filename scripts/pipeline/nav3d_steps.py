@@ -1,4 +1,4 @@
-"""3D 내비 블록 (N): 메인 맵 위에 미리 계산한 통행성 그래프·토폴로지 nav3d_graph.bin (입력 navigation_map.pcd = 메인 맵)."""
+"""3D 내비 블록 (N): 메인 맵 위에 미리 계산한 통행성 그래프·토폴로지 nav3d_graph.bin (입력 navigation_map.pcd = 메인 맵 − 천장 윗면)."""
 import json, os, shutil
 
 import yaml
@@ -9,7 +9,10 @@ from pipeline.env import CODE, REPO, PY
 class Nav3dSteps:
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # N (nav3d) — 로봇 raisin_navigation3d_plugin 이 시작할 때마다 계산하던 것을 빌드에서 미리 만든다. 메인 맵(M)의 일부.
-    #   ① navigation_map.pcd : 메인 맵 기하 main_map.pcd 그대로 (같은 바이트 — 하드링크/복사). 로봇이 읽는 이름은 파라미터 graph_map_file.
+    #   ① navigation_map.pcd : 메인 맵 기하 main_map.pcd 에서 '위에서 한 번도 본 적 없는 윗면 판'(천장·지붕 윗면)을 뺀 것
+    #      (nav3d/drop_unseen_tops.py, M 의 main_map_elev.npy 사용). 그래프는 위가 빈 면을 전부 바닥으로 보기 때문에 천장이 방·계단으로 잡혔다.
+    #      벽·슬래브 밑면은 남긴다. options.nav3d.drop_unseen_tops: false 이거나 elev 파일이 없으면(옛 빌드) main_map.pcd 그대로(하드링크).
+    #      로봇이 읽는 이름은 파라미터 graph_map_file.
     #   ② nav3d_graph.bin    : 통행성 그래프(다층 표면, 여유 거리, 연결) + 토폴로지(방·계단·포털). raisin_navigation3d_plugin 의
     #      navigation3d_build_graph 실행 파일이 만든다 — 로봇과 같은 C++ 코드라 결과가 같다. 파일에 원본 pcd 해시와 파라미터가
     #      들어 있어, 로봇은 둘이 맞을 때만 이 파일을 읽고 아니면 예전처럼 직접 계산한다. 층 이름(1F·B1)은 로봇 위치 기준이라 로봇이 정한다.
@@ -21,7 +24,7 @@ class Nav3dSteps:
     #                없으면 컴파일 기본값으로 만들고, 로봇 파라미터가 다르면 로봇이 다시 계산한다(로그에 이유).
     #   options.nav3d: false 면 생략. 실패해도 빌드는 계속.
     # ───────────────────────────────────────────────────────────────────────────────────────────
-    opt_default_nav3d = {"bin": None, "params": None}
+    opt_default_nav3d = {"bin": None, "params": None, "drop_unseen_tops": {"tau": 0.2, "max_run": 0.3}}
 
     def nav3d_tool(self, n3, key, env_name, default_name):
         for p in (n3.get(key), os.environ.get(env_name), os.path.join(REPO, "tools", "bin", default_name)):
@@ -41,12 +44,21 @@ class Nav3dSteps:
                 name = (yaml.safe_load(open(params)) or {}).get("graph_map_file") or name
             navpcd = os.path.join(d, name); main = self.main_pcd()
             if not os.path.exists(main) and not self.dry: raise RuntimeError(f"메인 맵이 없음 ({main}) — M 단계 먼저")
-            if not self.dry and not (os.path.exists(navpcd) and os.path.samefile(navpcd, main)) and \
+            dut = n3.get("drop_unseen_tops"); elev = self.main_elev()
+            if dut and (os.path.exists(elev) or self.dry):
+                dut = dict(self.opt_default_nav3d["drop_unseen_tops"], **(dut if isinstance(dut, dict) else {}))
+                summ = os.path.join(d, "navigation_map_summary.json")
+                ok = lambda: (not os.path.samefile(navpcd, main) and os.path.getmtime(navpcd) >= max(os.path.getmtime(main), os.path.getmtime(elev))
+                              and os.path.exists(summ) and json.load(open(summ))["params"].get("tau") == dut["tau"] and json.load(open(summ))["params"].get("max_run") == dut["max_run"])
+                if not self.done("N", navpcd, ok):
+                    if os.path.exists(navpcd) and os.path.samefile(navpcd, main): os.remove(navpcd)   # 예전 하드링크를 덮어쓰면 main_map.pcd 가 바뀐다
+                    self.run([PY, f"{CODE}/nav3d/drop_unseen_tops.py", main, elev, navpcd, "--tau", str(dut["tau"]), "--max-run", str(dut["max_run"]), "--summary", summ], logname="N_graph.log")
+            elif not self.dry and not (os.path.exists(navpcd) and os.path.samefile(navpcd, main)) and \
                     not (os.path.exists(navpcd) and os.path.getsize(navpcd) == os.path.getsize(main) and os.path.getmtime(navpcd) >= os.path.getmtime(main)):
                 if os.path.exists(navpcd): os.remove(navpcd)
                 try: os.link(main, navpcd)                                    # 같은 바이트 = 같은 해시 (디스크도 아낌)
                 except OSError: shutil.copy2(main, navpcd)
-                self.say(f"  nav3d: {name} ← main_map/main_map.pcd")
+                self.say(f"  nav3d: {name} ← main_map/main_map.pcd" + ("" if not dut else " (main_map_elev.npy 없음 — 천장 윗면 빼기 생략, M 다시 하면 적용)"))
             tool = self.nav3d_tool(n3, "bin", "NAV3D_GRAPH_BIN", "navigation3d_build_graph")
             if not tool:
                 self.say("  nav3d: navigation3d_build_graph 실행 파일 없음 (options.nav3d.bin · $NAV3D_GRAPH_BIN · tools/bin/) → 그래프 생략, 로봇이 시작할 때 계산")

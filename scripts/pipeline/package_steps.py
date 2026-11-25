@@ -24,7 +24,7 @@ class PackageSteps:
         ("edges_heuristic", "compiled/session_edges.json", "objects", "3D scene graph 엣지: 기하 휴리스틱 (on top of / next to)"),
         ("edges_object_terrain", "compiled/voxel_session_relations.json", "objects", "3D scene graph 엣지: 객체-지형 (bbox 발자국 아래 지배 지형)"),
         ("edges_vlm", "compiled/session_edges_vlm.json", "objects", "3D scene graph 엣지: VLM 판정 (Qwen2.5-VL, 꺼져 있으면 빈 목록)"),
-        ("nav3d_navigation_map", "compiled/nav3d/navigation_map.pcd", "optional", "3D 내비 입력 = main_map.pcd 와 같은 바이트 (로봇 log/map/<맵>/ 에 이 이름으로)"),
+        ("nav3d_navigation_map", "compiled/nav3d/navigation_map.pcd", "optional", "3D 내비 입력 = main_map.pcd − 위에서 본 적 없는 천장·지붕 윗면 (로봇 log/map/<맵>/ 에 이 이름으로)"),
         ("nav3d_graph", "compiled/nav3d/nav3d_graph.bin", "optional", "통행성 그래프 + 토폴로지 (raisin_navigation3d_plugin GraphFile, 원본 pcd 해시·파라미터 포함)"),
         ("nav3d_summary", "compiled/nav3d/nav3d_graph_summary.json", "optional", "통행성 그래프 요약: 노드 수, 장소(방·계단), 포털"),
         ("nav3d_nodes", "compiled/nav3d/nav3d_nodes.csv", "optional", "통행성 그래프 노드 x y z clearance place component (CSV)"),
