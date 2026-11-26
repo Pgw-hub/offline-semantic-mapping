@@ -1,0 +1,25 @@
+# 2026-11-26 재빌드(현재 파이프라인: 메인 5 cm + 보행 2.5 cm + nav3d) — 수서 로보플러스 테스트센터 10/14. 옛 빌드 = t2_real_1014_110144 (offline_semantic_mapping_output, 건드리지 않음).
+# SLAM: 오프라인 lidar_slam 재생 /data2/users/gw.park/offline_slam/1014_110144
+# 2026-10-14 실로봇(KR-RRT-2604-008) 베이스라인 51 s, /path/pgo 1 msg → odom_traj — 레코더 v2. calibration 은 config_snapshot/raisin_root/calibration(로봇 자체). 저장 지도 없음.
+root: /data2/users/gw.park/maps/t2_suseo_1014_110144
+mcap_dir: /data2/users/gw.park/offline_slam/1014_110144/mcap
+calib: /data3/mcap-logging-data/20261014/KR-RRT-2604-008_20261014_110144/config_snapshot/raisin_root/calibration
+logs: [0]
+options:
+  map_id: "수서 1014_110144 기준 시험(계단/경사 플레이트) · OFFLINE lidar_slam · Mapillary road · main 5 cm + locomotion 2.5 cm"
+  robot_map:
+    traj: /data2/users/gw.park/offline_slam/1014_110144/mcap/offline_slam_map/offline.txt
+  lidar_extrinsic: calib
+  livox_flip: true
+  lidar_fusion: false
+  mask_bottom_px: 60
+  drop_classes: person
+  vlm_edges: false
+  prob_hit: 0.85
+  prob_miss: 0.45
+  video_speed: 15
+  classdict: mapillary_road_v1   # 도로 현장(실외) — 도로 지도와 같은 사전
+  label_edge_px: 4
+  require_depth: 1
+  pose_graph: true
+  aux_lidar: "off"

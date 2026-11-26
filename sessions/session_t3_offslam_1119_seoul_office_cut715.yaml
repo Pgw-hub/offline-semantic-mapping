@@ -1,0 +1,36 @@
+# 715 s 에서 자른 판 (/data2/users/gw.park/trimmed/railab_raibo_20261119_155339_cut715): 5층에서 717–720 s 좁은 곳 빠른 회전으로 LIO yaw ~20° 미끄러짐 → 이후 구간 제외.
+# 2026-11-19 15:53 핸드헬드 리그(Mid-360 + D455 SN 263022300454, 10/23 새 모듈) 761 s — 서울사무소 전층(지상 → 계단으로 약 21 m 위까지). 노트북 취득, 센서만 녹화(실시간 SLAM 출력 없음).
+# SLAM: 오프라인 lidar_slam 재생 (scripts/offline_slam, /data2/users/gw.park/offline_slam/1119_155339) — 스캔 7,583/7,602, 루프 124.
+#   루프 끈 재생과 같은 시각 위치 차 중앙 4.4 cm (≤~10 cm) → 층 겹침 같은 잘못된 루프 없음.
+# 카메라: CAD 외부 파라미터(DepthCAM_Handle_V1.2.STL) + depth 배율 0.945 — 이 데이터 측정: 배율 0.94 최적(CAD 1.58 cm vs 기록값 2.30 cm, /data2/users/gw.park/handheld_calib/scale1119).
+root: /data2/users/gw.park/maps/t3_offslam_1119_seoul_office_cut715
+mcap_dir: /data2/users/gw.park/offline_slam/1119_155339_cut715/mcap
+calib: /data2/users/gw.park/handheld_calib/calib/cad_1119_155339
+logs: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+options:
+  map_id: "handheld 20261119_155339 서울사무소 전층 (715 s 까지 — 5층 측위 틀어짐 이후 제외) · OFFLINE lidar_slam · CAD calib + depth 0.945 · SegFormer indoor_v1 · track 2 all_scans · voxel3d prior"
+  robot_map:
+    geometry: all_scans
+    traj: /data2/users/gw.park/offline_slam/1119_155339_cut715/mcap/offline_slam_map/offline.txt
+  lidar_extrinsic: calib
+  livox_flip: false
+  lidar_fusion: false
+  mask_bottom_px: 0
+  drop_classes: person
+  vlm_edges: false
+  occupancy_res: 0.2
+  prob_hit: 0.85
+  prob_miss: 0.45
+  costmap: {h_ground: 2, h_obs: 3, clearance: 1.4, band_min: 0.3}
+  view_cubes: false
+  view_coarse: 0.3
+  video_speed: 15
+  video_pipeline: true
+  classdict: indoor_v1
+  label_edge_px: 4
+  require_depth: 1
+  pose_graph: true
+  depth_fill_range: 4.0
+  depth_fill_gap: 0.15
+  aux_lidar: "off"
+  depth_scale: 0.945

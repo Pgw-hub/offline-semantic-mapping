@@ -1,0 +1,19 @@
+# 2026-11-19 15:28 핸드헬드(Mid-360 + D455) 서울사무소 154 s 테스트 녹화 — 실시간 vs 오프라인 SLAM 비교용 기하 빌드 (offline)
+# SLAM 출처: 오프라인 lidar_slam 재생(scripts/offline_slam, 서버에서 /livox/lidar·/livox/imu 로 다시 계산)
+root: /data2/users/gw.park/slamcmp_1119/offline
+mcap_dir: /data2/users/gw.park/offline_slam/1119_152850/mcap
+calib: /data3/mcap-logging-data/20261119/railab_raibo_20261119_152850/config_snapshot/raisin_root/calibration
+logs: [0, 1, 2]
+options:
+  map_id: "handheld 20261119_152850 · SLAM 비교 (offline)"
+  geometry_only: true
+  robot_map:
+    geometry: all_scans
+    traj: /data2/users/gw.park/offline_slam/1119_152850/mcap/offline_slam_map/offline.txt
+  lidar_extrinsic: calib
+  livox_flip: false
+  aux_lidar: "off"
+  pose_graph: true
+  voxel3d: false
+  potree: false
+  video_speed: 0
