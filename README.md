@@ -41,7 +41,7 @@ python ../scripts/build_map_package.py session_<이름>.yaml --dry-run      # �
 세부 옵션 (`options.` 아래, 기본값은 `scripts/pipeline/*_steps.py` 의 `opt_default_*`):
 `main_map: {res: 0.05, max_range: 100, free_range: 40, ror: [0.1, 5], loc_voxel: 0.25, sparse_far: [2, 10]}` (sparse_far = 10 m 안에서 본 적 없고 2 스캔 이하인 칸 제거: 유리 너머·유리 반사 고스트) ·
 `locomotion: {res: 0.025, max_range: 5, free_range: 5, tile_m: 10, stair: {risers: true, clean: true, roi: null}}` (`stair: false` 면 계단 보완 없음, `locomotion: false` 면 보행 맵 생략) ·
-`nav3d: {bin, params, drop_unseen_tops: {tau: 0.2, max_run: 0.3}}` (실행 파일 `tools/bin/navigation3d_build_graph`, 없으면 그래프 생략; drop_unseen_tops = 그래프 입력에서 위에서 본 적 없는 얇은 윗면(천장·지붕) 빼기 — 안 빼면 천장이 방·계단으로 잡힘, `false` 면 main_map.pcd 그대로) · `potree: true` · `rerun: false`.
+`objects: {vlm_model: Qwen/Qwen2.5-VL-32B-Instruct}` (E 단계 객체 융합: 점구름 겹침+의미로 같은 물체 묶고 비전 LLM 이 여러 장면을 보고 라벨·구조물 제거, GPU ~70 GB — 노트북은 `Qwen/Qwen2.5-VL-7B-Instruct` 또는 `none`=검출 투표) · `nav3d: {bin, params, drop_unseen_tops: {tau: 0.2, max_run: 0.3}}` (실행 파일 `tools/bin/navigation3d_build_graph`, 없으면 그래프 생략; drop_unseen_tops = 그래프 입력에서 위에서 본 적 없는 얇은 윗면(천장·지붕) 빼기 — 안 빼면 천장이 방·계단으로 잡힘, `false` 면 main_map.pcd 그대로) · `potree: true` · `rerun: false`.
 옛 옵션 `voxel3d` · `stair_complete` 는 더 이상 쓰지 않는다 (경고만). 2026-11-24 변경 뒤 시험하지 않은 경로: `--steps …,O,G`(옛 점유·코스트맵), `robot_map` 없는 트랙 1(raw 스캔 deskew), 처음부터 끝까지 새로 하는 카메라 빌드(시험은 A·R·B·D 결과 재사용). 옛 0.2 m 점유가 필요하면 `--steps …,O,G` (G 가 코스트맵도 만든다).
 
 새 세션은 기존 세션 yaml(기하 전용은 `sessions/session_TEMPLATE_geometry_only.yaml`)을 복사해 `mcap_dir`, `logs`, `root` 를 고쳐서 만든다.

@@ -7,6 +7,8 @@ from pipeline.env import CODE, REPO, PY, CGREPO, HF_HOME, CD
 
 
 class SemanticSteps:
+    # 객체 융합(E ①): vlm_model = 라벨을 고를 비전 LLM (none 이면 검출 투표). 서울 cut715 점검 표본 라벨 정확도 34 % → 83 %
+    opt_default_objects = {"vlm_model": "Qwen/Qwen2.5-VL-32B-Instruct"}
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # D (objects) — 객체(things) 레이어. ConceptGraphs 를 A 의 데이터셋 위에 돌려 객체 인스턴스를 뽑는다. [GPU, 로그별]
     #   실행: /data2/cg/concept-graphs 의 slam/rerun_realtime_mapping.py (우리 패치판; 환경변수로 옵션 전달)
@@ -33,7 +35,9 @@ class SemanticSteps:
             self.run([PY, "slam/rerun_realtime_mapping.py", f"scene_id={log}", f"dataset_root={self.D['dataset']}", f"dataset_config={dcfg}"], cwd=CGREPO, env=env, logname=f"D_{log}.log")
     # ───────────────────────────────────────────────────────────────────────────────────────────
     # E (graph) — D 의 로그별 객체를 세션 하나의 "3D scene graph" 로 묶는다. 노드 = 객체, 엣지 = 관계.
-    #   ① map_compiler.py merge : 로그 간 같은 객체 병합 → compiled/session_objects.json (+ _clip.npz, CLIP 1024D)
+    #   ① object_fusion.py : 로그별 객체를 점구름 겹침 + 의미로 한꺼번에 군집화 → Qwen2.5-VL 이 여러 장면 crop 을 보고 라벨
+    #      (구조물이면 객체 아님) → 같은 라벨끼리 2차 병합 → compiled/session_objects.json (+ _clip.npz, _rejected.json)
+    #      options.objects.vlm_model (기본 Qwen2.5-VL-32B, GPU ~70 GB) · none 이면 검출 투표 라벨. 옛 병합은 map_compiler.py merge
     #   ② map_compiler.py edges : 기하 휴리스틱 엣지 (on top of / next to) → compiled/session_edges.json
     #   ③ voxel_rerun_v2.py     : 객체 bbox 발자국 아래의 지배 지형(C) 조회 → compiled/voxel_session_relations.json (객체-지형 엣지)
     #   ④ (옵션 vlm_edges) vlm_edges.py : Qwen2.5-VL 에 객체 쌍 이미지를 보여 관계 판정 → compiled/session_edges_vlm.json
@@ -43,7 +47,9 @@ class SemanticSteps:
         env = {"CG_RAIBO_ROOT": self.D["dataset"], "CG_OUT_DIR": self.D["compiled"]}
         so = os.path.join(self.D["compiled"], "session_objects.json")
         if not self.done("E", so):
-            self.run([PY, f"{CODE}/semantic/scene_graph/map_compiler.py", "merge"], env=env, logname="E_merge.log")
+            o = dict(self.opt_default_objects, **(self.opt.get("objects") if isinstance(self.opt.get("objects"), dict) else {}))
+            self.run([PY, f"{CODE}/semantic/scene_graph/object_fusion.py", "--root", self.D["dataset"], "--out", self.D["compiled"], "--vlm-model", str(o["vlm_model"] or "none")],
+                     env=dict(env, HF_HOME=HF_HOME, HF_HUB_OFFLINE="1"), logname="E_merge.log")
         if not self.done("E", os.path.join(self.D["compiled"], "session_edges.json")):
             self.run([PY, f"{CODE}/semantic/scene_graph/map_compiler.py", "edges"], env=env, logname="E_edges.log")
         rel = os.path.join(self.D["compiled"], "voxel_session_relations.json")
