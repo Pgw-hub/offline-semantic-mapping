@@ -8,7 +8,7 @@
 | ② **보행 맵** | `compiled/locomotion/` | LiDAR 5 m 이내 → 2.5 cm 확률 복셀 지도 → 계단 인식·디딤판/앞면 채움·halo 제거 | `tiles/` (voxel3d_tiles v2, 로봇 prior map controller 가 읽음). 의미 정보 없음 |
 
 맵 보기는 **Potree** (`compiled/potree/index.html`, 포털의 *Open map (Potree)*) — 메인 맵(의미 색·카메라 색·높이), 위치추정 지도, 보행 맵, 통행성 그래프, 토폴로지, 3D scene graph 를 오른쪽 패널에서 클릭으로 켜고 끈다.
-로봇에 넣을 폴더는 포털 *Robot map package* (`scripts/package/robot_map_package.py`): `<이름>.pcd`(위치추정) + `voxel3d_tiles/`(보행 맵) + `navigation_map.pcd`·`nav3d_graph.bin`.
+로봇에 넣을 폴더는 포털 *Deploy to robot* (`scripts/package/robot_map_package.py`): `<이름>.pcd`(위치추정) + `voxel3d_tiles/`(보행 맵) + `navigation_map.pcd`·`nav3d_graph.bin`.
 
 ![Offline Map Build Pipeline v2](docs/img/pipeline_v2.png)
 

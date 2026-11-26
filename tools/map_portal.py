@@ -456,7 +456,7 @@ class H(http.server.SimpleHTTPRequestHandler):
             if why: return self.send_json({"error": why}, 403)
             pkg = os.path.realpath(os.path.join(ROOT, str(body.get("dir", ""))))
             if not (pkg.startswith(os.path.realpath(OUT) + os.sep) and os.path.basename(os.path.dirname(pkg)) == "robot"
-                    and os.path.isfile(os.path.join(pkg, os.path.basename(pkg) + ".pcd"))): return self.send_json({"error": "패키지 폴더가 아닙니다 (먼저 Robot map package)"}, 400)
+                    and os.path.isfile(os.path.join(pkg, os.path.basename(pkg) + ".pcd"))): return self.send_json({"error": "패키지 폴더가 아닙니다 (먼저 Deploy to robot)"}, 400)
             ws = str(body.get("ws", "") or "").strip()
             if ws and not re.fullmatch(r"[A-Za-z0-9._/~-]{1,200}", ws): return self.send_json({"error": "워크스페이스 경로: 영문·숫자·. _ / ~ - 만"}, 400)
             robot = str(body.get("robot", "") or ""); target = str(body.get("target", "") or "").strip(); save = str(body.get("save_name", "") or "").strip()

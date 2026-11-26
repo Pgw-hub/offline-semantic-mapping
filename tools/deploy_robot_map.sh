@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # 로봇 맵 패키지(scripts/package/robot_map_package.py 산출: <이름>/ 폴더 또는 <이름>.zip)를 로봇 raisin 워크스페이스 log/map/<이름>/ 에 넣는다.
 # 같은 이름이 있으면 log/map_backup/<이름>_<시각> 으로 옮기고 → 폴더를 스트림으로 보내 풀고 → 파일 목록·크기를 노트북 쪽과 비교한다.
-# 로봇에 unzip·python 필요 없음 (bash, tar, find 만). 포털 'Robot map package' 창의 '로봇에 넣기'도 이 스크립트를 부른다.
+# 로봇에 unzip·python 필요 없음 (bash, tar, find 만). 포털 'Deploy to robot' 창의 '로봇에 넣기'도 이 스크립트를 부른다.
 #
 # 사용:
 #   tools/deploy_robot_map.sh <패키지 폴더|zip> <로봇> [--ws <워크스페이스>] [--name <새 이름>] [--dry-run] [--forget-host]

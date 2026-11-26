@@ -119,7 +119,7 @@ tools/start_portal.sh
 로봇은 맵 이름 하나로 두 지도를 잇는다: lidar_slam 은 `log/map/<이름>/<이름>.pcd` 를 읽고, 위치추정 중 `/Odometry/base` 의 frame_id 가 `<이름>` 이 되며,
 prior map controller 는 그 이름으로 `log/map/<이름>/voxel3d_tiles` 를 찾는다. 그래서 **폴더 이름 = pcd 이름 = 맵 이름** 이어야 한다. 아래 두 단계가 이를 맞춘다.
 
-1. 패키지 만들기 — 포털 세션 화면의 **Robot map package** 버튼(이름 입력 → 패키지를 만들고 '로봇에 넣기' 창을 연다), 또는:
+1. 패키지 만들기 — 포털 세션 화면의 **Deploy to robot** 버튼(이름 입력 → 패키지를 만들고 '로봇에 넣기' 창을 연다), 또는:
 
    ```
    docker exec -u $(id -u):$(id -g) -w $PWD offline-map python scripts/package/robot_map_package.py output/<세션> --name 1103_daejeon_grating
