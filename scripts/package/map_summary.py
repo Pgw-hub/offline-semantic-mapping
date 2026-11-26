@@ -52,7 +52,7 @@ def main():
     nv = jload(os.path.join(comp, "nav3d", "nav3d_graph_summary.json"))
     if nv:
         pl = nv.get("places", [])
-        S["nav3d"] = {"nodes": nv.get("nodes"), "rooms": sum(p["type"] == "room" for p in pl), "stairs": sum(p["type"] == "stair" for p in pl), "portals": len(nv.get("portals", [])),
+        S["nav3d"] = {"nodes": nv.get("nodes"), "rooms": sum(p["type"] == "room" for p in pl), "stairs": sum(p["type"] == "stair" for p in pl), "landings": sum(p["type"] == "landing" for p in pl), "portals": len(nv.get("portals", [])),
                       "build_ms": nv.get("build_ms"), "load_ms": nv.get("load_ms")}
         S["traversable_m2"] = round(sum(p.get("nodes", 0) for p in pl) * 0.01)       # 방·계단에 든 노드(0.1 m 칸) — 벽 윗면·좁은 틈 노드 제외
     # 보행 맵

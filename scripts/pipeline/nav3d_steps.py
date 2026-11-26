@@ -75,8 +75,8 @@ class Nav3dSteps:
                 self.run([PY, f"{CODE}/nav3d/nav3d_graph_view.py", d, png, "--name", os.path.basename(self.root)], env={"MPLCONFIGDIR": "/tmp/mpl"}, logname="N_graph.log")
             if not self.dry:
                 S = json.load(open(os.path.join(d, "nav3d_graph_summary.json")))
-                rooms = sum(p["type"] == "room" for p in S["places"]); stairs = sum(p["type"] == "stair" for p in S["places"])
-                self.say(f"  nav3d: {S['points']:,} 점 → 노드 {S['nodes']:,}, 방 {rooms}, 계단 {stairs}, 포털 {len(S['portals'])} "
+                rooms = sum(p["type"] == "room" for p in S["places"]); stairs = sum(p["type"] == "stair" for p in S["places"]); landings = sum(p["type"] == "landing" for p in S["places"])
+                self.say(f"  nav3d: {S['points']:,} 점 → 노드 {S['nodes']:,}, 방 {rooms}, 계단 {stairs}, 계단참 {landings}, 포털 {len(S['portals'])} "
                          f"(계산 {S['build_ms'] / 1000:.1f} s, 파일 읽기 {S.get('load_ms', 0) / 1000:.2f} s) → nav3d/")
         except Exception as ex:
             self.say(f"  nav3d 실패(빌드는 계속, 로그 logs/N_*.log): {ex}")

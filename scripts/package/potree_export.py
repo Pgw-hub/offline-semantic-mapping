@@ -188,7 +188,7 @@ for (const L of LAYERS) {
 # ─────────────────────────── 새 빌드 (메인 맵 + 보행 맵) ───────────────────────────
 OTHER_CODE, NONE_CODE = 30, 31                                   # 의미 클래스 classification: id+1 · other 30 · 라벨 없음 31 (LAS 5 bit 안)
 PLACE_PAL = np.array([[31, 119, 180], [174, 199, 232], [44, 160, 44], [152, 223, 138], [148, 103, 189], [197, 176, 213], [140, 86, 75], [196, 156, 148],
-                      [227, 119, 194], [247, 182, 210], [188, 189, 34], [219, 219, 141], [23, 190, 207], [158, 218, 229], [255, 127, 14], [255, 187, 120]], np.uint8)
+                      [227, 119, 194], [247, 182, 210], [188, 189, 34], [219, 219, 141], [23, 190, 207], [158, 218, 229]], np.uint8)   # 빨강·주황 없음: 계단(빨강)·계단참(주황) 전용
 
 
 def sem_class_code(lab):
@@ -247,7 +247,7 @@ def layer_nav(comp, tmp):
     places = {pl["id"]: pl for pl in (json.load(open(sp)).get("places", []) if os.path.exists(sp) else [])}
     pid = A[:, 4].astype(np.int64); rgb = np.full((len(A), 3), 150, np.uint8)
     for i, pl in places.items():
-        m = pid == i; rgb[m] = [230, 40, 40] if pl["type"] == "stair" else PLACE_PAL[i % len(PLACE_PAL)]
+        m = pid == i; rgb[m] = [230, 40, 40] if pl["type"] == "stair" else ([255, 158, 61] if pl["type"] == "landing" else PLACE_PAL[i % len(PLACE_PAL)])
     las = os.path.join(tmp, "nav.las"); write_las(las, A[:, :3], intensity=np.clip(A[:, 3] * 100, 0, 65535).astype(np.uint16), rgb=rgb)
     convert(las, os.path.join(comp, "potree", "nav"), True)
     print(f"  nav: {len(A):,} 노드, 장소 {len(places)}")
@@ -261,7 +261,7 @@ def overlays(comp):
     if os.path.exists(sp):
         S = json.load(open(sp))
         for pl in S.get("places", []):
-            col = [230, 40, 40] if pl["type"] == "stair" else PLACE_PAL[pl["id"] % len(PLACE_PAL)].tolist()
+            col = [230, 40, 40] if pl["type"] == "stair" else ([255, 158, 61] if pl["type"] == "landing" else PLACE_PAL[pl["id"] % len(PLACE_PAL)].tolist())
             out["places"].append({"id": pl["id"], "type": pl["type"], "c": [round(v, 3) for v in pl["centroid"]], "nodes": pl.get("nodes"), "color": col})
         for po in S.get("portals", []):
             out["portals"].append({"id": po["id"], "type": po["type"], "c": [round(v, 3) for v in po["centroid"]], "places": po.get("places", []), "width": round(po.get("width", 0), 2)})

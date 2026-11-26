@@ -18,8 +18,8 @@ PORTAL_MARK = {"door": "D", "stair_entry": "S", "opening": "O"}
 
 
 def floor_levels(places, min_nodes):
-    """방 중 노드가 min_nodes 이상인 것의 높이를 1 m 안쪽끼리 묶어 층 높이 목록 (낮은 것부터)."""
-    zs = sorted(p["centroid"][2] for p in places if p["type"] == "room" and p["nodes"] >= min_nodes)
+    """방(계단참 포함) 중 노드가 min_nodes 이상인 것의 높이를 1 m 안쪽끼리 묶어 층 높이 목록 (낮은 것부터)."""
+    zs = sorted(p["centroid"][2] for p in places if p["type"] != "stair" and p["nodes"] >= min_nodes)
     levels = []
     for z in zs:
         if levels and z - levels[-1][-1] < 1.0: levels[-1].append(z)
@@ -32,6 +32,7 @@ def place_colors(places):
     k = 0
     for i, p in enumerate(places):
         if p["type"] == "stair": col[i] = (0.85, 0.1, 0.1)
+        elif p["type"] == "landing": col[i] = (1.0, 0.62, 0.24)
         else: col[i] = cmap(k % 20)[:3]; k += 1
     return col
 
@@ -65,18 +66,19 @@ def main():
                         bbox=dict(boxstyle="round,pad=0.1", fc="white", ec="black", lw=0.5))
         nroom = sum(1 for p in places if p["type"] == "room" and zl - 0.5 <= p["centroid"][2] < top)
         nst = sum(1 for p in places if p["type"] == "stair" and zl - 0.5 <= p["centroid"][2] < top)
-        ax.set_title(f"level {k + 1}: z {zl:.2f} m  |  {int(m.sum()):,} nodes, {nroom} rooms, {nst} stair runs", fontsize=9)
+        nld = sum(1 for p in places if p["type"] == "landing" and zl - 0.5 <= p["centroid"][2] < top)
+        ax.set_title(f"level {k + 1}: z {zl:.2f} m  |  {int(m.sum()):,} nodes, {nroom} rooms, {nld} landings, {nst} stair runs", fontsize=9)
         ax.set_xlim(xlim); ax.set_ylim(ylim); ax.set_aspect("equal"); ax.grid(alpha=0.3); ax.tick_params(labelsize=7)
     ax = axs[(n - 1) // ncol][(n - 1) % ncol]
     span_x = x.max() - x.min(); span_y = y.max() - y.min()
     h = x if span_x >= span_y else y
     ax.scatter(h, z, c=c, s=0.4, marker="s", linewidths=0)
     for zl in levels: ax.axhline(zl, color="k", lw=0.4, ls=":")
-    ax.set_title(f"side view ({'x' if span_x >= span_y else 'y'} vs z), red = stairs, grey = no place", fontsize=9)
+    ax.set_title(f"side view ({'x' if span_x >= span_y else 'y'} vs z), red = stairs, orange = landings, grey = no place", fontsize=9)
     ax.grid(alpha=0.3); ax.tick_params(labelsize=7)
     for k in range(n, nrow * ncol): axs[k // ncol][k % ncol].axis("off")
-    rooms = sum(p["type"] == "room" for p in places); stairs = sum(p["type"] == "stair" for p in places)
-    fig.suptitle(f"nav3d graph {a.name or S.get('map', '')} ({S.get('source', '')}): {S['nodes']:,} nodes, {rooms} rooms, {stairs} stair runs, "
+    rooms = sum(p["type"] == "room" for p in places); stairs = sum(p["type"] == "stair" for p in places); landings = sum(p["type"] == "landing" for p in places)
+    fig.suptitle(f"nav3d graph {a.name or S.get('map', '')} ({S.get('source', '')}): {S['nodes']:,} nodes, {rooms} rooms, {landings} landings, {stairs} stair runs, "
                  f"{len(portals)} portals, built in {S.get('build_ms', 0) / 1000:.1f} s", fontsize=11)
     fig.tight_layout(); fig.savefig(a.out, dpi=110); plt.close(fig)
     print(f"{a.out}: {len(levels)} levels")

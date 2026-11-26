@@ -113,8 +113,8 @@ const ann = {places: [], objects: []};
 function addAnn(kind, pos, title, desc) {
   const a = new Potree.Annotation({position: pos, title, description: desc || ""}); a.visible = false; viewer.scene.annotations.add(a); ann[kind].push(a); return a;
 }
-let nRoom = 0, nStair = 0;
-OV.places.forEach(p => addAnn("places", p.c, p.type === "stair" ? `Stair ${++nStair}` : `Room ${++nRoom}`, `${p.type} #${p.id} · ${fmt(p.nodes)} nodes`));
+let nRoom = 0, nStair = 0, nLanding = 0;
+OV.places.forEach(p => addAnn("places", p.c, p.type === "stair" ? `Stair ${++nStair}` : p.type === "landing" ? `Landing ${++nLanding}` : `Room ${++nRoom}`, `${p.type} #${p.id} · ${fmt(p.nodes)} nodes`));
 // 3D scene graph: 객체 상자 · 관계 엣지 · 라벨
 if (OV.objects.length) {
   const g = group("objects"); const byCol = {};
@@ -149,7 +149,7 @@ $id("sMain").innerHTML = `<h3>① Main map · 5 cm</h3>` +
 $id("sGraph").innerHTML = `<h3>Graphs on main map</h3>` +
   chk("nav", "Traversability graph (nodes)", fmt(L.nav && L.nav.points), !!L.nav) +
   (L.nav ? seg("navAttr", [["rgba", "Place"], ["intensity", "Clearance"]]) : "") +
-  chk("places", "Topology: places", `${OV.places.filter(p => p.type !== "stair").length} rooms · ${OV.places.filter(p => p.type === "stair").length} stairs`, OV.places.length > 0) +
+  chk("places", "Topology: places", `${OV.places.filter(p => p.type === "room").length} rooms · ${OV.places.filter(p => p.type === "landing").length} landings · ${OV.places.filter(p => p.type === "stair").length} stairs`, OV.places.length > 0) +
   chk("portals", "Topology: portals ↔ places", OV.portals.length, OV.portals.length > 0) +
   chk("objects", "3D scene graph: objects", OV.objects.length, OV.objects.length > 0) +
   chk("objLabels", "3D scene graph: object labels", "", OV.objects.length > 0, "sub") +
