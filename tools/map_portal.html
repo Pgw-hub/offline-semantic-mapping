@@ -210,7 +210,8 @@ table.cdt input[type=text]{width:120px}table.cdt input[type=number]{width:70px}t
   <div class="bform" id="depForm">
     <div class="row2"><label>로봇<select id="depRobot"></select></label><label>로봇 워크스페이스 (비우면 목록·기본값)<input id="depWs" placeholder="raisin_master"></label></div>
     <div class="row2" id="depAdhoc"><label>주소 [user@]주소[:포트]<input id="depTarget" placeholder="raion@192.168.0.10"></label><label>목록에 저장할 이름 (비우면 저장 안 함)<input id="depSave" placeholder="raibo-01"></label></div>
-    <div style="font-size:12px;color:var(--color-ink-muted-48);margin-top:8px">접속은 <b>포털이 돌고 있는 컴퓨터</b><span id="depHost"></span>에서 합니다 (그 컴퓨터가 로봇과 같은 네트워크여야 함). 그 컴퓨터의 열쇠 → 안 되면 비밀번호(tools/robots.json)로 들어가 열쇠를 등록합니다. 같은 이름의 맵은 로봇 log/map_backup/ 으로 옮긴 뒤 바꿉니다.</div>
+    <div class="row2"><label>로봇 비밀번호 (매번 입력, 저장하지 않음)<input id="depPass" type="password" autocomplete="off" placeholder="ssh 비밀번호"></label><span></span></div>
+    <div style="font-size:12px;color:var(--color-ink-muted-48);margin-top:8px">접속은 <b>포털이 돌고 있는 컴퓨터</b><span id="depHost"></span>에서 합니다 (그 컴퓨터가 로봇과 같은 네트워크여야 함). 접속은 위 비밀번호로 매번 합니다 (열쇠 등록·저장 없음). 같은 이름의 맵은 로봇 log/map_backup/ 으로 옮긴 뒤 바꿉니다.</div>
   </div>
   <div id="depBlocked" class="err" hidden></div>
   <pre id="depLog" style="margin-top:14px;max-height:280px;white-space:pre-wrap" hidden></pre>
@@ -496,7 +497,7 @@ load(); setInterval(load,60000); setInterval(()=>{ if(JOBS.some(j=>j.status==="r
 
 const escH=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 let DEP=null, ROBOTS={robots:[],defaults:{}};
-const DEP_RC={10:"로봇에 닿지 않습니다",11:"접속 인증 실패",12:"로봇 지문이 바뀌었습니다",3:"로봇에 워크스페이스가 없습니다",5:"로봇 디스크 공간 부족",4:"받은 파일 확인 실패",2:"보내는 도중 끊김",13:"ssh 실패"};
+const DEP_RC={10:"로봇에 닿지 않습니다",11:"비밀번호가 틀렸거나 없음",12:"로봇 지문이 바뀌었습니다",3:"로봇에 워크스페이스가 없습니다",5:"로봇 디스크 공간 부족",4:"받은 파일 확인 실패",2:"보내는 도중 끊김",13:"ssh 실패"};
 function depEl(id){return document.getElementById(id);}
 function depReset(){if(!DEP) return; DEP.checked=false; depEl("depGo").disabled=true; depEl("depForget").hidden=true;}
 function depLabel(){const v=depEl("depRobot").value; return v==="__adhoc"?depEl("depTarget").value.trim():v;}
@@ -510,12 +511,13 @@ async function openDeploy(nm,j){const i=j.info; DEP={nm,dir:j.dir,deploy:j.deplo
   depEl("depTitle").textContent=`${nm} — 로봇에 넣기`;
   depEl("depInfo").innerHTML=`위치추정 <b>${escH(nm)}.pcd</b> ${fmt(i.localization.points)} 점 (${i.localization.voxel_m||"dense"} m) · 보행 voxel3d_tiles <b>${escH(i.locomotion.variant||"default")}</b> (타일 ${i.locomotion.tiles}개) · zip ${(j.bytes/1e6).toFixed(1)} MB`+(j.log||[]).filter(x=>x.startsWith("주의")).map(x=>`<br><span style="color:#8f3d1c">${escH(x)}</span>`).join("");
   const z=depEl("depZip"); z.href=fileURL(j.path); z.setAttribute("download",j.path.split("/").pop());
-  depEl("depLog").hidden=true; depEl("depLog").textContent=""; depEl("depStatus").textContent=""; depEl("depBlocked").hidden=true;
+  depEl("depLog").hidden=true; depEl("depLog").textContent=""; depEl("depStatus").textContent=""; depEl("depBlocked").hidden=true; depEl("depPass").value="";
   depEl("depModal").classList.add("on"); await depLoadRobots(); depEl("depHost").textContent=ROBOTS.host?` (${ROBOTS.host})`:"";
   const blocked=!ROBOTS.enabled; depEl("depForm").style.display=blocked?"none":""; depEl("depCheck").hidden=blocked; depEl("depGo").hidden=blocked;
   if(blocked){const b=depEl("depBlocked"); b.hidden=false; b.innerHTML=`${escH(ROBOTS.reason)}<br><br>노트북 터미널(저장소 폴더):<br><code>${escH(j.deploy)}</code>`;}}
 async function depRun(dry,forget){if(!DEP||DEP.busy) return; const v=depEl("depRobot").value;
-  const body={dir:DEP.dir,dry_run:dry,forget_host:!!forget,ws:depEl("depWs").value.trim()};
+  const body={dir:DEP.dir,dry_run:dry,forget_host:!!forget,ws:depEl("depWs").value.trim(),password:depEl("depPass").value};
+  if(!body.password){depEl("depStatus").textContent="로봇 비밀번호를 입력하세요"; depEl("depPass").focus(); return;}
   if(v==="__adhoc"){body.target=depEl("depTarget").value.trim(); body.save_name=depEl("depSave").value.trim(); if(!body.target){depEl("depStatus").textContent="주소를 입력하세요 (예: raion@192.168.0.10)"; return;}} else body.robot=v;
   const headers={"Content-Type":"application/json"}; if(TOKEN_REQUIRED){const t=localStorage.getItem("portal_token")||prompt("빌드 토큰을 입력하세요"); if(t){headers["X-Portal-Token"]=t; try{localStorage.setItem("portal_token",t);}catch(_){}}}
   DEP.busy=true; for(const id of ["depCheck","depGo","depForget"]) depEl(id).disabled=true; depEl("depForget").hidden=true;
@@ -525,7 +527,7 @@ async function depRun(dry,forget){if(!DEP||DEP.busy) return; const v=depEl("depR
     if(k.saved){await depLoadRobots(k.robot); depEl("depSave").value=""; depEl("depTarget").value="";}
     let d; for(;;){await new Promise(res=>setTimeout(res,700)); d=await (await fetch(`/api/robot_deploy/${k.id}`)).json(); lg.textContent=d.lines.join("\n"); lg.scrollTop=lg.scrollHeight; if(d.done) break;}
     if(d.rc===0){ if(dry){DEP.checked=true; st.innerHTML=`<b>확인됨</b> — 위 내용대로 <b>로봇에 넣기</b>를 누르면 설치합니다`;} else {DEP.checked=false; st.innerHTML=`<b>✓ 설치 완료</b> — raisin GUI Load Map 에서 <b>${escH(DEP.nm)}</b> 선택`;} }
-    else {DEP.checked=false; st.innerHTML=`<b>✗ ${escH(DEP_RC[d.rc]||"실패")}</b> (코드 ${d.rc}) — 위 로그의 안내를 확인하세요`; if(d.rc===12) depEl("depForget").hidden=false;}
+    else {DEP.checked=false; st.innerHTML=`<b>✗ ${escH(DEP_RC[d.rc]||"실패")}</b> (코드 ${d.rc}) — 위 로그의 안내를 확인하세요`; if(d.rc===12) depEl("depForget").hidden=false; if(d.rc===11){depEl("depPass").value=""; depEl("depPass").focus();}}
   }catch(err){st.textContent="✗ 실패: "+err;}
   finally{DEP.busy=false; depEl("depCheck").disabled=false; depEl("depForget").disabled=false; depEl("depGo").disabled=!DEP.checked;}}
 depEl("depRobot").addEventListener("change",depRobotChanged);

@@ -140,9 +140,9 @@ prior map controller 는 그 이름으로 `log/map/<이름>/voxel3d_tiles` 를 �
    tools/deploy_robot_map.sh output/<세션>/compiled/export/robot/<이름> <robots.json 이름 | [user@]주소[:포트]> [--ws ~/raisin_master] [--dry-run]
    ```
 
-   - 접속: 이 저장소 전용 열쇠 `.robot_ssh/id_ed25519`(처음 실행 때 생성)로 먼저, 안 되면 `tools/robots.json` 의 비밀번호(`defaults.password` — git 에 올리지 않으므로 PC 마다 한 번 적는다, 예시 `tools/robots.example.json`)로
-     들어가 그 열쇠를 로봇 `~/.ssh/authorized_keys` 에 등록한다 — 다음부터는 비밀번호 없이. `ssh-copy-id` 는 필요 없다. 처음 접속의 지문(yes/no)은 자동 수락.
-   - 안 될 때 안내: 로봇에 닿지 않음(같은 네트워크·주소 확인) / 인증 실패(robots.json 의 password 수정 또는 `ssh-copy-id -i .robot_ssh/id_ed25519.pub raion@<주소>`) /
+   - 접속: **매번 로봇 비밀번호를 입력**한다 (2026-11-26, 사용자 결정 — 열쇠 등록이나 `robots.json` 비밀번호 저장 없음). 포털은 창의 비밀번호 칸, 터미널은 묻는 프롬프트(또는 `--password` / `ROBOT_SSH_PASS`).
+     `tools/robots.json` 에는 이름·user·host·ws·port 만 둔다. 처음 접속의 지문(yes/no)은 자동 수락하고 `.robot_ssh/known_hosts` 에 남긴다.
+   - 안 될 때 안내: 로봇에 닿지 않음(같은 네트워크·주소 확인) / 비밀번호 틀림(다시 입력) /
      지문 바뀜(로봇 재설치 — 같은 로봇이면 포털 '지문 지우고 다시 확인', 터미널 `--forget-host`) / 워크스페이스 없음(`ws` 수정) / 공간 부족.
    - ssh 한 번으로 보내고 로봇에서 바로 풀며(로봇에 unzip 필요 없음), 받은 파일 목록·크기를 노트북 쪽과 비교한 뒤에만 설치한다.
      같은 이름이 이미 있으면 `log/map_backup/<이름>_<시각>` 으로 옮긴다 (`log/map` 안에 두면 GUI 맵 목록에 뜨므로 밖에). 전송이 끊기면 기존 맵은 그대로.

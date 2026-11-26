@@ -269,23 +269,23 @@ def load_robots():
             except Exception: pass
     return {"defaults": {}, "robots": []}
 def robots_public():
-    """비밀번호를 뺀 기본값·로봇 목록 (웹에 보내는 것)"""
+    """기본값·로봇 목록 (웹에 보내는 것). 비밀번호는 저장하지 않는 방침이지만 옛 파일에 있으면 뺀다"""
     c = load_robots(); d = {"user": "raion", "ws": "raisin_master", "port": 22, **{k: v for k, v in (c.get("defaults") or {}).items() if k != "password"}}
     return d, [{k: v for k, v in r.items() if k != "password"} for r in c.get("robots") or [] if r.get("name") and r.get("host")]
 def save_robot(name, user, host, port, ws):
-    """robots.json 에 로봇 추가·갱신 (없으면 예시에서 만든다). 비밀번호는 defaults 를 따른다."""
+    """robots.json 에 로봇 추가·갱신 (없으면 예시에서 만든다). 비밀번호는 저장하지 않는다 (매번 입력)."""
     c = load_robots(); c.setdefault("robots", [])
     r = {"name": name, "host": host, **({"user": user} if user else {}), **({"port": port} if port and port != 22 else {}), **({"ws": ws} if ws else {})}
     c["robots"] = [x for x in c["robots"] if x.get("name") != name] + [r]
     tmp = ROBOTS_FILE + ".tmp"; json.dump(c, open(tmp, "w", encoding="utf-8"), ensure_ascii=False, indent=2); os.replace(tmp, ROBOTS_FILE)
     if os.getuid() == 0: st = os.stat(ROOT); os.chown(ROBOTS_FILE, st.st_uid, st.st_gid)   # 노트북 컨테이너(root) — 사용자가 직접 고칠 수 있게
-def start_deploy(args, key):
-    """tools/deploy_robot_map.sh 를 백그라운드로 — 출력 줄을 모아 /api/robot_deploy/<id> 로 보여 준다"""
+def start_deploy(args, key, password):
+    """tools/deploy_robot_map.sh 를 백그라운드로 — 출력 줄을 모아 /api/robot_deploy/<id> 로 보여 준다. 비밀번호는 환경변수로만 넘긴다(저장·로그 없음)"""
     with _dep_lock:
         if any(j["key"] == key and not j["done"] for j in DEPLOYS.values()): raise ValueError("같은 로봇에 이미 진행 중인 작업이 있습니다")
         for k in sorted(DEPLOYS, key=lambda k: DEPLOYS[k]["t"])[:-30]: DEPLOYS.pop(k)
         jid = f"{int(time.time() * 1000):x}"; job = {"id": jid, "key": key, "lines": [], "done": False, "rc": None, "t": time.time()}; DEPLOYS[jid] = job
-    p = subprocess.Popen(["bash", DEPLOY_SH, *args], cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace", bufsize=1)
+    p = subprocess.Popen(["bash", DEPLOY_SH, *args], cwd=ROOT, env={**os.environ, "ROBOT_SSH_PASS": password}, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL, text=True, encoding="utf-8", errors="replace", bufsize=1)
     def pump():
         for line in p.stdout: job["lines"].append(line.rstrip("\n"))
         job.update(rc=p.wait(), done=True)
@@ -451,9 +451,11 @@ class H(http.server.SimpleHTTPRequestHandler):
             f = os.path.join(CD.DIR, f"{name}.json")
             if os.path.exists(f): os.remove(f)
             return self.send_json({"ok": True})
-        if p == "/api/robot_deploy":    # 로봇 맵 패키지를 로봇 log/map/<이름>/ 에: {dir, robot | target(+save_name), ws, dry_run, forget_host}
+        if p == "/api/robot_deploy":    # 로봇 맵 패키지를 로봇 log/map/<이름>/ 에: {dir, robot | target(+save_name), ws, password, dry_run, forget_host}
             why = self.deploy_block_reason()
             if why: return self.send_json({"error": why}, 403)
+            password = str(body.get("password", "") or "")
+            if not password: return self.send_json({"error": "로봇 비밀번호를 입력하세요 (매번 입력, 저장하지 않음)"}, 400)
             pkg = os.path.realpath(os.path.join(ROOT, str(body.get("dir", ""))))
             if not (pkg.startswith(os.path.realpath(OUT) + os.sep) and os.path.basename(os.path.dirname(pkg)) == "robot"
                     and os.path.isfile(os.path.join(pkg, os.path.basename(pkg) + ".pcd"))): return self.send_json({"error": "패키지 폴더가 아닙니다 (먼저 Deploy to robot)"}, 400)
@@ -473,7 +475,7 @@ class H(http.server.SimpleHTTPRequestHandler):
                     except Exception as e: return self.send_json({"error": f"로봇 목록 저장 실패: {e}"}, 500)
                     target = save
             args = [pkg, target] + (["--ws", ws] if ws else []) + (["--dry-run"] if body.get("dry_run") else []) + (["--forget-host"] if body.get("forget_host") else [])
-            try: jid = start_deploy(args, target)
+            try: jid = start_deploy(args, target, password)
             except ValueError as e: return self.send_json({"error": str(e)}, 409)
             return self.send_json({"ok": True, "id": jid, "robot": target, "saved": bool(save and not robot)})
         if p == "/api/datasets/rescan":

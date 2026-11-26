@@ -9,8 +9,9 @@
 #     --dry-run     : 보내지 않고 접속·워크스페이스·같은 이름 맵 유무·여유 공간만 확인 (처음이면 열쇠 등록까지)
 #     --forget-host : 로봇을 다시 설치해 지문(host key)이 바뀌었을 때 예전 지문을 지우고 접속
 #   tools/deploy_robot_map.sh <패키지 폴더|zip> --local [--ws <워크스페이스>]     # 이 컴퓨터
-# 접속: 이 저장소 전용 열쇠(.robot_ssh/id_ed25519, 처음 실행 때 생성)로 먼저, 안 되면 robots.json 의 비밀번호로 접속해
-#   그 열쇠를 로봇 ~/.ssh/authorized_keys 에 등록한다 (다음부터는 비밀번호 없이). 비밀번호 우선순위: --password > $ROBOT_SSH_PASS > robots.json.
+# 접속: 매번 로봇 비밀번호로 (2026-11-26, 사용자 결정 — 열쇠 등록·robots.json 비밀번호 저장 없음).
+#   비밀번호는 --password <비번> 또는 환경변수 ROBOT_SSH_PASS 로 주고, 둘 다 없으면 터미널에서 묻는다 (포털은 입력 칸의 값을 환경변수로 넘긴다).
+#   robots.json 에는 user·host·ws·port 만 둔다 (password 가 있어도 무시). 로봇 지문(known_hosts)만 .robot_ssh/ 에 남긴다.
 # 종료 코드: 10 로봇에 닿지 않음 · 11 인증 실패 · 12 지문 바뀜 · 3 워크스페이스 없음 · 5 공간 부족 · 4 목록 불일치 · 2 전송 끊김
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
@@ -38,7 +39,7 @@ OWNER="$(stat -c %u:%g "$REPO")"
 cleanup() { rm -rf "$STAGE"; [ "$(id -u)" = 0 ] && [ -d "$SSHDIR" ] && chown -R "$OWNER" "$SSHDIR" 2>/dev/null; true; }
 trap cleanup EXIT
 
-# 0) 로봇 찾기: robots.json 이름 또는 [user@]주소[:포트] → user host port ws password label
+# 0) 로봇 찾기: robots.json 이름 또는 [user@]주소[:포트] → user host port ws label
 if [ "$TARGET" != "--local" ]; then
   mapfile -t R < <(python3 - "$ROBOTS_FILE" "$REPO/tools/robots.example.json" "$TARGET" <<'PY'
 import json, os, re, sys
@@ -47,7 +48,7 @@ cfg = {}
 for p in (f, ex):
     if os.path.exists(p):
         cfg = json.load(open(p, encoding="utf-8")); break
-d = {"user": "raion", "password": "", "ws": "raisin_master", "port": 22, **(cfg.get("defaults") or {})}
+d = {"user": "raion", "ws": "raisin_master", "port": 22, **(cfg.get("defaults") or {})}
 r = next((x for x in cfg.get("robots") or [] if x.get("name") == t and x.get("host")), None)
 if r is None:
     m = re.fullmatch(r"(?:([a-z_][a-z0-9_.-]{0,31})@)?([A-Za-z0-9._-]{1,253})(?::(\d{1,5}))?", t)
@@ -56,12 +57,12 @@ if r is None:
     r = {"host": m[2], **({"user": m[1]} if m[1] else {}), **({"port": int(m[3])} if m[3] else {})}
 r = {**d, **r}
 label = (r["name"] + " " if r.get("name") else "") + f'{r["user"]}@{r["host"]}' + (f':{r["port"]}' if int(r["port"]) != 22 else "")
-for k in (r["user"], r["host"], str(int(r["port"])), r["ws"], r["password"], label):
+for k in (r["user"], r["host"], str(int(r["port"])), r["ws"], label):
     print(str(k).replace("\n", " "))
 PY
   ) || exit 1
-  [ ${#R[@]} -eq 6 ] || exit 1
-  RUSER="${R[0]}"; RHOST="${R[1]}"; RPORT="${R[2]}"; [ -n "$WS" ] || WS="${R[3]}"; [ -n "$PASS" ] || PASS="${R[4]}"; LABEL="${R[5]}"
+  [ ${#R[@]} -eq 5 ] || exit 1
+  RUSER="${R[0]}"; RHOST="${R[1]}"; RPORT="${R[2]}"; [ -n "$WS" ] || WS="${R[3]}"; LABEL="${R[4]}"
   DEST="$RUSER@$RHOST"
   [ "$RPORT" = 22 ] && HOSTKEY="$RHOST" || HOSTKEY="[$RHOST]:$RPORT"
 fi
@@ -117,16 +118,12 @@ SIZE="$(du -sh "$SRC" | cut -f1)"; SIZE_KB="$(du -sk "$SRC" | cut -f1)"
 echo "맵 '$NAME': 위치추정 $NAME.pcd ${POINTS:-?} 점 · 보행 타일 $TILES 개 · $SIZE"
 [ "$TARGET" = "--local" ] && echo "대상: 이 컴퓨터 $WS/log/map/$NAME/" || echo "대상: $LABEL  $WS/log/map/$NAME/"
 
-# 4) 접속 (열쇠 → 비밀번호 + 열쇠 등록)
-KEY="$SSHDIR/id_ed25519"
+# 4) 접속 (매번 비밀번호)
 SSHOPTS=(-p "${RPORT:-22}" -o "UserKnownHostsFile=$SSHDIR/known_hosts" -o GlobalKnownHostsFile=/dev/null -o StrictHostKeyChecking=accept-new
-         -o ConnectTimeout=8 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o LogLevel=ERROR)
-KEYOPTS=(-i "$KEY" -o BatchMode=yes)
-PWOPTS=(-o BatchMode=no -o PubkeyAuthentication=no -o PreferredAuthentications=keyboard-interactive,password -o NumberOfPasswordPrompts=1)
-MODE=key
-rssh() {
-  if [ "$MODE" = key ]; then ssh "${SSHOPTS[@]}" "${KEYOPTS[@]}" "$DEST" "$@"
-  else SSH_ASKPASS="$STAGE/askpass" SSH_ASKPASS_REQUIRE=force DISPLAY="${DISPLAY:-:0}" ROBOT_SSH_PASS="$PASS" ssh "${SSHOPTS[@]}" "${PWOPTS[@]}" "$DEST" "$@"; fi
+         -o ConnectTimeout=8 -o ServerAliveInterval=15 -o ServerAliveCountMax=4 -o LogLevel=ERROR
+         -o BatchMode=no -o PubkeyAuthentication=no -o PreferredAuthentications=keyboard-interactive,password -o NumberOfPasswordPrompts=1)
+rssh() {   # 비밀번호는 askpass 스크립트가 환경변수에서 읽어 ssh 에 준다 (명령줄·로그에 남지 않음)
+  SSH_ASKPASS="$STAGE/askpass" SSH_ASKPASS_REQUIRE=force DISPLAY="${DISPLAY:-:0}" ROBOT_SSH_PASS="$PASS" ssh "${SSHOPTS[@]}" "$DEST" "$@"
 }
 fail_ssh() {   # ssh 자체 실패(255) 메시지 → 안내 + 종료 코드
   local err="$1"
@@ -134,9 +131,7 @@ fail_ssh() {   # ssh 자체 실패(255) 메시지 → 안내 + 종료 코드
     echo "✗ 로봇 지문(host key)이 예전에 접속했을 때와 다릅니다 ($HOSTKEY)." >&2
     echo "  로봇을 다시 설치했거나 주소가 다른 로봇으로 바뀐 경우입니다. 같은 로봇이 맞으면 --forget-host 를 붙여 다시 실행하세요 (포털: '지문 지우고 다시 확인')." >&2; exit 12
   elif grep -qiE "Permission denied|Authentication failed|Too many authentication" <<<"$err"; then
-    echo "✗ 로봇 접속 인증 실패: 열쇠도, robots.json 의 비밀번호도 안 됩니다 ($DEST)." >&2
-    echo "  비밀번호가 다르면 tools/robots.json 에서 그 로봇의 \"password\" 를 고치거나, 터미널에서 직접 열쇠를 등록하세요:" >&2
-    echo "    ssh-copy-id -i $KEY.pub -p ${RPORT:-22} $DEST" >&2; exit 11
+    echo "✗ 로봇 접속 인증 실패: 비밀번호가 틀립니다 ($DEST). 다시 입력하세요." >&2; exit 11
   elif grep -qiE "resolve|timed out|No route|refused|unreachable|Connection closed|Connection reset|kex_exchange" <<<"$err"; then
     echo "✗ 이 컴퓨터($(hostname))에서 로봇에 닿지 않습니다 ($DEST:${RPORT:-22}): $(tail -1 <<<"$err")" >&2
     echo "  접속은 이 스크립트(포털이면 포털)가 돌고 있는 컴퓨터에서 합니다. 그 컴퓨터와 로봇이 같은 네트워크인지, 주소가 맞는지, 로봇이 켜져 있는지 확인하세요." >&2; exit 10
@@ -145,28 +140,15 @@ fail_ssh() {   # ssh 자체 실패(255) 메시지 → 안내 + 종료 코드
 }
 connect() {
   mkdir -p "$SSHDIR"; chmod 700 "$SSHDIR"; touch "$SSHDIR/known_hosts"
-  [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N "" -C "offline-map@$(hostname)" -f "$KEY"
   if [ "$FORGET" = 1 ]; then ssh-keygen -f "$SSHDIR/known_hosts" -R "$HOSTKEY" >/dev/null 2>&1 || true; echo "예전 지문 지움: $HOSTKEY"; fi
-  local err rc
-  if err="$(ssh "${SSHOPTS[@]}" "${KEYOPTS[@]}" "$DEST" true 2>&1 </dev/null)"; then echo "접속: 열쇠(비밀번호 없이)"; return; else rc=$?; fi
-  [ "$rc" = 255 ] || fail_ssh "$err"
-  grep -qiE "Permission denied|Authentication" <<<"$err" || fail_ssh "$err"
   if [ -z "$PASS" ]; then
-    echo "✗ 열쇠로 접속이 안 되고, 비밀번호가 없습니다 — tools/robots.json 의 defaults.password(또는 그 로봇의 password)를 적거나 --password 로 주세요." >&2
-    echo "  또는 터미널에서 열쇠를 직접 등록: ssh-copy-id -i $KEY.pub -p ${RPORT:-22} $DEST" >&2; exit 11
+    if [ -t 0 ]; then read -rs -p "로봇 비밀번호 ($DEST): " PASS </dev/tty; echo
+    else echo "✗ 로봇 비밀번호가 없습니다 — --password <비번> 또는 ROBOT_SSH_PASS=<비번> 으로 주세요 (포털은 비밀번호 칸)." >&2; exit 11; fi
+    [ -n "$PASS" ] || { echo "✗ 비밀번호가 비어 있습니다" >&2; exit 11; }
   fi
-  echo "열쇠로는 아직 안 됨 → 비밀번호로 접속해 이 노트북 열쇠를 로봇에 등록합니다"
   printf '#!/bin/sh\nprintf "%%s\\n" "$ROBOT_SSH_PASS"\n' > "$STAGE/askpass"; chmod 700 "$STAGE/askpass"
-  MODE=pw
-  local pub inst
-  pub="$(cat "$KEY.pub")"
-  inst="umask 077; mkdir -p \"\$HOME/.ssh\"; touch \"\$HOME/.ssh/authorized_keys\"; grep -qxF '$pub' \"\$HOME/.ssh/authorized_keys\" || echo '$pub' >> \"\$HOME/.ssh/authorized_keys\""
-  if err="$(rssh "sh -c \"\$(echo $(printf '%s' "$inst" | base64 -w0) | base64 -d)\"" 2>&1 </dev/null)"; then :; else
-    rc=$?; [ "$rc" = 255 ] && fail_ssh "$err"
-    echo "경고: 열쇠 등록 실패 ($err) — 이번에는 비밀번호로 계속합니다"; return
-  fi
-  if ssh "${SSHOPTS[@]}" "${KEYOPTS[@]}" "$DEST" true </dev/null >/dev/null 2>&1; then MODE=key; echo "열쇠 등록 완료 — 다음부터는 비밀번호 없이 접속"
-  else echo "경고: 열쇠를 넣었지만 열쇠 접속이 여전히 안 됩니다 (로봇 홈·~/.ssh 권한 또는 sshd 설정) — 비밀번호로 계속합니다"; fi
+  local err
+  if err="$(rssh true 2>&1 </dev/null)"; then echo "접속: 비밀번호 확인됨 ($DEST)"; else fail_ssh "$err"; fi
 }
 run_remote() {   # run_remote <스크립트> <인자...> : 원격 로그인 셸이 sh 여도 깨지지 않게 스크립트는 base64, 인자는 작은따옴표 (값은 위에서 검사)
   local script="$1"; shift
